@@ -1,0 +1,3 @@
+# Núcleo: biblioteca estándar de Python. Sin dependencias obligatorias.
+# Opcional para interfaz web embebida en versiones posteriores:
+# pywebview>=5.0
