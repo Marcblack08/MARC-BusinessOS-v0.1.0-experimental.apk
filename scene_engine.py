@@ -125,6 +125,41 @@ def allocate_scene_durations(scenes: Iterable[dict], total_seconds: int) -> list
     return durations
 
 
+def build_srt_subtitles(scenes: Iterable[dict], durations: Iterable[int], chars_per_line: int = 42) -> str:
+    """Build SRT captions from scene text and approximate scene-level durations."""
+    items = list(scenes)
+    times = list(durations)
+    if len(items) != len(times):
+        raise ValueError("Scene and duration counts must match.")
+    if chars_per_line < 10:
+        raise ValueError("chars_per_line must be at least 10.")
+
+    def stamp(milliseconds: int) -> str:
+        milliseconds = max(0, int(milliseconds))
+        hours, remainder = divmod(milliseconds, 3_600_000)
+        minutes, remainder = divmod(remainder, 60_000)
+        seconds, millis = divmod(remainder, 1000)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d},{millis:03d}"
+
+    parts: list[str] = []
+    elapsed_ms = 0
+    cue_number = 0
+    for scene, duration in zip(items, times):
+        body = " ".join(str(scene.get("text", "")).split()).strip()
+        if not body:
+            elapsed_ms += max(1, int(duration)) * 1000
+            continue
+        duration_ms = max(1, int(duration)) * 1000
+        wrapped = textwrap.wrap(body, width=chars_per_line, break_long_words=False) or [body]
+        cue_number += 1
+        parts.append(
+            f"{cue_number}\n{stamp(elapsed_ms)} --> {stamp(elapsed_ms + duration_ms)}\n"
+            + "\n".join(wrapped)
+        )
+        elapsed_ms += duration_ms
+    return "\n\n".join(parts) + ("\n" if parts else "")
+
+
 def ffmpeg_filter_path(path: str | Path) -> str:
     """Escape a path inside an FFmpeg filter option (e.g. drawtext=textfile=...)."""
     value = Path(path).resolve().as_posix()
