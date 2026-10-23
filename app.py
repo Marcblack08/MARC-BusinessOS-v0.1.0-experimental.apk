@@ -759,14 +759,15 @@ class App(tk.Tk):
         state = "disabled" if active else "normal"
         self.cancel_button.configure(state="normal" if self.generation_running else "disabled")
         self.cancel_render_button.configure(state="normal" if self.render_running else "disabled")
-        for button in (self.generate_button, self.cancel_button, self.save_button,
-                       self.approve_button, self.export_button, self.delete_button,
-                       self.assign_image_button, self.clear_image_button,
-                       self.refresh_scenes_button, self.detect_models_button,
-                       self.generate_image_button):
+        for button in (self.generate_button, self.save_button, self.approve_button,
+                       self.export_button, self.delete_button, self.assign_image_button,
+                       self.clear_image_button, self.refresh_scenes_button,
+                       self.detect_models_button, self.generate_image_button):
             button.configure(state=state)
         self.project_list.configure(state=state)
         self.scene_outline.configure(state=state)
+        self.cancel_button.configure(state="normal" if self.generation_running else "disabled")
+        self.cancel_render_button.configure(state="normal" if self.render_running else "disabled")
         self.image_model_combo.configure(state="disabled" if active else "readonly")
         for widget, idle_state in self.form_widgets:
             widget.configure(state="disabled" if active else idle_state)
@@ -1502,12 +1503,13 @@ class App(tk.Tk):
         self.generate_button.configure(state=state)
         self.cancel_button.configure(state="disabled" if not active else "disabled")
         self.cancel_render_button.configure(state="normal" if active else "disabled")
-        for button in (self.cancel_button, self.save_button, self.approve_button,
+        for button in (self.save_button, self.approve_button,
                        self.export_button, self.delete_button, self.assign_image_button,
                        self.clear_image_button, self.refresh_scenes_button,
                        self.detect_models_button, self.generate_image_button):
             button.configure(state=state)
         self.project_list.configure(state=state)
+        self.cancel_button.configure(state="disabled")
         for widget, idle_state in self.form_widgets:
             widget.configure(state="disabled" if active else idle_state)
         self.script_text.configure(state="disabled" if active else "normal")
