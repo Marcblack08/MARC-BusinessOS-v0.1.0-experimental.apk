@@ -93,7 +93,7 @@ class App(tk.Tk):
         super().__init__()
         self.title(APP_NAME)
         self.geometry("1540x960")
-        self.minsize(1120, 720)
+        self.minsize(1160, 700)
         self.state("zoomed")
         self.conn = db_connect()
         self.current_id = None
@@ -331,15 +331,15 @@ class App(tk.Tk):
         editor.grid_rowconfigure(0, weight=1)
         editor.grid_columnconfigure(0, weight=1)
 
-        vertical = tk.PanedWindow(editor, orient="vertical", sashwidth=7, sashrelief="flat",
+        vertical = tk.PanedWindow(editor, orient="horizontal", sashwidth=7, sashrelief="flat",
                                   bg=self.colors["bg"], bd=0, opaqueresize=True, showhandle=False)
         vertical.grid(row=0, column=0, sticky="nsew")
         self.vertical_panes = vertical
 
         controls_area = tk.Frame(vertical, bg=self.colors["bg"])
         self.controls_area = controls_area
-        vertical.add(controls_area, minsize=235, height=325, stretch="never")
-        card = tk.Frame(controls_area, bg=self.colors["panel"], padx=18, pady=15,
+        vertical.add(controls_area, minsize=285, width=325, stretch="never")
+        card = tk.Frame(controls_area, bg=self.colors["panel"], padx=10, pady=10,
                         highlightthickness=1, highlightbackground=self.colors["border"])
         card.pack(fill="both", expand=True)
         tk.Label(card, text="CONFIGURACIÓN DE HISTORIA", bg=self.colors["panel"], fg=self.colors["text"],
@@ -363,44 +363,45 @@ class App(tk.Tk):
         form = tk.Frame(card, bg=self.colors["panel"])
         form.pack(fill="x", expand=True)
         self.form_widgets = []
-        for c in range(4):
-            form.columnconfigure(c, weight=1, uniform="fields")
-        self._field(form, "Nombre del proyecto", self.title_var, 0, 0)
-        self._field(form, "Género", self.style_var, 0, 1,
+        form.columnconfigure(0, weight=1, uniform="fields")
+        form.columnconfigure(1, weight=1, uniform="fields")
+        self._field(form, "Nombre del proyecto", self.title_var, 0, 0, span=2)
+        self._field(form, "Género", self.style_var, 1, 0,
                     values=["Novela dramática", "Reencarnación y venganza", "Superación personal", "Romance",
                             "Fantasía", "Misterio y suspenso", "Terror", "Acción y aventura", "Ciencia ficción",
                             "Drama familiar", "Educativo y directo", "Documental", "Promocional"])
-        self._field(form, "Plataforma", self.platform_var, 0, 2, values=list(PLATFORMS))
-        self._field(form, "Duración (min)", self.duration_var, 0, 3,
+        self._field(form, "Plataforma", self.platform_var, 1, 1, values=list(PLATFORMS))
+        self._field(form, "Duración (min)", self.duration_var, 2, 0,
                     values=[str(i) for i in (1, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120)])
-        self._field(form, "Premisa / idea", self.topic_var, 1, 0, span=2)
-        self._field(form, "Protagonista", self.protagonist_var, 1, 2)
-        self._field(form, "Conflicto central", self.conflict_var, 1, 3)
-        self._field(form, "Tono", self.tone_var, 2, 0,
+        self._field(form, "Tono", self.tone_var, 2, 1,
                     values=["Dramático e intenso", "Oscuro y misterioso", "Emotivo", "Inspirador",
                             "Épico", "Ligero y humorístico", "Realista"])
-        self._field(form, "Narrador", self.narrator_var, 2, 1,
+        self._field(form, "Narrador", self.narrator_var, 3, 0,
                     values=["Tercera persona", "Primera persona protagonista", "Primera persona retrospectiva",
                             "Narrador omnisciente"])
-        self._field(form, "Desenlace", self.ending_var, 2, 2,
+        self._field(form, "Desenlace", self.ending_var, 3, 1,
                     values=["Justicia y superación", "Final feliz", "Final trágico", "Giro inesperado",
                             "Abierto para continuación", "Agridulce"])
-        self._field(form, "Estilo de dibujo", self.drawing_style_var, 2, 3,
+        self._field(form, "Protagonista", self.protagonist_var, 4, 0)
+        self._field(form, "Conflicto central", self.conflict_var, 4, 1)
+        self._field(form, "Estilo de dibujo", self.drawing_style_var, 5, 0,
                     values=["Anime cinematográfico", "Manga en blanco y negro", "Cartoon occidental",
                             "Cómic realista", "Acuarela ilustrada", "Pixel art", "3D estilizado",
                             "Realismo cinematográfico"])
-        self._field(form, "Estilo de animación", self.animation_style_var, 3, 0,
-                    span=2, values=["2D fluida", "Anime con movimientos dinámicos", "Motion comic",
-                                    "Cut-out / recortes", "3D cinematográfica", "Stop motion",
-                                    "Pixel animation", "Presentación animada"])
-        tk.Label(form, text="La selección visual orienta el guion; no implica todavía generación automática de dibujos.",
+        self._field(form, "Estilo de animación", self.animation_style_var, 5, 1,
+                    values=["2D fluida", "Anime con movimientos dinámicos", "Motion comic",
+                            "Cut-out / recortes", "3D cinematográfica", "Stop motion",
+                            "Pixel animation", "Presentación animada"])
+        self._field(form, "Premisa / idea", self.topic_var, 6, 0, span=2)
+        tk.Label(form, text="Los estilos guían la generación; las ilustraciones se asignan en ESCENAS.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8),
-                 justify="left", wraplength=320).grid(row=3, column=2, columnspan=2, sticky="w", padx=8, pady=5)
+                 justify="left", wraplength=280).grid(row=7, column=0, columnspan=2,
+                                                        sticky="w", padx=5, pady=(5, 2))
 
         lower = tk.Frame(vertical, bg=self.colors["bg"])
         self.lower_panel = lower
-        vertical.add(lower, minsize=280, stretch="always")
-        lower.grid_rowconfigure(2, weight=1)
+        vertical.add(lower, minsize=620, stretch="always")
+        lower.grid_rowconfigure(3, weight=1)
         lower.grid_columnconfigure(0, weight=1)
 
         toolrow = tk.Frame(lower, bg=self.colors["bg"])
@@ -419,13 +420,14 @@ class App(tk.Tk):
         self.cancel_render_button = ttk.Button(toolrow, text="Cancelar render",
                                                command=self.cancel_export, state="disabled")
         self.cancel_render_button.pack(side="left", padx=(6, 0))
+        self.configuration_visible = True
         self.config_toggle_button = ttk.Button(
             toolrow, text="Ocultar configuración", command=self.toggle_configuration)
         self.config_toggle_button.pack(side="right")
 
-        statuscard = tk.Frame(lower, bg=self.colors["panel"], padx=15, pady=12,
+        statuscard = tk.Frame(lower, bg=self.colors["panel"], padx=10, pady=6,
                               highlightthickness=1, highlightbackground=self.colors["border"])
-        statuscard.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        statuscard.grid(row=1, column=0, sticky="ew", pady=(0, 7))
         status_head = tk.Frame(statuscard, bg=self.colors["panel"])
         status_head.pack(fill="x")
         self.progress_label_var = tk.StringVar(value="Listo para crear el guion")
@@ -436,7 +438,7 @@ class App(tk.Tk):
                                          command=self.toggle_status_details)
         self.details_button.pack(side="right")
         self.progressbar = ttk.Progressbar(statuscard, mode="determinate", maximum=100, value=0)
-        self.progressbar.pack(fill="x", pady=(6, 3))
+        self.progressbar.pack(fill="x", pady=(4, 2))
         self.progress_detail_var = tk.StringVar(value="0% · En espera")
         tk.Label(statuscard, textvariable=self.progress_detail_var, bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 8)).pack(anchor="w")
@@ -450,9 +452,38 @@ class App(tk.Tk):
                  fg=self.colors["success"], font=("Segoe UI", 9, "bold"), justify="left",
                  wraplength=1250).pack(anchor="w", pady=(4, 0))
 
+        # Persistent monitor in the main workspace; it stays visible while switching tabs.
+        preview_dock = tk.Frame(lower, bg=self.colors["panel"], padx=9, pady=7,
+                                highlightthickness=1, highlightbackground=self.colors["border"])
+        preview_dock.grid(row=2, column=0, sticky="ew", pady=(0, 7))
+        preview_dock.grid_columnconfigure(0, weight=1)
+        monitor_header = tk.Frame(preview_dock, bg=self.colors["panel"])
+        monitor_header.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+        tk.Label(monitor_header, text="MONITOR / STORYBOARD", bg=self.colors["panel"],
+                 fg=self.colors["text"], font=("Segoe UI", 10, "bold")).pack(side="left")
+        self.preview_scene_var = tk.StringVar(value="SIN ESCENAS")
+        tk.Label(monitor_header, textvariable=self.preview_scene_var, bg=self.colors["panel"],
+                 fg="#69b8ff", font=("Segoe UI", 8, "bold")).pack(side="right")
+        monitor = tk.Frame(preview_dock, bg="#03070d", highlightthickness=1,
+                           highlightbackground=self.colors["border"])
+        monitor.grid(row=1, column=0, sticky="ew")
+        monitor.grid_columnconfigure(0, weight=1)
+        self.preview_canvas = tk.Canvas(monitor, bg="#03070d", highlightthickness=0,
+                                        height=158, width=800)
+        self.preview_canvas.grid(row=0, column=0, sticky="ew")
+        self.preview_canvas.bind("<Configure>", lambda _event: self._render_preview_frame())
+        monitor_actions = tk.Frame(preview_dock, bg=self.colors["panel"])
+        monitor_actions.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+        ttk.Button(monitor_actions, text="◀ Escena", command=lambda: self._step_preview_scene(-1)).pack(side="left")
+        ttk.Button(monitor_actions, text="Escena ▶", command=lambda: self._step_preview_scene(1)).pack(side="left", padx=(5, 0))
+        ttk.Button(monitor_actions, text="Abrir MP4", style="Accent.TButton",
+                   command=self.open_last_video).pack(side="right")
+        ttk.Button(monitor_actions, text="Elegir MP4",
+                   command=self.choose_preview_video).pack(side="right", padx=(0, 5))
+
         script_card = tk.Frame(lower, bg=self.colors["panel"], padx=10, pady=9,
                                highlightthickness=1, highlightbackground=self.colors["border"])
-        script_card.grid(row=2, column=0, sticky="nsew")
+        script_card.grid(row=3, column=0, sticky="nsew")
         script_card.grid_rowconfigure(0, weight=1)
         script_card.grid_columnconfigure(0, weight=1)
         studio_tabs = ttk.Notebook(script_card)
@@ -641,7 +672,6 @@ class App(tk.Tk):
         preview_head.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         tk.Label(preview_head, text="MONITOR DE VÍDEO", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 14, "bold")).pack(side="left")
-        self.preview_scene_var = tk.StringVar(value="ESCENA 01  ·  STORYBOARD")
         tk.Label(preview_head, textvariable=self.preview_scene_var, bg=self.colors["panel"],
                  fg="#69b8ff", font=("Segoe UI", 9, "bold")).pack(side="right")
         monitor = tk.Frame(preview_tab, bg="#03070d", highlightthickness=1,
@@ -649,10 +679,10 @@ class App(tk.Tk):
         monitor.grid(row=1, column=0, sticky="nsew")
         monitor.grid_columnconfigure(0, weight=1)
         monitor.grid_rowconfigure(0, weight=1)
-        self.preview_canvas = tk.Canvas(monitor, bg="#03070d", highlightthickness=0,
-                                        height=380, width=900)
-        self.preview_canvas.grid(row=0, column=0, sticky="nsew")
-        self.preview_canvas.bind("<Configure>", lambda _event: self._render_preview_frame())
+        self.preview_tab_canvas = tk.Canvas(monitor, bg="#03070d", highlightthickness=0,
+                                            height=300, width=800)
+        self.preview_tab_canvas.grid(row=0, column=0, sticky="nsew")
+        self.preview_tab_canvas.bind("<Configure>", lambda _event: self._render_preview_frame())
         preview_transport = tk.Frame(preview_tab, bg=self.colors["panel"])
         preview_transport.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         ttk.Button(preview_transport, text="◀ Escena anterior",
@@ -766,11 +796,36 @@ class App(tk.Tk):
             wraplength=800, justify="left"
         ).pack(side="left", padx=(10, 0))
 
+        # Compact overview timeline, always visible below the script/scene workspace.
+        mini_timeline = tk.Frame(lower, bg=self.colors["panel"], padx=8, pady=5,
+                                 highlightthickness=1, highlightbackground=self.colors["border"])
+        mini_timeline.grid(row=4, column=0, sticky="ew", pady=(5, 0))
+        mini_timeline.grid_columnconfigure(0, weight=1)
+        mini_head = tk.Frame(mini_timeline, bg=self.colors["panel"])
+        mini_head.grid(row=0, column=0, sticky="ew", pady=(0, 3))
+        tk.Label(mini_head, text="SECUENCIA / TIMELINE", bg=self.colors["panel"],
+                 fg=self.colors["text"], font=("Segoe UI", 8, "bold")).pack(side="left")
+        self.mini_time_var = tk.StringVar(value="00:00 / 10:00")
+        tk.Label(mini_head, textvariable=self.mini_time_var, bg=self.colors["panel"],
+                 fg="#69b8ff", font=("Consolas", 8, "bold")).pack(side="right")
+        mini_shell = tk.Frame(mini_timeline, bg="#080e18")
+        mini_shell.grid(row=1, column=0, sticky="ew")
+        mini_shell.grid_columnconfigure(0, weight=1)
+        self.mini_timeline_canvas = tk.Canvas(mini_shell, bg="#080e18", height=76,
+                                             highlightthickness=0, borderwidth=0)
+        self.mini_timeline_canvas.grid(row=0, column=0, sticky="ew")
+        mini_xscroll = ttk.Scrollbar(mini_shell, orient="horizontal",
+                                    command=self.mini_timeline_canvas.xview)
+        mini_xscroll.grid(row=1, column=0, sticky="ew")
+        self.mini_timeline_canvas.configure(xscrollcommand=mini_xscroll.set)
+        self.mini_timeline_canvas.bind("<Button-1>", self._mini_timeline_click)
+        self.mini_timeline_canvas.bind("<Configure>", lambda _event: self._draw_mini_timeline())
+
         self.status_var = tk.StringVar(value="Listo. Define una historia o abre un proyecto de la biblioteca.")
-        self.after(250, lambda: studio_tabs.select(timeline_tab))
+        self.after(250, lambda: studio_tabs.select(script_tab))
         self.after(300, self._draw_timeline)
         tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
-                 font=("Segoe UI", 9), anchor="w").grid(row=3, column=0, sticky="ew", pady=(6, 0))
+                 font=("Segoe UI", 8), anchor="w").grid(row=5, column=0, sticky="ew", pady=(3, 0))
 
     def _timeline_duration_seconds(self):
         try:
@@ -870,6 +925,116 @@ class App(tk.Tk):
         canvas.xview_moveto(max(0.0, min(1.0, (px - 180) / max(1, width))))
         if hasattr(self, "timeline_time_var"):
             self.timeline_time_var.set(f"{playhead // 60:02d}:{playhead % 60:02d} / {total // 60:02d}:{total % 60:02d}")
+        self._draw_mini_timeline()
+
+    def _draw_mini_timeline(self):
+        """Draw a compact scene/audio overview outside the Montage tab."""
+        canvas = getattr(self, "mini_timeline_canvas", None)
+        if canvas is None:
+            return
+        try:
+            if not canvas.winfo_exists():
+                return
+            canvas.delete("all")
+            viewport = max(520, canvas.winfo_width())
+            left = 88
+            height = 86
+            target_seconds = self._timeline_duration_seconds()
+            durations = allocate_scene_durations(self.scene_data, target_seconds) if self.scene_data else []
+            durations = [self.scene_duration_overrides.get(str(i + 1), value)
+                         for i, value in enumerate(durations)]
+            total = max(1, sum(durations) if durations else target_seconds)
+            scale = max(0.22, min(1.6, (viewport - left - 12) / total))
+            positions = []
+            x = left
+            for i, scene in enumerate(self.scene_data):
+                duration = durations[i] if i < len(durations) else 5
+                clip_width = max(30, duration * scale)
+                positions.append((x, x + clip_width, i + 1))
+                x += clip_width
+            full_width = max(viewport, x + 12)
+            canvas.configure(scrollregion=(0, 0, full_width, height))
+            canvas.create_rectangle(0, 0, full_width, height, fill="#080e18", outline="#080e18")
+            canvas.create_rectangle(0, 0, left - 1, height, fill="#0d1726", outline="#0d1726")
+            canvas.create_text(8, 13, text="TIEMPO", anchor="w", fill="#9aadc6", font=("Segoe UI", 7, "bold"))
+            canvas.create_text(8, 35, text="VÍDEO", anchor="w", fill="#55b5ff", font=("Segoe UI", 7, "bold"))
+            canvas.create_text(8, 57, text="VOZ", anchor="w", fill="#42d5ba", font=("Segoe UI", 7, "bold"))
+            canvas.create_text(8, 75, text="MÚSICA", anchor="w", fill="#b29bff", font=("Segoe UI", 7, "bold"))
+            tick = 60 if total <= 1800 else 300
+            for seconds in range(0, total + 1, tick):
+                pos = left + seconds * scale
+                canvas.create_line(pos, 20, pos, height - 1, fill="#1c2b3e")
+                canvas.create_text(pos + 3, 13, text=f"{seconds//60:02d}:{seconds%60:02d}",
+                                   anchor="w", fill="#7489a3", font=("Consolas", 7))
+            for x1, x2, number in positions:
+                scene = self.scene_data[number - 1]
+                asset = self.scene_assets.get(str(number), "")
+                has_image = bool(asset and Path(asset).is_file())
+                selected = number == getattr(self, "timeline_selected_scene", 1)
+                fill = "#176e9d" if has_image else "#29384b"
+                canvas.create_rectangle(x1, 24, x2 - 2, 45, fill=fill,
+                                        outline="#68d3ff" if selected else "#46617d",
+                                        width=2 if selected else 1, tags=(f"mini_scene_{number}",))
+                clip_label = f"{number:02d} · {scene.get('title', f'Escena {number}')}"
+                max_chars = max(4, int((x2 - x1 - 7) / 6))
+                if len(clip_label) > max_chars:
+                    clip_label = clip_label[:max(3, max_chars - 1)] + "…"
+                if x2 - x1 > 26:
+                    canvas.create_text(x1 + 4, 34, text=clip_label, anchor="w",
+                                       fill="#f4f8ff", font=("Segoe UI", 7, "bold"),
+                                       tags=(f"mini_scene_{number}",))
+            voice_color = "#159d8a" if self.audio_track_path and Path(self.audio_track_path).is_file() else "#1a2935"
+            music_color = "#6a4eab" if self.music_track_path and Path(self.music_track_path).is_file() else "#1a2935"
+            canvas.create_rectangle(left, 49, full_width - 6, 64, fill=voice_color, outline=voice_color)
+            voice_label = Path(self.audio_track_path).name if voice_color != "#1a2935" else "Sin narración"
+            canvas.create_text(left + 5, 56, text=voice_label, anchor="w",
+                               fill="#d9fff5" if voice_color != "#1a2935" else "#61748b",
+                               font=("Segoe UI", 7, "bold"))
+            canvas.create_rectangle(left, 68, full_width - 6, 82, fill=music_color, outline=music_color)
+            music_label = Path(self.music_track_path).name if music_color != "#1a2935" else "Sin música"
+            canvas.create_text(left + 5, 75, text=music_label, anchor="w",
+                               fill="#e8ddff" if music_color != "#1a2935" else "#61748b",
+                               font=("Segoe UI", 7, "bold"))
+            playhead = max(0, int(getattr(self, "timeline_playhead_seconds", 0)))
+            px = left + playhead * scale
+            canvas.create_line(px, 19, px, height, fill="#ffcf5a", width=2, tags=("mini_playhead",))
+            canvas.create_polygon(px - 4, 19, px + 4, 19, px, 25, fill="#ffcf5a", outline="#ffcf5a")
+            if hasattr(self, "mini_time_var"):
+                self.mini_time_var.set(
+                    f"{playhead//60:02d}:{playhead%60:02d} / {target_seconds//60:02d}:{target_seconds%60:02d}"
+                )
+        except (tk.TclError, ValueError, OSError):
+            return
+
+    def _mini_timeline_click(self, event):
+        canvas = getattr(self, "mini_timeline_canvas", None)
+        if canvas is None or not self.scene_data:
+            return
+        x = canvas.canvasx(event.x)
+        y = canvas.canvasy(event.y)
+        if not (22 <= y <= 47):
+            return
+        viewport = max(520, canvas.winfo_width())
+        left = 88
+        target = self._timeline_duration_seconds()
+        durations = allocate_scene_durations(self.scene_data, target)
+        durations = [self.scene_duration_overrides.get(str(i + 1), value)
+                     for i, value in enumerate(durations)]
+        elapsed = 0
+        scale = max(0.22, min(1.6, (viewport - left - 12) / max(1, sum(durations))))
+        for index, duration in enumerate(durations):
+            clip_width = max(30, duration * scale)
+            if left + elapsed <= x <= left + elapsed + clip_width:
+                self.timeline_selected_scene = index + 1
+                self.timeline_playhead_seconds = sum(durations[:index])
+                iid = f"scene_{index + 1}"
+                if iid in self.scene_outline.get_children(""):
+                    self.scene_outline.selection_set(iid)
+                    self.scene_outline.see(iid)
+                self._draw_timeline()
+                self._render_preview_frame()
+                break
+            elapsed += clip_width
 
     def _timeline_scene_selected(self, _event=None):
         number = self._scene_selection_number()
@@ -1636,52 +1801,74 @@ Write-Output 'NARRATION_OK'
         self._render_preview_frame()
 
     def _render_preview_frame(self):
-        if not hasattr(self, "preview_canvas"):
-            return
-        canvas = self.preview_canvas
-        canvas.delete("all")
-        width = max(320, canvas.winfo_width())
-        height = max(220, canvas.winfo_height())
-        number = getattr(self, "timeline_selected_scene", 1)
+        """Draw current scene artwork/storyboard into both monitor surfaces."""
+        canvases = [getattr(self, "preview_canvas", None),
+                    getattr(self, "preview_tab_canvas", None)]
+        number = max(1, int(getattr(self, "timeline_selected_scene", 1)))
         scenes = getattr(self, "scene_data", [])
         image_path = getattr(self, "scene_assets", {}).get(str(number), "")
-        if image_path and Path(image_path).is_file():
+        if not hasattr(self, "_preview_photos"):
+            self._preview_photos = {}
+        for canvas in canvases:
+            if canvas is None:
+                continue
             try:
-                from PIL import Image, ImageTk
-                image = Image.open(image_path).convert("RGB")
-                image.thumbnail((width - 40, height - 40), Image.Resampling.LANCZOS)
-                self._preview_photo = ImageTk.PhotoImage(image)
-                canvas.create_image(width // 2, height // 2, image=self._preview_photo, anchor="center")
-                canvas.create_rectangle(12, 12, width - 12, height - 12, outline="#2b527b", width=1)
-            except Exception:
-                canvas.create_text(width // 2, height // 2,
-                    text="Imagen asignada\nInstala Pillow para mostrarla en el monitor",
-                    fill="#a8bdd7", font=("Segoe UI", 12), justify="center")
-        elif scenes and 1 <= number <= len(scenes):
-            scene = scenes[number - 1]
-            canvas.create_rectangle(18, 18, width - 18, height - 18, fill="#101d30", outline="#24466c", width=2)
-            canvas.create_text(width // 2, height * 0.24, text=f"STORYBOARD  /  ESCENA {number:02d}",
-                               fill="#55b5ff", font=("Segoe UI", 10, "bold"))
-            title = scene.get("title", f"Escena {number}")
-            canvas.create_text(width // 2, height * 0.43, text=title[:100], width=width - 100,
-                               fill="#f2f7ff", font=("Segoe UI", 18, "bold"), justify="center")
-            body = re.sub(r"\\s+", " ", scene.get("text", scene.get("content", ""))).strip()
-            if not body:
-                body = "Asigna una ilustración a esta escena para visualizar su composición."
-            canvas.create_text(width // 2, height * 0.63, text=body[:260], width=width - 120,
-                               fill="#a9bad0", font=("Segoe UI", 10), justify="center")
-            canvas.create_text(width // 2, height * 0.86, text="MARC  •  MONITOR DE STORYBOARD",
-                               fill="#47749e", font=("Segoe UI", 8, "bold"))
-        else:
-            canvas.create_rectangle(18, 18, width - 18, height - 18, fill="#101d30", outline="#24466c", width=2)
-            canvas.create_text(width // 2, height * 0.42, text="MARC  /  VIDEO STUDIO",
-                               fill="#168bff", font=("Segoe UI", 22, "bold"))
-            canvas.create_text(width // 2, height * 0.55,
-                               text="Genera un guion para crear el storyboard de tu vídeo",
-                               fill="#a9bad0", font=("Segoe UI", 11))
+                if not canvas.winfo_exists():
+                    continue
+                canvas.delete("all")
+                width = max(320, canvas.winfo_width())
+                height = max(150, canvas.winfo_height())
+                if image_path and Path(image_path).is_file():
+                    try:
+                        from PIL import Image, ImageTk
+                        with Image.open(image_path) as source:
+                            image = source.convert("RGB")
+                        image.thumbnail((max(100, width - 24), max(80, height - 24)), Image.Resampling.LANCZOS)
+                        photo = ImageTk.PhotoImage(image)
+                        self._preview_photos[str(canvas)] = photo
+                        canvas.create_image(width // 2, height // 2, image=photo, anchor="center")
+                        canvas.create_rectangle(8, 8, width - 8, height - 8, outline="#2b527b", width=1)
+                        canvas.create_rectangle(8, height - 27, width - 8, height - 8,
+                                                fill="#07111f", outline="#07111f")
+                        title = scenes[number - 1].get("title", f"Escena {number}") if number <= len(scenes) else "Imagen de referencia"
+                        canvas.create_text(18, height - 17, text=f"ESCENA {number:02d}  ·  {title[:72]}",
+                                           anchor="w", fill="#d8eaff", font=("Segoe UI", 8, "bold"))
+                    except Exception:
+                        canvas.create_text(width // 2, height // 2,
+                            text="Imagen asignada\nNo se pudo decodificar la imagen",
+                            fill="#a8bdd7", font=("Segoe UI", 11), justify="center")
+                elif scenes and number <= len(scenes):
+                    scene = scenes[number - 1]
+                    canvas.create_rectangle(8, 8, width - 8, height - 8,
+                                            fill="#101d30", outline="#24466c", width=2)
+                    canvas.create_text(width // 2, height * 0.24,
+                                       text=f"STORYBOARD  /  ESCENA {number:02d}",
+                                       fill="#55b5ff", font=("Segoe UI", 9, "bold"))
+                    title = scene.get("title", f"Escena {number}")
+                    canvas.create_text(width // 2, height * 0.45, text=title[:90], width=width - 70,
+                                       fill="#f2f7ff", font=("Segoe UI", 15 if height > 200 else 12, "bold"),
+                                       justify="center")
+                    body = re.sub(r"\s+", " ", scene.get("text", scene.get("content", ""))).strip()
+                    if not body:
+                        body = "Asigna una ilustración a esta escena para visualizar su composición."
+                    canvas.create_text(width // 2, height * 0.69, text=body[:220], width=width - 80,
+                                       fill="#a9bad0", font=("Segoe UI", 9), justify="center")
+                    canvas.create_text(width // 2, height * 0.89, text="MARC  •  MONITOR DE STORYBOARD",
+                                       fill="#47749e", font=("Segoe UI", 8, "bold"))
+                else:
+                    canvas.create_rectangle(8, 8, width - 8, height - 8,
+                                            fill="#101d30", outline="#24466c", width=2)
+                    canvas.create_text(width // 2, height * 0.42, text="MARC  /  VIDEO STUDIO",
+                                       fill="#168bff", font=("Segoe UI", 18, "bold"))
+                    canvas.create_text(width // 2, height * 0.60,
+                                       text="Genera un guion para construir el storyboard",
+                                       fill="#a9bad0", font=("Segoe UI", 10))
+            except tk.TclError:
+                continue
         if hasattr(self, "preview_scene_var"):
-            total = len(scenes)
-            self.preview_scene_var.set(f"ESCENA {number:02d} / {total:02d}" if total else "STORYBOARD · SIN ESCENAS")
+            self.preview_scene_var.set(
+                f"ESCENA {number:02d} / {len(scenes):02d}" if scenes else "STORYBOARD · SIN ESCENAS"
+            )
 
     def choose_preview_video(self):
         path = filedialog.askopenfilename(
@@ -1931,7 +2118,7 @@ Write-Output 'NARRATION_OK'
         if visible and not is_visible:
             self.vertical_panes.add(
                 self.controls_area, before=self.lower_panel,
-                minsize=235, height=325, stretch="never"
+                minsize=285, width=325, stretch="never"
             )
             self.configuration_visible = True
         elif not visible and is_visible:
@@ -1962,15 +2149,15 @@ Write-Output 'NARRATION_OK'
 
     def _field(self, parent, label, variable, row, col, values=None, span=1):
         cell = tk.Frame(parent, bg=self.colors["panel"])
-        cell.grid(row=row, column=col, columnspan=span, sticky="ew", padx=8, pady=7)
+        cell.grid(row=row, column=col, columnspan=span, sticky="ew", padx=4, pady=3)
         tk.Label(cell, text=label.upper(), bg=self.colors["panel"], fg="#8fa8c8",
-                 font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
+                 font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 3))
         if values is not None:
             widget = ttk.Combobox(cell, textvariable=variable, values=values,
-                                  state="readonly", font=("Segoe UI", 10))
+                                  state="readonly", font=("Segoe UI", 9))
         else:
-            widget = ttk.Entry(cell, textvariable=variable, font=("Segoe UI", 10))
-        widget.pack(fill="x", ipady=2)
+            widget = ttk.Entry(cell, textvariable=variable, font=("Segoe UI", 9))
+        widget.pack(fill="x", ipady=1)
         self.form_widgets.append((widget, "readonly" if values is not None else "normal"))
         return widget
 
