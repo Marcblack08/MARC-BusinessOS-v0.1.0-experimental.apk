@@ -1757,8 +1757,8 @@ Write-Output 'NARRATION_OK'
         if not title or not topic:
             messagebox.showwarning("Faltan datos", "Completa el nombre del proyecto y la idea o premisa.")
             return None
-        if duration < 1 or duration > 10:
-            messagebox.showwarning("Duración no válida", "MARC permite vídeos de entre 1 y 10 minutos por proyecto.")
+        if duration < 1 or duration > 120:
+            messagebox.showwarning("Duración no válida", "MARC permite vídeos de entre 1 y 120 minutos por proyecto, procesados en bloques de unos 5 minutos.")
             return None
         if len(topic) > 3000:
             messagebox.showwarning("Premisa demasiado larga", "Resume la premisa en un máximo de 3000 caracteres.")
@@ -2374,6 +2374,22 @@ Write-Output 'NARRATION_OK'
         if not output:
             return
         width, height = PLATFORMS.get(row["platform"], (1280, 720))
+        # Perfil ligero para CPU con pocos hilos o equipos con poca RAM: conserva la proporción.
+        pc_info = getattr(self, "pc_info", {})
+        try:
+            logical_cores = int(pc_info.get("cores") or os.cpu_count() or 2)
+            ram_gb = float(pc_info.get("ram_gb") or 8)
+        except (TypeError, ValueError):
+            logical_cores, ram_gb = (os.cpu_count() or 2), 8.0
+        if logical_cores <= 4 or ram_gb < 8:
+            max_side = 854
+            scale = min(1.0, max_side / max(width, height))
+            width = max(2, int(width * scale) // 2 * 2)
+            height = max(2, int(height * scale) // 2 * 2)
+            self.status_var.set(
+                f"Perfil ligero activado ({logical_cores} hilos, {ram_gb:g} GB RAM): "
+                f"render a {width}×{height} para reducir la carga del equipo."
+            )
         target_seconds = max(60, int(row["duration_minutes"]) * 60)
         durations = allocate_scene_durations(scenes, target_seconds)
         durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
