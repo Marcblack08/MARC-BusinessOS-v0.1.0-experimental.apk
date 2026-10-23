@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import hashlib
 import os
 import random
 import queue
@@ -1818,7 +1819,8 @@ Write-Output 'NARRATION_OK'
         if not preflight:
             return
         self.estimate_var.set(self._estimate_time(minutes))
-        chapter_count = max(1, math.ceil((minutes * 135) / 360))
+        # Genera capítulos de aproximadamente 5 minutos para evitar una sola petición enorme.
+        chapter_count = max(1, math.ceil(minutes / 5))
         self.planned_chapters = chapter_count
         self.completed_chapters = 0
         self.planned_words = minutes * 135
@@ -2462,11 +2464,46 @@ Write-Output 'NARRATION_OK'
             has_audio = has_voice or has_music
             final_steps = total + 1 + (1 if has_audio else 0)
             font_size = max(20, min(44, width // 28))
+            elapsed_before_scene = 0
+            chunk_seconds = 5 * 60
             for index, scene in enumerate(scenes):
                 if self.render_cancel_event.is_set():
                     raise RuntimeError("__MARC_RENDER_CANCELLED__")
                 seconds = int(durations[index])
                 source_text = " ".join(scene["text"].split()).strip()
+                asset = asset_map.get(str(index + 1), "")
+                asset_signature = None
+                if asset and Path(asset).is_file():
+                    asset_path = Path(asset)
+                    stat = asset_path.stat()
+                    asset_signature = {
+                        "path": str(asset_path.resolve()), "size": stat.st_size,
+                        "mtime_ns": stat.st_mtime_ns
+                    }
+                cache_payload = {
+                    "scene": scene, "duration": seconds, "asset": asset_signature,
+                    "animation": animation_style, "width": width, "height": height,
+                    "fps": 24, "preset": "ultrafast", "crf": 25, "version": 2
+                }
+                cache_fingerprint = hashlib.sha256(
+                    json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+                ).hexdigest()
+                scene_file = scene_dir / f"scene_{index + 1:03d}.mp4"
+                cache_file = scene_dir / f"scene_{index + 1:03d}.cache.json"
+                try:
+                    cached = json.loads(cache_file.read_text(encoding="utf-8")) if cache_file.is_file() else {}
+                except (OSError, json.JSONDecodeError):
+                    cached = {}
+                if (scene_file.is_file() and scene_file.stat().st_size > 0
+                        and cached.get("fingerprint") == cache_fingerprint):
+                    elapsed_before_scene += seconds
+                    chunk_number = max(1, math.ceil(elapsed_before_scene / chunk_seconds))
+                    chunk_total = max(1, math.ceil(sum(durations) / chunk_seconds))
+                    self.generation_queue.put((
+                        "render_progress", index + 1, final_steps,
+                        f"Bloque {chunk_number}/{chunk_total} · escena {index + 1}/{total}: reutilizada"
+                    ))
+                    continue
                 sentences = re.split(r"(?<=[.!?…])\s+", source_text)
                 caption = " ".join(sentences[:2]).strip()
                 if len(caption) > 190:
@@ -2482,14 +2519,12 @@ Write-Output 'NARRATION_OK'
                     wrapped.extend(textwrap.wrap(paragraph, width=wrap_width, break_long_words=False) or [""])
                 text_file = scene_dir / f"scene_text_{index + 1:03d}.txt"
                 text_file.write_text("\n".join(wrapped), encoding="utf-8")
-                scene_file = scene_dir / f"scene_{index + 1:03d}.mp4"
                 draw_path = ffmpeg_filter_path(text_file)
                 draw_filter = (
                     f"drawtext=textfile='{draw_path}':expansion=none:fontcolor=white:"
                     f"fontsize={font_size}:line_spacing=12:x=(w-text_w)/2:y=(h-text_h)/2:"
                     "box=1:boxcolor=0x06101d@0.80:boxborderw=28"
                 )
-                asset = asset_map.get(str(index + 1), "")
                 if asset and Path(asset).is_file():
                     motion = scene_motion_filter(animation_style, width, height, seconds)
                     video_filter = f"{motion},{draw_filter}"
@@ -2512,9 +2547,16 @@ Write-Output 'NARRATION_OK'
                         "-crf", "25", "-movflags", "+faststart", str(scene_file)
                     ]
                 run_ffmpeg(cmd, f"scene_{index + 1:03d}.log")
+                cache_file.write_text(
+                    json.dumps({"fingerprint": cache_fingerprint}, ensure_ascii=False),
+                    encoding="utf-8"
+                )
+                elapsed_before_scene += seconds
+                chunk_number = max(1, math.ceil(elapsed_before_scene / chunk_seconds))
+                chunk_total = max(1, math.ceil(sum(durations) / chunk_seconds))
                 self.generation_queue.put((
                     "render_progress", index + 1, final_steps,
-                    f"Escena {index + 1}/{total}: {scene.get('title', 'Escena')}"
+                    f"Bloque {chunk_number}/{chunk_total} · escena {index + 1}/{total}: {scene.get('title', 'Escena')}"
                 ))
 
             concat_path = scene_dir / "concat.txt"
