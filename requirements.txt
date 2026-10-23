@@ -1,3 +1,4 @@
-# Núcleo: biblioteca estándar de Python. Sin dependencias obligatorias.
+# Dependencia visual opcional para previsualizar imágenes de escenas en el monitor.
+Pillow>=10.0
 # Opcional para interfaz web embebida en versiones posteriores:
 # pywebview>=5.0
