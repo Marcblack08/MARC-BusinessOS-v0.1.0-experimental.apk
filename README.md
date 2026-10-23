@@ -14,12 +14,14 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 - Timeline multipista visual con clips por escena, pistas de narración/música, bloques de subtítulos aproximados, cabezal navegable, zoom y selección sincronizada con la lista de escenas.
 - Edición básica de montaje: mover el clip seleccionado una posición a izquierda/derecha, editar la duración de cada escena (5–3600 segundos) y conservar duraciones e imágenes asignadas en los recursos del proyecto. Estos cambios invalidan la aprobación del guion y requieren volver a aprobar antes de exportar.
 - El monitor permite reproducir un MP4 dentro de MARC mediante el motor VLC cuando VLC Media Player está instalado. Incluye reproducción, pausa, detención y búsqueda; si el motor local no está disponible, ofrece abrir el MP4 en el reproductor externo. La miniatura/storyboard sigue visible en la pestaña Vista previa.
+- **Vista previa MP4 antes de exportar:** renderiza el montaje actual en un archivo temporal de revisión (720p, hasta 24 FPS) y lo abre dentro de MARC; no exige haber aprobado el guion. La vista previa registra los ajustes y recursos usados y avisa si después cambias el montaje. La exportación final sigue siendo una operación separada y exige aprobación.
+- **Generar imágenes faltantes:** permite generar en secuencia una ilustración local por cada escena que todavía no tenga recurso visual. Al iniciarla desde la vista previa, puede continuar automáticamente al render de revisión cuando termine el lote. Requiere ComfyUI abierto y un checkpoint seleccionado.
 - Género, premisa, protagonistas, conflicto, tono, narrador, desenlace, plataforma, duración, estilo de dibujo y animación.
 - Modos de producción **Corto (2 minutos)** y **Novela / Serie**. El modo corto fija un objetivo de 2 minutos y ajusta la cantidad de texto; la duración real depende de la voz, las pausas y el ritmo.
 - Perfil de salida por proyecto: **720p HD, 1080p Full HD o 2K/1440p**, formatos horizontal 16:9, vertical 9:16 y cuadrado 1:1, y 24/25/30/60 FPS. La aplicación muestra una advertencia para perfiles exigentes y no reduce silenciosamente la resolución elegida.
 - Biblia narrativa y continuidad por proyecto: personajes, relaciones, escenarios, canon, estado del episodio y tramas pendientes se guardan en SQLite. La acción **Continuar historia** crea un episodio vinculado que reutiliza la biblia y el estado más reciente. En **Dirección visual → Biblia de la historia y continuidad** se pueden revisar y corregir manualmente el canon y el cierre del episodio.
 - Guiones con gancho dramático y etiquetas de hablante como `[NARRADOR]:` y `[JUAN]:`; el texto se organiza por escena para permitir voces distintas sin convertir cada línea hablada en un clip visual independiente.
-- Asignación de voces por personaje a las voces SAPI que estén instaladas en Windows. La generación automática/manual de narración puede cambiar la voz por etiqueta; las voces y su expresividad dependen del sistema instalado.
+- Asignación de voces por personaje a las voces SAPI que estén instaladas en Windows. Si hay varias voces disponibles, MARC intenta asignar voces alternativas a los personajes etiquetados y mantener la voz principal para el narrador, respetando las asignaciones manuales existentes. Para diferenciar voces el guion debe incluir etiquetas como `[NARRADOR]:`, `[LUCÍA]:` y `[MARIO]:`, y Windows debe tener al menos dos voces instaladas; con una sola voz disponible no puede crear timbres distintos.
 - Revisión narrativa preventiva antes de aprobar: avisa de algunos posibles inicios genéricos o borradores cortos. Son heurísticas y no sustituyen una revisión humana ni prueban por sí solas la ausencia de contradicciones.
 - Generación de historias en capítulos de aproximadamente 5 minutos con Ollama/Qwen 2.5 3B local, en segundo plano y con cancelación entre solicitudes. Los proyectos admiten de 1 a 120 minutos; los guiones largos se dividen en partes para reducir solicitudes enormes.
 - Detección del equipo y estimación inicial de tiempos.
@@ -62,14 +64,14 @@ Ollama, sus modelos, ComfyUI/checkpoints y FFmpeg no se incluyen en el instalado
 ## Flujo de trabajo
 1. Configura la premisa, género y duración.
 2. Genera el guion con la IA local.
-3. Revisa el guion y las escenas; importa imágenes o genera ilustraciones con ComfyUI si está instalado.
-4. Opcionalmente, añade una pista de narración/música local.
-5. Exporta subtítulos SRT si los necesitas y revisa su sincronización.
-6. Aprueba el guion.
-7. Exporta MP4 y abre el resultado desde la pestaña **Vista previa**.
+3. Revisa el guion y las escenas; importa imágenes, o selecciona un checkpoint en ComfyUI y usa **Generar imágenes faltantes**.
+4. Configura las voces: asegúrate de tener varias voces de Windows instaladas y etiquetas de hablante en el guion para distinguir personajes. Opcionalmente, añade música de fondo.
+5. Pulsa **Vista previa MP4** para crear y reproducir el montaje dentro de MARC antes de exportar. Corrige el guion, imágenes, duraciones o asignaciones de voz si hace falta; vuelve a generar la vista previa tras cualquier cambio.
+6. Exporta subtítulos SRT si los necesitas y revisa su sincronización.
+7. Aprueba el guion y pulsa **Exportar MP4** para producir el archivo final.
 
 ## Límites importantes
-- La integración de ComfyUI genera **imágenes fijas**, no vídeo neuronal completo. Los prompts de ilustración incluyen referencias de la biblia narrativa para ayudar a mantener la apariencia y los escenarios; el modelo local no puede garantizar identidad visual perfecta. El render aplica movimiento de cámara sencillo a imágenes y tarjetas tipográficas donde no haya recursos.
+- La integración de ComfyUI genera **imágenes fijas**, no vídeo neuronal completo. Los prompts de ilustración incluyen referencias de la biblia narrativa para ayudar a mantener la apariencia y los escenarios; el modelo local no puede garantizar identidad visual perfecta. El render aplica movimiento de cámara sencillo a imágenes y tarjetas tipográficas donde no haya recursos. La vista previa permite comprobar este montaje antes de la exportación definitiva, pero no convierte por sí sola imágenes fijas en animación completa de personajes.
 - La voz local usa las voces SAPI que tenga Windows instaladas; puede necesitar que instales una voz española desde la configuración de idioma/voz. No es una voz neuronal de alta calidad y el resultado varía según la voz disponible. Las voces por personaje requieren que el guion tenga etiquetas de hablante y que estén instaladas las voces elegidas. La música de fondo se mezcla a menor volumen que la narración; revisa el balance auditivo antes de publicar.
 - La biblia narrativa es memoria estructurada basada en el contenido generado y guardado; no garantiza continuidad perfecta. La IA puede cometer errores, así que revisa nombres, cronología y hechos antes de aprobar cada episodio.
 - El perfil 2K/1440p a 60 FPS puede ser lento en equipos antiguos. Seleccionar 2K no mejora las imágenes de origen, no genera ilustraciones por sí solo y no convierte imágenes fijas en vídeo neuronal.
