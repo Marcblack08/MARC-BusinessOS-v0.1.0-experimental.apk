@@ -442,6 +442,9 @@ class App(tk.Tk):
         tk.Label(scenes_tab, text="Organiza la estructura narrativa antes de producir recursos visuales. Esta lista se construye a partir del guion; no simula clips ya generados.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=900, justify="left").grid(row=1, column=0, sticky="w", pady=(4, 12))
+        self.scene_summary_var = tk.StringVar(value="0 escenas · 0 palabras")
+        tk.Label(scenes_tab, textvariable=self.scene_summary_var, bg=self.colors["panel"],
+                 fg=self.colors["muted"], font=("Segoe UI", 9, "bold")).grid(row=1, column=0, sticky="w", pady=(4, 8))
         scene_actions = tk.Frame(scenes_tab, bg=self.colors["panel"])
         scene_actions.grid(row=2, column=0, sticky="ew", pady=(0, 8))
         self.assign_image_button = ttk.Button(scene_actions, text="Añadir imagen", style="Accent.TButton",
@@ -697,6 +700,10 @@ class App(tk.Tk):
         self.progress_label_var.set("Listo para planificar el guion.")
         self.progress_detail_var.set("0% · Esperando inicio")
         self.script_text.delete("1.0", "end")
+        self.scene_assets = {}
+        self.last_export_path = ""
+        if hasattr(self, "preview_status_var"):
+            self.preview_status_var.set("Todavía no hay un MP4 exportado para este proyecto.")
         self._refresh_scene_outline("")
         self.status_var.set("Proyecto nuevo. Define la premisa y los parámetros narrativos.")
 
@@ -1085,6 +1092,7 @@ class App(tk.Tk):
         self.ending_var.set(project["ending"] or "Justicia y superación")
         self.drawing_style_var.set(project["drawing_style"] or "Anime cinematográfico")
         self.animation_style_var.set(project["animation_style"] or "2D fluida")
+        self._load_scene_assets(project["id"])
         self.script_text.delete("1.0", "end")
         self.script_text.insert("1.0", project["script"])
         self._refresh_scene_outline(project["script"] or "")
