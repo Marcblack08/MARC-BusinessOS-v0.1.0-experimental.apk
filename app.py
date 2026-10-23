@@ -655,8 +655,8 @@ class App(tk.Tk):
         if self.current_id is None:
             messagebox.showwarning("Guarda el proyecto", "Completa el título y la premisa antes de asignar imágenes.")
             return
-        selection = self.scene_outline.curselection()
-        if not selection or not self.scene_data:
+        scene_number = self._scene_selection_number()
+        if scene_number is None or not self.scene_data or scene_number > len(self.scene_data):
             messagebox.showinfo("Selecciona una escena", "Primero genera o abre un guion y selecciona una escena.")
             return
         source = filedialog.askopenfilename(
@@ -669,7 +669,6 @@ class App(tk.Tk):
         if source_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
             messagebox.showerror("Formato no compatible", "Selecciona una imagen PNG, JPG, WEBP o BMP.")
             return
-        scene_number = selection[0] + 1
         assets_dir = self._project_assets_dir()
         if assets_dir is None:
             return
@@ -680,17 +679,17 @@ class App(tk.Tk):
             self.scene_assets[str(scene_number)] = str(destination.resolve())
             self._save_scene_assets()
             self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
-            self.scene_outline.selection_set(scene_number - 1)
+            self.scene_outline.selection_set(f"scene_{scene_number}")
+            self.scene_outline.see(f"scene_{scene_number}")
             self.status_var.set(f"Imagen asignada a la escena {scene_number}. Se usará durante el render.")
         except OSError as exc:
             messagebox.showerror("No se pudo copiar la imagen", str(exc))
 
     def clear_scene_image(self):
-        selection = self.scene_outline.curselection()
-        if not selection:
+        scene_number = self._scene_selection_number()
+        if scene_number is None:
             messagebox.showinfo("Selecciona una escena", "Selecciona la escena cuya imagen quieres quitar.")
             return
-        scene_number = selection[0] + 1
         self.scene_assets.pop(str(scene_number), None)
         try:
             self._save_scene_assets()
@@ -698,7 +697,8 @@ class App(tk.Tk):
             messagebox.showerror("No se pudo guardar el recurso", str(exc))
             return
         self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
-        self.scene_outline.selection_set(scene_number - 1)
+        self.scene_outline.selection_set(f"scene_{scene_number}")
+        self.scene_outline.see(f"scene_{scene_number}")
         self.status_var.set(f"Se quitó la imagen de la escena {scene_number}; se usará una tarjeta de texto.")
 
     def choose_preview_video(self):
@@ -801,7 +801,7 @@ class App(tk.Tk):
                        self.detect_models_button, self.generate_image_button):
             button.configure(state=state)
         self.project_list.configure(state=state)
-        self.scene_outline.configure(state=state)
+        self._set_scene_list_state(active)
         self.cancel_button.configure(state="normal" if self.generation_running else "disabled")
         self.cancel_render_button.configure(state="normal" if self.render_running else "disabled")
         self.image_model_combo.configure(state="disabled" if active else "readonly")
@@ -1085,7 +1085,7 @@ class App(tk.Tk):
                        self.detect_models_button, self.generate_image_button):
             button.configure(state=state)
         self.image_model_combo.configure(state="disabled" if active else "readonly")
-        self.scene_outline.configure(state=state)
+        self._set_scene_list_state(active)
         # La barra es determinista: solo avanza cuando un capítulo termina realmente.
         if not active:
             self.progressbar.stop()
@@ -1299,8 +1299,8 @@ class App(tk.Tk):
                         self.scene_assets[str(scene_number)] = image_path
                         self._save_scene_assets()
                         self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
-                        self.scene_outline.selection_clear(0, "end")
-                        self.scene_outline.selection_set(scene_number - 1)
+                        self.scene_outline.selection_set(f"scene_{scene_number}")
+                        self.scene_outline.see(f"scene_{scene_number}")
                     self.progress_label_var.set(f"Ilustración generada · escena {scene_number}")
                     self.progress_detail_var.set("Imagen guardada localmente en los recursos del proyecto.")
                     self.status_var.set("Ilustración IA generada y asignada a la escena.")
@@ -1550,7 +1550,7 @@ class App(tk.Tk):
             widget.configure(state="disabled" if active else idle_state)
         self.script_text.configure(state="disabled" if active else "normal")
         self.image_model_combo.configure(state="disabled" if active else "readonly")
-        self.scene_outline.configure(state=state)
+        self._set_scene_list_state(active)
 
     def cancel_export(self):
         if self.render_running:
