@@ -18,7 +18,7 @@ jobs:
       - name: Install FFmpeg for media smoke tests
         run: choco install ffmpeg --yes --no-progress
       - name: Compile all Python source and tests
-        run: python -m py_compile app.py scene_engine.py ollama_client.py tests/test_scene_engine.py tests/test_ffmpeg_smoke.py
+        run: python -m py_compile app.py scene_engine.py story_engine.py ollama_client.py tests/test_scene_engine.py tests/test_story_engine.py tests/test_ffmpeg_smoke.py
       - name: Run scene and FFmpeg integration tests
         run: python -m unittest discover -s tests -v
       - name: Check desktop UI runtime
