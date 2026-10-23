@@ -12,15 +12,16 @@
 - [x] Integración opcional con ComfyUI local para generar imágenes fijas.
 - [x] Exportación MP4 en segundo plano con progreso, cancelación y logs FFmpeg.
 - [x] Movimiento sencillo de cámara para imágenes fijas y tratamiento pixel/stop-motion básico.
-- [x] Importación de pista de audio y mezcla dentro del MP4.
+- [x] Pistas separadas de narración y música, mezcla con música atenuada y opción de repetir música corta dentro del MP4.
 - [x] Generación offline de narración con Windows System.Speech/SAPI y selección de voces instaladas.
 - [x] Exportación de subtítulos SRT por escena con tiempos orientativos y tests unitarios.
+- [x] Pruebas de integración FFmpeg en Windows para mezcla de narración+música y pista de voz individual.
 - [x] Instalador de dependencias y constructor PyInstaller/Inno Setup.
 - [x] Flujo de GitHub Actions para construir instalador y carpeta portable manualmente.
 - [x] Pruebas unitarias del parser/tiempos/escape de rutas en CI.
 - [ ] Probar la GUI en Windows con escalas/resoluciones distintas.
 - [ ] Probar Ollama con Qwen 2.5 3B y ComfyUI con un checkpoint concreto.
-- [ ] Probar exportación MP4 corta con imagen + audio, incluidos caracteres y rutas con espacios.
+- [ ] Probar exportación MP4 corta con imagen + narración y música, incluidos caracteres y rutas con espacios, en el PC objetivo.
 - [ ] Ejecutar el artefacto de instalador sobre Windows limpio; confirmar instalar/desinstalar y persistencia de datos.
 
 ## Siguientes fases de producción
