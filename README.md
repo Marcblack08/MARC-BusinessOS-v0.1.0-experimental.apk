@@ -1,51 +1,45 @@
 # MARC Video Studio AI Desktop
 
-Aplicación de escritorio local para diseñar historias, generar guiones por capítulos con Ollama/Qwen, revisarlos y exportar un MP4 básico con FFmpeg.
+Aplicación de escritorio local para crear guiones narrativos con Ollama/Qwen, revisarlos y exportar un MP4 de escenas tipográficas mediante FFmpeg.
 
-> **Estado honesto:** las mejoras de interfaz e IA están incorporadas al código de `main`, pero esta revisión aún necesita validación en Windows. No es todavía un instalador EXE compilado. El render actual utiliza tarjetas de texto sobre fondos; aún no genera automáticamente imágenes cinematográficas ni narración de voz.
+## Estado real del proyecto
+El código fuente está en desarrollo. La sintaxis de Python se valida mediante GitHub Actions. La ejecución completa, el render en Windows y el empaquetado deben probarse en el PC objetivo antes de considerar una versión estable. El script de construcción produce una carpeta portable con PyInstaller, no un instalador MSI firmado.
 
-## Funcionalidad implementada en el código
-- Interfaz rediseñada en azul tecnológico: azul noche, tarjetas, panel de proyectos y estados de herramientas.
-- Indicador de disponibilidad de Ollama y búsqueda de FFmpeg.
-- Conexión local a `http://127.0.0.1:11434/api/generate`; modelo esperado: `qwen2.5:3b`.
-- Parámetros de guion independientes: género, premisa, protagonista, conflicto central, tono, narrador, desenlace, plataforma y duración.
-- Plan de continuidad y generación secuencial por capítulos para que las historias largas no dependan de una sola respuesta.
-- Generación en segundo plano para mantener la interfaz sensible, progreso por capítulos y cancelación entre solicitudes.
-- Proyectos almacenados en SQLite. La migración añade los nuevos campos sin borrar proyectos guardados.
-- La exportación exige aprobación humana. Guardar cambios en texto o parámetros invalida la aprobación anterior.
-- FFmpeg se busca en PATH y en carpetas habituales de discos locales; también se permite seleccionarlo manualmente.
+## Mejoras actuales
+- Interfaz azul tecnológico con biblioteca de proyectos y paneles.
+- Configuración narrativa independiente.
+- Estilos seleccionables de dibujo y animación para orientar la dirección visual del guion.
+- Barra de progreso con porcentaje, capítulos completados y estimación de palabras.
+- Generación por capítulos con Ollama/Qwen 2.5 3B en segundo plano.
+- Guardado local SQLite con migraciones compatibles.
+- Aprobación humana obligatoria antes de exportar; editar invalida la aprobación.
+- Búsqueda automática y selección manual de FFmpeg.
 
 ## Requisitos
 - Windows 10/11 de 64 bits.
-- Python 3.11+ con Tcl/Tk disponible.
-- Ollama instalado y ejecutándose.
-- Modelo local descargado: `qwen2.5:3b`.
+- Python 3.11+ con Tcl/Tk para ejecutar desde código.
+- Ollama instalado y modelo local `qwen2.5:3b` descargado.
 - FFmpeg para exportar MP4.
-- Equipo objetivo de desarrollo: Intel Core i5 de 4.ª generación, 16 GB RAM, SSD y NVIDIA GTX 750. Qwen puede funcionar por CPU; los guiones largos pueden tardar bastante.
+- Equipo objetivo: Intel Core i5 de 4.ª generación, 16 GB de RAM, SSD y NVIDIA GTX 750. La generación larga puede tardar por CPU.
 
-## Instalación/ejecución
-1. Instala Python y Ollama desde sus sitios oficiales.
-2. Descarga el modelo una vez desde PowerShell:
-   ```powershell
-   ollama run qwen2.5:3b
-   ```
-   Espera a que termine la descarga. Para uso posterior, deja Ollama abierto/en ejecución.
-3. Extrae FFmpeg Essentials. MARC intenta encontrar `ffmpeg.exe` en `bin`; no es obligatorio añadirlo a PATH.
+## Instalación y ejecución
+1. Instala Python 3.11+.
+2. Instala Ollama y descarga una vez el modelo con `ollama run qwen2.5:3b`.
+3. Descarga FFmpeg Essentials; puedes dejarlo fuera de PATH y elegir `ffmpeg.exe` desde MARC.
 4. Ejecuta `install_windows.bat`.
-5. Ejecuta `start_windows.bat`.
+5. Abre MARC con `start_windows.bat`.
 
-## Flujo de trabajo
-1. Define el tema y los parámetros narrativos.
-2. MARC solicita a Qwen una biblia/escaleta de continuidad.
-3. Qwen genera los capítulos en orden y MARC conserva un borrador local.
-4. Edita la historia y pulsa **Aprobar guion**.
-5. Solo entonces puedes exportar el MP4.
+Para construir una carpeta portable, ejecuta `build_windows.bat`. La carpeta resultante en `dist` debe probarse en otra instalación de Windows antes de distribuirse. Ollama y FFmpeg no quedan integrados en el EXE.
 
-No se publica automáticamente en redes sociales ni se envía el contenido a una nube de IA; las solicitudes del modelo se dirigen al servicio Ollama local.
+## Flujo de producción
+1. Completa premisa y parámetros.
+2. MARC propone un plan y genera capítulos.
+3. Revisa y edita el guion.
+4. Pulsa **Aprobar guion**.
+5. Exporta el MP4.
 
-## Límites actuales
-- El tamaño de las respuestas depende del modelo local. La división por capítulos mejora la continuidad, pero no garantiza exactamente el número de palabras ni la duración final.
-- Cancelar una generación detiene el proceso después de que termine la solicitud actual de Ollama.
-- La exportación crea tarjetas de texto con FFmpeg, sin voz, música ni imágenes generadas. El montaje avanzado y las herramientas de voz son fases posteriores.
-- El código se actualiza en GitHub; para usar estas mejoras en una copia ya descargada hay que actualizar `app.py` y reiniciar la aplicación.
-- El EXE y la instalación limpia aún no se han verificado en esta máquina de desarrollo.
+## Limitaciones importantes
+- Los estilos de dibujo/animación se guardan y orientan el diseño narrativo, pero el motor actual no genera imágenes ni animación real automáticamente.
+- La exportación actual utiliza escenas de texto con fondos. No incorpora voz, música, imágenes generadas ni montaje de clips.
+- La duración real depende del texto final y del ritmo de narración; el cálculo mostrado es orientativo.
+- Cancelar la IA actúa después de que termine la solicitud de Ollama que esté en curso.
