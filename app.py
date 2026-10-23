@@ -2322,6 +2322,25 @@ Write-Output 'NARRATION_OK'
         if not row or not row["approved"]:
             messagebox.showerror("Aprobación obligatoria", "No se puede exportar: primero debes aprobar el guion.")
             return
+        scenes = parse_script_scenes(row["script"] or "")
+        if not scenes:
+            messagebox.showerror("Guion vacío", "El guion no contiene escenas exportables. Genera o escribe el guion primero.")
+            return
+        asset_map = dict(self.scene_assets)
+        for key, value in list(asset_map.items()):
+            if not Path(value).is_file():
+                asset_map.pop(key, None)
+        has_scene_images = any(asset_map.get(str(i + 1)) for i in range(len(scenes)))
+        if not has_scene_images:
+            continue_text_only = messagebox.askyesno(
+                "Faltan imágenes para el vídeo",
+                "El guion está listo, pero ninguna escena tiene una imagen asignada.\\n\\n"
+                "Si continúas, el MP4 tendrá tarjetas de texto sobre fondos oscuros; "
+                "MARC NO generará ilustraciones automáticamente durante la exportación.\\n\\n"
+                "Pulsa «No» para volver a ESCENAS y asignar imágenes, o «Sí» para continuar con vídeo de texto."
+            )
+            if not continue_text_only:
+                return
         ffmpeg = self._find_ffmpeg()
         if not ffmpeg:
             selected = filedialog.askopenfilename(
@@ -2342,24 +2361,10 @@ Write-Output 'NARRATION_OK'
         )
         if not output:
             return
-        scenes = parse_script_scenes(row["script"] or "")
-        if not scenes:
-            messagebox.showerror("Guion vacío", "El guion no contiene escenas exportables. Genera o escribe el guion primero.")
-            return
         width, height = PLATFORMS.get(row["platform"], (1280, 720))
         target_seconds = max(60, int(row["duration_minutes"]) * 60)
         durations = allocate_scene_durations(scenes, target_seconds)
         durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
-        asset_map = dict(self.scene_assets)
-        for key, value in list(asset_map.items()):
-            if not Path(value).is_file():
-                asset_map.pop(key, None)
-        if not any(asset_map.get(str(i + 1)) for i in range(len(scenes))):
-            messagebox.showinfo(
-                "Producción de vídeo",
-                "No has asignado imágenes a las escenas. MARC creará tarjetas de texto sobre fondos oscuros. "
-                "Para obtener escenas ilustradas, asigna imágenes propias o genera ilustraciones con ComfyUI en la pestaña ESCENAS."
-            )
         audio_path = self.audio_track_path if self.audio_track_path and Path(self.audio_track_path).is_file() else ""
         music_path = self.music_track_path if self.music_track_path and Path(self.music_track_path).is_file() else ""
         loop_music = bool(self.loop_music_var.get()) if self.loop_music_var is not None else True
