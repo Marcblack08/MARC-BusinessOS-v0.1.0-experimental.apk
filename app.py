@@ -5,6 +5,8 @@ import shutil
 import sqlite3
 import subprocess
 import textwrap
+import urllib.request
+import urllib.error
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from datetime import datetime
@@ -122,7 +124,7 @@ class App(tk.Tk):
         ttk.Label(form, text="Plataforma / formato").grid(row=2, column=0, sticky="w", pady=4)
         ttk.Combobox(form, textvariable=self.platform_var, values=list(PLATFORMS), state="readonly").grid(row=2, column=1, sticky="ew", pady=4)
         ttk.Label(form, text="Duración objetivo (minutos, máx. 10)").grid(row=3, column=0, sticky="w", pady=4)
-        ttk.Combobox(form, textvariable=self.duration_var, values=[str(i) for i in range(1, 11)], state="readonly").grid(row=3, column=1, sticky="ew", pady=4)
+        ttk.Combobox(form, textvariable=self.duration_var, values=[str(i) for i in (1, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120)], state="readonly").grid(row=3, column=1, sticky="ew", pady=4)
         ttk.Label(form, text="Estilo").grid(row=4, column=0, sticky="w", pady=4)
         ttk.Combobox(form, textvariable=self.style_var, values=["Educativo y directo", "Narrativo", "Promocional", "Documental", "Motivacional"], state="readonly").grid(row=4, column=1, sticky="ew", pady=4)
         form.columnconfigure(1, weight=1)
@@ -167,8 +169,8 @@ class App(tk.Tk):
         if not title or not topic:
             messagebox.showwarning("Faltan datos", "Completa el nombre del proyecto y el tema.")
             return None
-        if duration < 1 or duration > 10:
-            messagebox.showwarning("Duración no válida", "La duración debe estar entre 1 y 10 minutos.")
+        if duration < 1 or duration > 120:
+            messagebox.showwarning("Duración no válida", "La duración debe estar entre 1 y 120 minutos.")
             return None
         return title, topic, self.platform_var.get(), duration, self.style_var.get()
 
@@ -176,10 +178,53 @@ class App(tk.Tk):
         data = self.get_form()
         if not data:
             return
-        title, topic, _, minutes, style = data
+        title, topic, platform, minutes, style = data
+        prompt = (
+            "Eres un guionista experto de historias para YouTube. Responde en español natural. "
+            "Crea una historia original, no una lista de consejos ni un resumen. "
+            "Desarrolla personajes con nombres, motivaciones, defectos, relaciones y evolución. "
+            "Incluye escenas con diálogos, conflicto creciente, giros coherentes, consecuencias emocionales "
+            "y un desenlace satisfactorio. No repitas ideas para rellenar. "
+            f"Proyecto: {title}. Premisa/tema: {topic}. Formato: {platform}. "
+            f"Duración solicitada: {minutes} minutos. Estilo seleccionado: {style}. "
+            f"Escribe aproximadamente {minutes * 130} a {minutes * 150} palabras, "
+            "organizadas en escenas con indicaciones visuales breves y narración lista para locución. "
+            "Si la extensión supera tu capacidad de respuesta, entrega la primera parte y señala claramente "
+            "dónde continuar, sin fingir que completaste toda la duración."
+        )
+        payload = json.dumps({
+            "model": "qwen2.5:3b", "prompt": prompt, "stream": False,
+            "options": {"temperature": 0.85, "num_ctx": 8192}
+        }).encode("utf-8")
+        request = urllib.request.Request(
+            "http://127.0.0.1:11434/api/generate", data=payload,
+            headers={"Content-Type": "application/json"}, method="POST"
+        )
+        self.status_var.set("Consultando Qwen local… la generación puede tardar.")
+        self.update_idletasks()
+        try:
+            with urllib.request.urlopen(request, timeout=900) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            answer = result.get("response", "").strip()
+            if not answer:
+                raise RuntimeError("Ollama devolvió una respuesta vacía.")
+        except Exception as exc:
+            messagebox.showerror(
+                "No se pudo generar con IA",
+                "No se pudo consultar Ollama en http://127.0.0.1:11434. "
+                "Comprueba que Ollama esté abierto y ejecuta «ollama list» en PowerShell.\n\n"
+                f"Detalle: {exc}"
+            )
+            self.status_var.set("Error de conexión o generación. No se ha aprobado el guion.")
+            return
+        script = (
+            f"TÍTULO: {title}\nESTILO: {style}\nDURACIÓN OBJETIVO: {minutes} minuto(s)\n"
+            "GENERADO POR: Qwen 2.5 3B local\n\n" + answer +
+            "\n\nNOTA: Revisa la historia, continuidad, datos y derechos de uso antes de aprobar."
+        )
         self.script_text.delete("1.0", "end")
-        self.script_text.insert("1.0", draft_script(title, topic, minutes, style))
-        self.status_var.set("Borrador generado localmente. Revísalo y guárdalo; aún no está aprobado.")
+        self.script_text.insert("1.0", script)
+        self.status_var.set("Borrador generado por Qwen local. Revísalo y apruébalo manualmente.")
         self.save_project(reset_approval=True, quiet=True)
 
     def save_project(self, reset_approval=False, quiet=False):
