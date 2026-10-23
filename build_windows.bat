@@ -19,7 +19,7 @@ echo [1/3] Limpiando compilacion anterior...
 if exist build rmdir /s /q build
 if exist "dist\MARC Video Studio AI Desktop" rmdir /s /q "dist\MARC Video Studio AI Desktop"
 echo [2/3] Construyendo aplicacion de escritorio...
-".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --windowed --onedir --name "MARC Video Studio AI Desktop" app.py
+".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --windowed --onedir --name "MARC Video Studio AI Desktop" --collect-all tkinter app.py
 if errorlevel 1 goto error
 echo.
 echo [OK] Aplicacion empaquetada en:
