@@ -1599,24 +1599,54 @@ class App(tk.Tk):
             text_path = assets_dir / "narration_text.txt"
             script_path = assets_dir / "synthesize_windows_voice.ps1"
             output_path = assets_dir / "narration.pending.wav"
+            voice_map_path = assets_dir / "voice_assignments.json"
             text_path.write_text(narration, encoding="utf-8")
+            voice_map_path.write_text(json.dumps(self.voice_assignments or {}, ensure_ascii=False), encoding="utf-8")
             script_path.write_text(
                 r"""param(
     [Parameter(Mandatory=$true)][string]$TextFile,
     [Parameter(Mandatory=$true)][string]$OutputFile,
-    [Parameter(Mandatory=$false)][string]$VoiceName
+    [Parameter(Mandatory=$false)][string]$VoiceName,
+    [Parameter(Mandatory=$false)][string]$VoiceMapFile
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Speech
 $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$voiceMap = @{}
+if ($VoiceMapFile -and (Test-Path -LiteralPath $VoiceMapFile)) {
+    $parsed = Get-Content -LiteralPath $VoiceMapFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($property in $parsed.PSObject.Properties) {
+        $voiceMap[$property.Name.ToUpperInvariant()] = [string]$property.Value
+    }
+}
 try {
-    if ($VoiceName -and $VoiceName -ne '(Automática)') { $synth.SelectVoice($VoiceName) }
+    $defaultVoice = $VoiceName
+    if ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
     $synth.Rate = 0
     $synth.Volume = 100
     $text = [System.IO.File]::ReadAllText($TextFile, [System.Text.Encoding]::UTF8)
     if ([string]::IsNullOrWhiteSpace($text)) { throw 'El texto de narración está vacío.' }
     $synth.SetOutputToWaveFile($OutputFile)
-    $synth.Speak($text)
+    foreach ($rawLine in ($text -split '\r?\n')) {
+        $line = $rawLine.Trim()
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $segments = [regex]::Matches($line, '\[([^\]]+)\]\s*:\s*(.*?)(?=\s+\[[^\]]+\]\s*:\s*|$)')
+        if ($segments.Count -gt 0) {
+            foreach ($segment in $segments) {
+                $speaker = $segment.Groups[1].Value.Trim().ToUpperInvariant()
+                $spoken = $segment.Groups[2].Value.Trim()
+                if ($voiceMap.ContainsKey($speaker) -and $voiceMap[$speaker] -and $voiceMap[$speaker] -ne '(Voz principal)') {
+                    $synth.SelectVoice($voiceMap[$speaker])
+                } elseif ($defaultVoice -and $defaultVoice -ne '(Automática)') {
+                    $synth.SelectVoice($defaultVoice)
+                }
+                if (![string]::IsNullOrWhiteSpace($spoken)) { $synth.Speak($spoken) }
+            }
+        } else {
+            if ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+            $synth.Speak($line)
+        }
+    }
     $synth.SetOutputToNull()
 }
 finally {
@@ -1641,7 +1671,7 @@ Write-Output 'NARRATION_OK'
         self.progress_detail_var.set("0% · Windows está sintetizando voz desde el guion")
         self.voice_status_var.set("Generando WAV sin conexión. La duración depende de la longitud del guion y la voz instalada.")
         self.status_var.set("La narración se genera localmente; puedes cancelar este proceso.")
-        args = (int(self.current_id), str(text_path), str(script_path), str(output_path), chosen_voice)
+        args = (int(self.current_id), str(text_path), str(script_path), str(output_path), chosen_voice, str(voice_map_path))
         threading.Thread(target=self._local_voice_worker, args=args, daemon=True).start()
 
     def _set_voice_state(self, active):
@@ -1651,7 +1681,8 @@ Write-Output 'NARRATION_OK'
             self.export_button, self.delete_button, self.assign_image_button, self.clear_image_button,
             self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
             self.detect_models_button, self.generate_image_button, self.detect_voice_button,
-            self.generate_voice_button, self.export_srt_button, self.select_music_button, self.clear_music_button
+            self.generate_voice_button, self.assign_character_voices_button, self.export_srt_button,
+            self.select_music_button, self.clear_music_button
         ):
             button.configure(state=state)
         self.cancel_button.configure(state="disabled")
@@ -1674,7 +1705,7 @@ Write-Output 'NARRATION_OK'
             self.cancel_voice_button.configure(state="disabled")
             self.voice_status_var.set("Cancelación solicitada; deteniendo la síntesis de voz…")
 
-    def _local_voice_worker(self, project_id, text_path, script_path, output_path, voice_name):
+    def _local_voice_worker(self, project_id, text_path, script_path, output_path, voice_name, voice_map_path=""):
         log_path = Path(text_path).with_name("synthesize_voice.log")
         try:
             powershell = shutil.which("powershell.exe") or shutil.which("powershell")
@@ -1688,7 +1719,8 @@ Write-Output 'NARRATION_OK'
                 process = subprocess.Popen(
                     [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass",
                      "-File", script_path, "-TextFile", text_path,
-                     "-OutputFile", output_path, "-VoiceName", voice_name],
+                     "-OutputFile", output_path, "-VoiceName", voice_name,
+                     "-VoiceMapFile", voice_map_path],
                     stdout=subprocess.DEVNULL, stderr=log, creationflags=creationflags
                 )
                 last_update = time.monotonic()
