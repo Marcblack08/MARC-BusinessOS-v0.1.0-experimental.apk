@@ -1654,6 +1654,9 @@ class App(tk.Tk):
             return
         speaker_names = extract_speaker_names(raw_script)
         if len(speaker_names) > 1 and len(self.available_voice_names) > 1:
+            if chosen_voice == "(Automática)":
+                chosen_voice = self.available_voice_names[0]
+                self.voice_var.set(chosen_voice)
             self._prepare_default_character_voice_assignments(raw_script, chosen_voice)
         elif len(speaker_names) > 1:
             self.voice_status_var.set(
@@ -3824,6 +3827,22 @@ Write-Output 'NARRATION_OK'
                 if not messagebox.askyesno("Escenas sin ilustración", warning):
                     return
 
+        preview_audio_path = self.audio_track_path if self.audio_track_path and Path(self.audio_track_path).is_file() else ""
+        chosen_voice = self.voice_var.get().strip() if hasattr(self, "voice_var") else "(Automática)"
+        if not preview_audio_path and os.name == "nt":
+            voice_count = len(self.available_voice_names)
+            speaker_count = len(extract_speaker_names(row["script"] or ""))
+            if speaker_count > 1 and voice_count > 1:
+                if chosen_voice == "(Automática)":
+                    chosen_voice = self.available_voice_names[0]
+                    self.voice_var.set(chosen_voice)
+                self._prepare_default_character_voice_assignments(row["script"] or "", chosen_voice)
+            elif speaker_count > 1 and voice_count <= 1:
+                self.voice_status_var.set(
+                    "El guion contiene varios hablantes, pero Windows solo tiene una voz local detectada; "
+                    "instala más voces para distinguirlos."
+                )
+
         signature = self._current_preview_signature()
         if preview:
             preview_dir = PROJECTS_DIR / str(row["id"]) / "previews"
@@ -3895,7 +3914,7 @@ Write-Output 'NARRATION_OK'
         target_seconds = max(60, int(row["duration_minutes"]) * 60)
         durations = allocate_scene_durations(scenes, target_seconds)
         durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
-        audio_path = self.audio_track_path if self.audio_track_path and Path(self.audio_track_path).is_file() else ""
+        audio_path = preview_audio_path
         music_path = self.music_track_path if self.music_track_path and Path(self.music_track_path).is_file() else ""
         loop_music = bool(self.loop_music_var.get()) if self.loop_music_var is not None else True
         has_any_audio = bool(audio_path or music_path or (os.name == "nt" and not audio_path))
@@ -3914,14 +3933,6 @@ Write-Output 'NARRATION_OK'
             self.progress_detail_var.set(
                 f"0% · {width}×{height} · {fps} FPS · duración objetivo {self._format_eta(sum(durations))}"
             )
-        chosen_voice = self.voice_var.get().strip() if hasattr(self, "voice_var") else "(Automática)"
-        if not audio_path and os.name == "nt":
-            voice_count = len(self.available_voice_names)
-            speaker_count = len(extract_speaker_names(row["script"] or ""))
-            if speaker_count > 1 and voice_count > 1:
-                self._prepare_default_character_voice_assignments(row["script"] or "", chosen_voice)
-            elif speaker_count > 1 and voice_count <= 1:
-                self.voice_status_var.set("El guion contiene varios hablantes, pero Windows solo tiene una voz local detectada; instala más voces para distinguirlos.")
         voice_assignments_json = json.dumps(self.voice_assignments or {}, ensure_ascii=False)
         narration_text = "\n\n".join(
             str(scene.get("text", "")).strip() for scene in scenes if str(scene.get("text", "")).strip()
