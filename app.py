@@ -482,10 +482,10 @@ class App(tk.Tk):
         self.preview_scene_title_var = tk.StringVar(value="Genera un guion")
         tk.Label(scene_inspector, textvariable=self.preview_scene_title_var, bg=self.colors["input"],
                  fg=self.colors["text"], font=("Segoe UI", 11, "bold"),
-                 wraplength=330, justify="left").pack(anchor="w", pady=(7, 5))
+                 wraplength=260, justify="left").pack(anchor="w", pady=(7, 5))
         self.preview_scene_text_var = tk.StringVar(value="Al seleccionar una escena aparecerán aquí su resumen y referencia visual.")
         tk.Label(scene_inspector, textvariable=self.preview_scene_text_var, bg=self.colors["input"],
-                 fg=self.colors["muted"], font=("Segoe UI", 9), wraplength=330,
+                 fg=self.colors["muted"], font=("Segoe UI", 9), wraplength=260,
                  justify="left", anchor="nw").pack(fill="both", expand=True)
         monitor_actions = tk.Frame(preview_dock, bg=self.colors["panel"])
         monitor_actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5, 0))
