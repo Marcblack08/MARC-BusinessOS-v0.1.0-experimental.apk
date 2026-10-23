@@ -2155,6 +2155,18 @@ Write-Output 'NARRATION_OK'
             return False
 
     def play_preview_video(self):
+        if self.preview_player_active and self._vlc_player is not None:
+            try:
+                state = self._vlc_player.get_state()
+                if state == self._vlc_instance.State.Paused:
+                    self._vlc_player.play()
+                    self.preview_playback_status_var.set("Reanudando vídeo dentro de MARC")
+                    self._schedule_preview_poll()
+                    return
+                if self._vlc_player.is_playing():
+                    return
+            except Exception:
+                pass
         path = self.last_export_path
         if not path or not Path(path).is_file():
             self.choose_preview_video()
@@ -2578,6 +2590,8 @@ Write-Output 'NARRATION_OK'
         if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual antes de crear otro proyecto.")
             return
+        if getattr(self, "preview_player_active", False):
+            self.stop_preview_video()
         self.current_id = None
         self.series_key = ""
         self.episode_number = 1
@@ -3356,6 +3370,8 @@ Write-Output 'NARRATION_OK'
         selection = self.project_list.curselection()
         if not selection:
             return
+        if getattr(self, "preview_player_active", False):
+            self.stop_preview_video()
         row = self.project_rows[selection[0]]
         project = self.conn.execute("SELECT * FROM projects WHERE id=?", (row["id"],)).fetchone()
         if not project:
