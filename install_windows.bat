@@ -15,6 +15,8 @@ set "PYARGS="
 rem Test each runtime explicitly; do not rely on py --version error handling.
 where py >nul 2>nul
 if not errorlevel 1 (
+  py -3.15 -c "import sys" >nul 2>nul
+  if not errorlevel 1 goto use_py315
   py -3.13 -c "import sys" >nul 2>nul
   if not errorlevel 1 goto use_py313
   py -3.12 -c "import sys" >nul 2>nul
@@ -30,9 +32,9 @@ if not errorlevel 1 (
   if not errorlevel 1 goto use_python
 )
 
-echo [ERROR] No se encontro una instalacion funcional de Python 3.11, 3.12 o 3.13.
+echo [ERROR] No se encontro una instalacion funcional de Python 3.11, 3.12, 3.13 o 3.15.
 echo.
-echo Instala Python 3.12 de 64 bits desde:
+echo Instala Python 3.12 de 64 bits desde (recomendado):
 echo https://www.python.org/downloads/release/python-31210/
 echo Durante la instalacion marca "Add python.exe to PATH".
 echo Luego cierra esta ventana y ejecuta este archivo de nuevo.
@@ -40,6 +42,10 @@ echo.
 pause
 exit /b 1
 
+:use_py315
+set "PYEXE=py"
+set "PYARGS=-3.15"
+goto python_found
 :use_py313
 set "PYEXE=py"
 set "PYARGS=-3.13"
