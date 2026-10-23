@@ -1597,19 +1597,23 @@ class App(tk.Tk):
         if not any(asset_map.get(str(i + 1)) for i in range(len(scenes))):
             messagebox.showinfo(
                 "Producción de vídeo",
-                "No has asignado imágenes a las escenas. MARC creará tarjetas de texto animadas sobre fondos oscuros. "
-                "Para obtener escenas ilustradas, abre la pestaña ESCENAS y usa «Añadir imagen» en las escenas deseadas."
+                "No has asignado imágenes a las escenas. MARC creará tarjetas de texto sobre fondos oscuros. "
+                "Para obtener escenas ilustradas, asigna imágenes propias o genera ilustraciones con ComfyUI en la pestaña ESCENAS."
             )
+        audio_path = self.audio_track_path if self.audio_track_path and Path(self.audio_track_path).is_file() else ""
+        loop_audio = bool(self.loop_audio_var.get()) if self.loop_audio_var is not None else False
+        render_steps = len(scenes) + 1 + (1 if audio_path else 0)
         self.render_cancel_event.clear()
         self.render_running = True
         self._set_render_state(True)
-        self.progressbar.configure(maximum=len(scenes) + 1, value=0)
+        self.progressbar.configure(maximum=render_steps, value=0)
         self.progress_label_var.set(f"Preparando render · {len(scenes)} escenas")
         self.progress_detail_var.set(f"0% · Duración objetivo: {self._format_eta(sum(durations))}")
         self.status_var.set("Render iniciado en segundo plano. Puedes seguir viendo el progreso aquí.")
         args = (
             ffmpeg, str(Path(output).resolve()), int(row["id"]), width, height,
-            scenes, durations, asset_map, row["animation_style"] or "2D fluida"
+            scenes, durations, asset_map, row["animation_style"] or "2D fluida",
+            audio_path, loop_audio
         )
         threading.Thread(target=self._render_video_worker, args=args, daemon=True).start()
 
@@ -1639,7 +1643,7 @@ class App(tk.Tk):
             self.status_var.set("Cancelación solicitada. Se detendrá el proceso FFmpeg actual.")
 
     def _render_video_worker(self, ffmpeg, output, project_id, width, height,
-                             scenes, durations, asset_map, animation_style):
+                             scenes, durations, asset_map, animation_style, audio_path="", loop_audio=False):
         scene_dir = PROJECTS_DIR / str(project_id) / "render_work"
         scene_dir.mkdir(parents=True, exist_ok=True)
         output_path = Path(output)
@@ -1671,6 +1675,8 @@ class App(tk.Tk):
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
             total = len(scenes)
+            has_audio = bool(audio_path and Path(audio_path).is_file())
+            final_steps = total + 1 + (1 if has_audio else 0)
             font_size = max(20, min(44, width // 28))
             for index, scene in enumerate(scenes):
                 if self.render_cancel_event.is_set():
@@ -1717,7 +1723,7 @@ class App(tk.Tk):
                     ]
                 run_ffmpeg(cmd, f"scene_{index + 1:03d}.log")
                 self.generation_queue.put((
-                    "render_progress", index + 1, total + 1,
+                    "render_progress", index + 1, final_steps,
                     f"Escena {index + 1}/{total}: {scene.get('title', 'Escena')}"
                 ))
 
@@ -1728,7 +1734,7 @@ class App(tk.Tk):
             )
             if self.render_cancel_event.is_set():
                 raise RuntimeError("__MARC_RENDER_CANCELLED__")
-            self.generation_queue.put(("render_progress", total, total + 1, "Uniendo escenas y finalizando MP4…"))
+            self.generation_queue.put(("render_progress", total + 1, final_steps, "Uniendo escenas y finalizando MP4…"))
             concat_cmd = [
                 ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", "concat.txt",
                 "-c", "copy", "-movflags", "+faststart", str(temp_output_path)
@@ -1736,6 +1742,33 @@ class App(tk.Tk):
             run_ffmpeg(concat_cmd, "concat.log", cwd=scene_dir)
             if not temp_output_path.is_file() or temp_output_path.stat().st_size == 0:
                 raise RuntimeError("FFmpeg terminó, pero no se encontró un archivo MP4 válido.")
+            if has_audio:
+                if self.render_cancel_event.is_set():
+                    raise RuntimeError("__MARC_RENDER_CANCELLED__")
+                audio_video_path = scene_dir / "with_audio.mp4"
+                if audio_video_path.exists():
+                    audio_video_path.unlink()
+                self.generation_queue.put(("render_progress", total + 1, final_steps, "Mezclando la pista de audio…"))
+                audio_input = []
+                audio_filter = []
+                audio_map = ["-map", "0:a:0"]
+                if loop_audio:
+                    audio_input.extend(["-stream_loop", "-1"])
+                audio_input.extend(["-i", str(Path(audio_path).resolve()), "-i", str(temp_output_path)])
+                if not loop_audio:
+                    audio_filter = ["-filter_complex", "[0:a:0]apad[aout]", "-map", "[aout]"]
+                    audio_map = []
+                mux_cmd = [
+                    ffmpeg, "-y", *audio_input,
+                    "-map", "1:v:0", *audio_map, *audio_filter,
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
+                    "-movflags", "+faststart", str(audio_video_path)
+                ]
+                run_ffmpeg(mux_cmd, "mux_audio.log", cwd=scene_dir)
+                if not audio_video_path.is_file() or audio_video_path.stat().st_size == 0:
+                    raise RuntimeError("FFmpeg no pudo combinar el audio con el vídeo.")
+                temp_output_path.unlink()
+                audio_video_path.replace(temp_output_path)
             temp_output_path.replace(output_path)
             project_dir = PROJECTS_DIR / str(project_id)
             (project_dir / "last_export.txt").write_text(str(output_path), encoding="utf-8")
