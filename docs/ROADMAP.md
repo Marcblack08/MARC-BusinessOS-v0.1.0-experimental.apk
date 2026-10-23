@@ -13,6 +13,7 @@
 - [x] Exportación MP4 en segundo plano con progreso, cancelación y logs FFmpeg.
 - [x] Movimiento sencillo de cámara para imágenes fijas y tratamiento pixel/stop-motion básico.
 - [x] Importación de pista de audio y mezcla dentro del MP4.
+- [x] Generación offline de narración con Windows System.Speech/SAPI y selección de voces instaladas.
 - [x] Instalador de dependencias y constructor PyInstaller/Inno Setup.
 - [x] Flujo de GitHub Actions para construir instalador y carpeta portable manualmente.
 - [x] Pruebas unitarias del parser/tiempos/escape de rutas en CI.
@@ -22,7 +23,7 @@
 - [ ] Ejecutar el artefacto de instalador sobre Windows limpio; confirmar instalar/desinstalar y persistencia de datos.
 
 ## Siguientes fases de producción
-- [ ] Narración sintética local, con selección de voz.
+- [ ] Evaluar un motor neuronal de voz local opcional para mejorar la calidad respecto a Windows SAPI.
 - [ ] Subtítulos SRT/VTT sincronizados con el guion.
 - [ ] Vista previa de fotogramas y reproductor integrado.
 - [ ] Edición manual/reordenamiento de escenas y edición de duración por escena.
