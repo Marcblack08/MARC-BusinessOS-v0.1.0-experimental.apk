@@ -450,7 +450,7 @@ class App(tk.Tk):
         scenes_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=14, pady=12)
         studio_tabs.add(scenes_tab, text="  ▤  ESCENAS  ")
         scenes_tab.grid_columnconfigure(0, weight=1)
-        scenes_tab.grid_rowconfigure(5, weight=1)
+        scenes_tab.grid_rowconfigure(6, weight=1)
         tk.Label(scenes_tab, text="PLAN DE MONTAJE", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w")
         tk.Label(scenes_tab, text="Organiza el guion como escenas, asigna ilustraciones propias o genera imágenes con un motor local opcional.",
@@ -487,10 +487,11 @@ class App(tk.Tk):
         self.generate_image_button.pack(side="left", padx=(6, 0))
         self.image_ai_status_var = tk.StringVar(value="ComfyUI local opcional · comprobando modelos…")
         tk.Label(scenes_tab, textvariable=self.image_ai_status_var, bg=self.colors["panel"],
-                 fg=self.colors["muted"], font=("Segoe UI", 8), anchor="w").grid(row=4, column=1, sticky="e", padx=(8, 0))
+                 fg=self.colors["muted"], font=("Segoe UI", 8), anchor="w",
+                 wraplength=1000, justify="left").grid(row=5, column=0, sticky="ew", pady=(0, 7))
 
         scene_body = tk.Frame(scenes_tab, bg=self.colors["input"], padx=8, pady=8)
-        scene_body.grid(row=5, column=0, sticky="nsew")
+        scene_body.grid(row=6, column=0, sticky="nsew")
         scene_body.grid_columnconfigure(0, weight=1)
         scene_body.grid_rowconfigure(0, weight=1)
         columns = ("number", "title", "words", "duration", "visual")
@@ -511,7 +512,7 @@ class App(tk.Tk):
         self.scene_outline.bind("<Double-1>", lambda _event: self.assign_scene_image())
         tk.Label(scenes_tab, text="La generación de ilustraciones se ejecuta en ComfyUI en tu PC. Requiere instalarlo y descargar al menos un checkpoint compatible. No usa claves API ni servicios en la nube.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
-                 wraplength=1000, justify="left").grid(row=6, column=0, sticky="w", pady=(8, 0))
+                 wraplength=1000, justify="left").grid(row=7, column=0, sticky="w", pady=(8, 0))
 
         preview_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=14, pady=12)
         studio_tabs.add(preview_tab, text="  ▣  VISTA PREVIA  ")
