@@ -170,7 +170,8 @@ class App(tk.Tk):
         self.project_list.pack(fill="both", expand=True, pady=(0, 10))
         self.project_list.bind("<<ListboxSelect>>", self.load_selected)
         ttk.Button(sidebar, text="+ Nuevo proyecto", style="Accent.TButton", command=self.new_project).pack(fill="x")
-        ttk.Button(sidebar, text="Eliminar proyecto", command=self.delete_project).pack(fill="x", pady=(7, 0))
+        self.delete_button = ttk.Button(sidebar, text="Eliminar proyecto", command=self.delete_project)
+        self.delete_button.pack(fill="x", pady=(7, 0))
         tk.Label(sidebar, text="LOCAL · PRIVADO · SIN API", bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(16, 0))
 
@@ -381,6 +382,7 @@ class App(tk.Tk):
         self.generate_button.configure(state=state)
         self.cancel_button.configure(state="normal" if active else "disabled")
         self.project_list.configure(state=state)
+        self.delete_button.configure(state=state)
         self.save_button.configure(state=state)
         self.approve_button.configure(state=state)
         self.export_button.configure(state=state)
@@ -687,11 +689,16 @@ class App(tk.Tk):
         if not lines:
             messagebox.showerror("Guion vacío", "El guion no contiene escenas exportables.")
             return
+        # Agrupa párrafos para aproximar la duración elegida sin crear miles de escenas de 5 segundos.
+        target_seconds = max(5, int(row["duration_minutes"]) * 60)
+        max_scenes = max(1, target_seconds // 5)
+        group_size = max(1, math.ceil(len(lines) / max_scenes))
+        scene_texts = [" ".join(lines[i:i + group_size]) for i in range(0, len(lines), group_size)]
+        seconds = max(5, target_seconds // len(scene_texts))
         scene_dir = PROJECTS_DIR / str(row["id"])
         scene_dir.mkdir(parents=True, exist_ok=True)
-        seconds = max(5, int(row["duration_minutes"]) * 60 // len(lines))
         try:
-            for i, line in enumerate(lines):
+            for i, line in enumerate(scene_texts):
                 # Texto seguro para filtro drawtext; cada escena es un fondo sencillo.
                 wrapped = "\\n".join(textwrap.wrap(line, width=32 if height > width else 48))
                 textfile = scene_dir / f"scene_{i:03d}.txt"
@@ -705,7 +712,7 @@ class App(tk.Tk):
                 ]
                 subprocess.run(cmd, check=True, capture_output=True, text=True)
             concat = scene_dir / "concat.txt"
-            concat.write_text("".join(f"file '{(scene_dir / f'scene_{i:03d}.mp4').as_posix()}'\n" for i in range(len(lines))), encoding="utf-8")
+            concat.write_text("".join(f"file '{(scene_dir / f'scene_{i:03d}.mp4').as_posix()}'\n" for i in range(len(scene_texts))), encoding="utf-8")
             cmd = [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-c", "copy", output]
             subprocess.run(cmd, check=True, capture_output=True, text=True)
         except (subprocess.CalledProcessError, OSError) as exc:
