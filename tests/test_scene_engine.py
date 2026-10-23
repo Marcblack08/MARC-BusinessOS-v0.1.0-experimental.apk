@@ -1,6 +1,9 @@
 import unittest
 
-from scene_engine import allocate_scene_durations, ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
+from scene_engine import (
+    allocate_scene_durations, build_srt_subtitles, ffmpeg_filter_path,
+    parse_script_scenes, scene_motion_filter
+)
 
 
 class SceneEngineTests(unittest.TestCase):
@@ -40,6 +43,20 @@ class SceneEngineTests(unittest.TestCase):
         self.assertEqual(len(durations), 30)
         self.assertTrue(all(x >= 5 for x in durations))
         self.assertEqual(sum(durations), 150)
+
+    def test_srt_cues_are_numbered_and_time_uses_comma_milliseconds(self):
+        scenes = [
+            {"text": "La noche cayó. Lucía cerró la puerta."},
+            {"text": "Alguien llamó desde el pasillo."},
+        ]
+        srt = build_srt_subtitles(scenes, [7, 5])
+        self.assertIn("1\n00:00:00,000 --> 00:00:07,000", srt)
+        self.assertIn("2\n00:00:07,000 --> 00:00:12,000", srt)
+        self.assertIn("Lucía cerró la puerta.", srt)
+
+    def test_srt_rejects_mismatched_scene_durations(self):
+        with self.assertRaises(ValueError):
+            build_srt_subtitles([{"text": "Texto"}], [])
 
     def test_filter_path_escapes_windows_colon_and_apostrophe(self):
         escaped = ffmpeg_filter_path(r"C:\Users\Marc's files\scene:01.txt")
