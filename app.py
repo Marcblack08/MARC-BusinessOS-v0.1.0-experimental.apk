@@ -825,6 +825,9 @@ class App(tk.Tk):
         self.voice_combo.pack(side="left")
         self.detect_voice_button = ttk.Button(voice_controls, text="Detectar voces", command=self.detect_local_voices)
         self.detect_voice_button.pack(side="left", padx=(7, 0))
+        self.assign_character_voices_button = ttk.Button(
+            voice_controls, text="Voces por personaje", command=self.edit_character_voices)
+        self.assign_character_voices_button.pack(side="left", padx=(7, 0))
         self.generate_voice_button = ttk.Button(voice_controls, text="Generar narración", style="Accent.TButton",
                                                 command=self.generate_local_voice)
         self.generate_voice_button.pack(side="left", padx=(7, 0))
@@ -1490,6 +1493,74 @@ class App(tk.Tk):
             self.generation_queue.put(("voice_models", voices, quiet))
         except Exception as exc:
             self.generation_queue.put(("voice_models_error", str(exc), quiet))
+
+    def edit_character_voices(self):
+        """Map explicit script speaker labels to installed Windows voices."""
+        script = self.script_text.get("1.0", "end-1c")
+        speakers = [name for name in extract_speaker_names(script) if name.casefold() != "narrador"]
+        if not speakers:
+            messagebox.showinfo(
+                "No hay personajes etiquetados",
+                "Para asignar voces, el guion debe identificar las intervenciones como [JUAN]: diálogo y [NARRADOR]: descripción. "
+                "Genera un guion con etiquetas de hablante o añádelas al texto."
+            )
+            return
+        voices = list(getattr(self, "available_voice_names", []))
+        if not voices:
+            messagebox.showwarning(
+                "Primero detecta las voces",
+                "Pulsa «Detectar voces» en Audio para leer las voces SAPI que están instaladas en Windows."
+            )
+            return
+        dialog = tk.Toplevel(self)
+        dialog.title("Voces por personaje")
+        dialog.configure(bg=self.colors["panel"])
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.geometry("620x520")
+        dialog.minsize(520, 360)
+        body = tk.Frame(dialog, bg=self.colors["panel"], padx=16, pady=14)
+        body.pack(fill="both", expand=True)
+        tk.Label(body, text="ASIGNACIÓN DE VOCES", bg=self.colors["panel"],
+                 fg=self.colors["text"], font=("Segoe UI", 13, "bold")).pack(anchor="w")
+        tk.Label(body,
+                 text="Elige una voz local para cada personaje. «Voz principal» utiliza la voz general seleccionada en Audio.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
+                 wraplength=560, justify="left").pack(anchor="w", pady=(5, 12))
+        scroll = tk.Canvas(body, bg=self.colors["input"], highlightthickness=0)
+        scroll.pack(fill="both", expand=True)
+        inner = tk.Frame(scroll, bg=self.colors["input"], padx=8, pady=8)
+        win = scroll.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda _event: scroll.configure(scrollregion=scroll.bbox("all")))
+        scroll.bind("<Configure>", lambda event: scroll.itemconfigure(win, width=event.width))
+        voice_vars = {}
+        options = ["(Voz principal)"] + voices
+        for row, speaker in enumerate(speakers):
+            tk.Label(inner, text=speaker, bg=self.colors["input"], fg=self.colors["text"],
+                     font=("Segoe UI", 10, "bold")).grid(row=row, column=0, sticky="w", padx=(4, 10), pady=5)
+            variable = tk.StringVar(value=self.voice_assignments.get(speaker, "(Voz principal)"))
+            if variable.get() not in options:
+                variable.set("(Voz principal)")
+            combo = ttk.Combobox(inner, textvariable=variable, values=options,
+                                 state="readonly", font=("Segoe UI", 9))
+            combo.grid(row=row, column=1, sticky="ew", padx=4, pady=5)
+            voice_vars[speaker] = variable
+        inner.columnconfigure(1, weight=1)
+        actions = tk.Frame(body, bg=self.colors["panel"])
+        actions.pack(fill="x", pady=(12, 0))
+        def save_mapping():
+            self.voice_assignments = {
+                name: var.get() for name, var in voice_vars.items()
+                if var.get() and var.get() != "(Voz principal)"
+            }
+            if self.current_id is not None:
+                self.save_project(quiet=True)
+            self.voice_status_var.set(f"Voces asignadas a {len(self.voice_assignments)} personaje(s).")
+            self.status_var.set("Asignación de voces guardada en el proyecto.")
+            dialog.destroy()
+        ttk.Button(actions, text="Cancelar", command=dialog.destroy).pack(side="right")
+        ttk.Button(actions, text="Guardar asignaciones", style="Accent.TButton",
+                   command=save_mapping).pack(side="right", padx=(0, 8))
 
     def generate_local_voice(self):
         if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
@@ -3167,7 +3238,7 @@ Write-Output 'NARRATION_OK'
                        self.select_audio_button, self.clear_audio_button,
                        self.select_music_button, self.clear_music_button,
                        self.detect_models_button, self.generate_image_button,
-                       self.detect_voice_button, self.generate_voice_button, self.export_srt_button):
+                       self.detect_voice_button, self.generate_voice_button, self.assign_character_voices_button, self.export_srt_button):
             button.configure(state=state)
         self.cancel_voice_button.configure(state="disabled")
         self.voice_combo.configure(state="disabled" if active else "readonly")
