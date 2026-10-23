@@ -1111,6 +1111,9 @@ class App(tk.Tk):
         self.status_var.set("Proyecto eliminado.")
 
     def export_video(self):
+        if self.render_running or self.generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
         if self.current_id is None:
             messagebox.showwarning("Guarda primero", "Guarda el proyecto antes de exportar.")
             return
@@ -1126,75 +1129,177 @@ class App(tk.Tk):
                 filetypes=[("FFmpeg ejecutable", "ffmpeg.exe"), ("Ejecutables", "*.exe")]
             )
             if not selected:
-                messagebox.showerror("FFmpeg no encontrado", "No se encontró FFmpeg automáticamente. Selecciona ffmpeg.exe de la carpeta bin.")
+                messagebox.showerror("FFmpeg no encontrado", "Selecciona ffmpeg.exe de la carpeta bin para exportar.")
                 return
             if Path(selected).name.lower() != "ffmpeg.exe":
                 messagebox.showerror("Archivo incorrecto", "Selecciona el archivo ffmpeg.exe.")
                 return
             ffmpeg = selected
-        output = filedialog.asksaveasfilename(title="Guardar video MP4", defaultextension=".mp4",
-                                               filetypes=[("Video MP4", "*.mp4")],
-                                               initialfile=f"{row['title'][:40]}.mp4")
+        output = filedialog.asksaveasfilename(
+            title="Guardar vídeo MP4", defaultextension=".mp4",
+            filetypes=[("Vídeo MP4", "*.mp4")],
+            initialfile=f"{row['title'][:40]}.mp4"
+        )
         if not output:
             return
+        scenes = parse_script_scenes(row["script"] or "")
+        if not scenes:
+            messagebox.showerror("Guion vacío", "El guion no contiene escenas exportables. Genera o escribe el guion primero.")
+            return
         width, height = PLATFORMS.get(row["platform"], (1280, 720))
-        lines = [
-            x.strip() for x in row["script"].splitlines()
-            if x.strip()
-            and not x.strip().startswith("[")
-            and not x.strip().startswith(("TÍTULO:", "ESTILO:", "GÉNERO:", "DURACIÓN", "MODELO:", "GENERADO POR:", "NOTA:", "NOTA DE"))
-        ]
-        if not lines:
-            messagebox.showerror("Guion vacío", "El guion no contiene escenas exportables.")
-            return
-        # Agrupa párrafos para aproximar la duración elegida sin crear miles de escenas de 5 segundos.
-        target_seconds = max(5, int(row["duration_minutes"]) * 60)
-        max_scenes = max(1, target_seconds // 5)
-        group_size = max(1, math.ceil(len(lines) / max_scenes))
-        scene_texts = [" ".join(lines[i:i + group_size]) for i in range(0, len(lines), group_size)]
-        seconds = max(5, target_seconds // len(scene_texts))
-        scene_dir = PROJECTS_DIR / str(row["id"])
+        target_seconds = max(60, int(row["duration_minutes"]) * 60)
+        durations = allocate_scene_durations(scenes, target_seconds)
+        asset_map = dict(self.scene_assets)
+        for key, value in list(asset_map.items()):
+            if not Path(value).is_file():
+                asset_map.pop(key, None)
+        if not any(asset_map.get(str(i + 1)) for i in range(len(scenes))):
+            messagebox.showinfo(
+                "Producción de vídeo",
+                "No has asignado imágenes a las escenas. MARC creará tarjetas de texto animadas sobre fondos oscuros. "
+                "Para obtener escenas ilustradas, abre la pestaña ESCENAS y usa «Añadir imagen» en las escenas deseadas."
+            )
+        self.render_cancel_event.clear()
+        self.render_running = True
+        self._set_render_state(True)
+        self.progressbar.configure(maximum=len(scenes) + 1, value=0)
+        self.progress_label_var.set(f"Preparando render · {len(scenes)} escenas")
+        self.progress_detail_var.set(f"0% · Duración objetivo: {self._format_eta(sum(durations))}")
+        self.status_var.set("Render iniciado en segundo plano. Puedes seguir viendo el progreso aquí.")
+        args = (
+            ffmpeg, str(Path(output).resolve()), int(row["id"]), width, height,
+            scenes, durations, asset_map, row["animation_style"] or "2D fluida"
+        )
+        threading.Thread(target=self._render_video_worker, args=args, daemon=True).start()
+
+    def _set_render_state(self, active):
+        state = "disabled" if active else "normal"
+        self.generate_button.configure(state=state)
+        self.cancel_render_button.configure(state="normal" if active else "disabled")
+        for button in (self.cancel_button, self.save_button, self.approve_button,
+                       self.export_button, self.delete_button, self.assign_image_button,
+                       self.clear_image_button, self.refresh_scenes_button):
+            button.configure(state=state)
+        self.project_list.configure(state=state)
+        for widget, idle_state in self.form_widgets:
+            widget.configure(state="disabled" if active else idle_state)
+        self.script_text.configure(state="disabled" if active else "normal")
+        self.scene_outline.configure(state=state)
+
+    def cancel_export(self):
+        if self.render_running:
+            self.render_cancel_event.set()
+            self.cancel_render_button.configure(state="disabled")
+            self.status_var.set("Cancelación solicitada. Se detendrá el proceso FFmpeg actual.")
+
+    def _render_video_worker(self, ffmpeg, output, project_id, width, height,
+                             scenes, durations, asset_map, animation_style):
+        scene_dir = PROJECTS_DIR / str(project_id) / "render_work"
         scene_dir.mkdir(parents=True, exist_ok=True)
+        output_path = Path(output)
+
+        def run_ffmpeg(cmd, log_name, cwd=None):
+            log_path = scene_dir / log_name
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+            with log_path.open("w", encoding="utf-8", errors="replace") as log:
+                process = subprocess.Popen(
+                    cmd, cwd=str(cwd) if cwd else None,
+                    stdout=subprocess.DEVNULL, stderr=log,
+                    creationflags=creationflags
+                )
+                while process.poll() is None:
+                    if self.render_cancel_event.is_set():
+                        process.terminate()
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait()
+                        raise RuntimeError("__MARC_RENDER_CANCELLED__")
+                    time.sleep(0.2)
+                if process.returncode:
+                    detail = log_path.read_text(encoding="utf-8", errors="replace")[-2600:]
+                    raise RuntimeError(f"FFmpeg falló (código {process.returncode}).\n{detail}")
+
         try:
-            self.progressbar.configure(maximum=len(scene_texts) + 1, value=0)
-            self.progress_label_var.set(f"Renderizando video · {len(scene_texts)} escenas")
-            self.progress_detail_var.set("0% · Preparando escenas de texto")
-            self.update_idletasks()
-            for i, line in enumerate(scene_texts):
-                # Texto seguro para filtro drawtext; cada escena es un fondo sencillo.
-                wrapped = "\\n".join(textwrap.wrap(line, width=32 if height > width else 48))
-                textfile = scene_dir / f"scene_{i:03d}.txt"
-                textfile.write_text(wrapped, encoding="utf-8")
-                scene_path = scene_dir / f"scene_{i:03d}.mp4"
-                cmd = [
-                    ffmpeg, "-y", "-f", "lavfi", "-i", f"color=c=0x101b30:s={width}x{height}:d={seconds}:r=24",
-                    "-vf", f"drawtext=textfile='{textfile.as_posix()}':fontcolor=white:fontsize={max(22, width//28)}:line_spacing=12:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=0x2563eb@0.65:boxborderw=26",
-                    "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast", "-crf", "28",
-                    str(scene_path)
-                ]
-                subprocess.run(cmd, check=True, capture_output=True, text=True)
-                done = i + 1
-                percent = round(done / (len(scene_texts) + 1) * 100)
-                self.progressbar.configure(value=done)
-                self.progress_label_var.set(f"Renderizando video · escena {done} de {len(scene_texts)}")
-                self.progress_detail_var.set(f"{percent}% · FFmpeg está procesando las escenas")
-                self.update_idletasks()
-            concat = scene_dir / "concat.txt"
-            concat.write_text("".join(f"file '{(scene_dir / f'scene_{i:03d}.mp4').as_posix()}'\n" for i in range(len(scene_texts))), encoding="utf-8")
-            cmd = [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-c", "copy", output]
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
-            self.progressbar.configure(value=len(scene_texts) + 1)
-            self.progress_label_var.set("Video exportado correctamente")
-            self.progress_detail_var.set("100% · Render finalizado")
-            self.update_idletasks()
-        except (subprocess.CalledProcessError, OSError) as exc:
-            detail = (getattr(exc, "stderr", None) or str(exc))[-1800:]
-            self.progress_label_var.set("La exportación se detuvo")
-            self.progress_detail_var.set("Error · Revisa FFmpeg y el mensaje de diagnóstico")
-            messagebox.showerror("Error de exportación", f"FFmpeg no pudo renderizar el video.\n\n{detail}")
-            return
-        self.status_var.set(f"Video exportado: {output}")
-        messagebox.showinfo("Exportación terminada", f"Video MP4 creado en:\n{output}")
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            total = len(scenes)
+            font_size = max(20, min(44, width // 28))
+            for index, scene in enumerate(scenes):
+                if self.render_cancel_event.is_set():
+                    raise RuntimeError("__MARC_RENDER_CANCELLED__")
+                seconds = int(durations[index])
+                body = scene["text"].strip()
+                title = scene.get("title", "")
+                if title and not title.lower().startswith("escena "):
+                    body = title + "\n\n" + body
+                wrap_width = 27 if height > width else 48
+                wrapped = []
+                for paragraph in body.splitlines():
+                    wrapped.extend(textwrap.wrap(paragraph, width=wrap_width, break_long_words=False) or [""])
+                text_file = scene_dir / f"scene_text_{index + 1:03d}.txt"
+                text_file.write_text("\n".join(wrapped), encoding="utf-8")
+                scene_file = scene_dir / f"scene_{index + 1:03d}.mp4"
+                draw_path = ffmpeg_filter_path(text_file)
+                draw_filter = (
+                    f"drawtext=textfile='{draw_path}':expansion=none:fontcolor=white:"
+                    f"fontsize={font_size}:line_spacing=12:x=(w-text_w)/2:y=(h-text_h)/2:"
+                    "box=1:boxcolor=0x06101d@0.80:boxborderw=28"
+                )
+                asset = asset_map.get(str(index + 1), "")
+                if asset and Path(asset).is_file():
+                    motion = scene_motion_filter(animation_style, width, height, seconds)
+                    video_filter = f"{motion},{draw_filter}"
+                    cmd = [
+                        ffmpeg, "-y", "-loop", "1", "-framerate", "24", "-i", str(Path(asset).resolve()),
+                        "-t", str(seconds), "-vf", video_filter, "-an", "-r", "24",
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
+                        "-crf", "25", "-movflags", "+faststart", str(scene_file)
+                    ]
+                else:
+                    video_filter = (
+                        "drawbox=x=0:y=0:w=iw:h=8:color=0x168bff@0.90:t=fill,"
+                        + draw_filter
+                    )
+                    cmd = [
+                        ffmpeg, "-y", "-f", "lavfi", "-i",
+                        f"color=c=0x0b1320:s={width}x{height}:r=24",
+                        "-t", str(seconds), "-vf", video_filter, "-an", "-r", "24",
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
+                        "-crf", "25", "-movflags", "+faststart", str(scene_file)
+                    ]
+                run_ffmpeg(cmd, f"scene_{index + 1:03d}.log")
+                self.generation_queue.put((
+                    "render_progress", index + 1, total + 1,
+                    f"Escena {index + 1}/{total}: {scene.get('title', 'Escena')}"
+                ))
+
+            concat_path = scene_dir / "concat.txt"
+            concat_path.write_text(
+                "".join(f"file 'scene_{i + 1:03d}.mp4'\n" for i in range(total)),
+                encoding="utf-8"
+            )
+            if self.render_cancel_event.is_set():
+                raise RuntimeError("__MARC_RENDER_CANCELLED__")
+            self.generation_queue.put(("render_progress", total, total + 1, "Uniendo escenas y finalizando MP4…"))
+            concat_cmd = [
+                ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", "concat.txt",
+                "-c", "copy", "-movflags", "+faststart", str(output_path)
+            ]
+            run_ffmpeg(concat_cmd, "concat.log", cwd=scene_dir)
+            if not output_path.is_file() or output_path.stat().st_size == 0:
+                raise RuntimeError("FFmpeg terminó, pero no se encontró un archivo MP4 válido.")
+            project_dir = PROJECTS_DIR / str(project_id)
+            (project_dir / "last_export.txt").write_text(str(output_path), encoding="utf-8")
+            self.generation_queue.put(("render_done", str(output_path), total, sum(durations)))
+        except RuntimeError as exc:
+            if "__MARC_RENDER_CANCELLED__" in str(exc):
+                self.generation_queue.put(("render_cancelled",))
+            else:
+                self.generation_queue.put(("render_error", str(exc)))
+        except Exception as exc:
+            self.generation_queue.put(("render_error", str(exc)))
+
 
 if __name__ == "__main__":
     App().mainloop()
