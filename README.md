@@ -6,8 +6,9 @@ Aplicación de escritorio local para desarrollar historias con Ollama/Qwen, orga
 El código fuente está en desarrollo. La validación automatizada comprueba la sintaxis de Python y pruebas unitarias de las funciones de escenas. La ejecución completa de la interfaz, la generación con Ollama/ComfyUI, el render y la instalación requieren una prueba real en Windows antes de considerar una versión estable. No se distribuye todavía un instalador binario probado dentro del repositorio.
 
 ## Funciones presentes en el código
-- Interfaz de cine oscuro y azul eléctrico, maximizada, con biblioteca y paneles redimensionables.
-- Pestañas **Guion**, **Escenas** y **Vista previa**.
+- Interfaz de edición oscura inspirada en Premiere, maximizada, con biblioteca y paneles redimensionables.
+- Pestañas **Guion**, **Escenas**, **Montaje**, **Vista previa** y **Audio**.
+- Timeline multipista visual con clips por escena, pistas de narración/música, bloques de subtítulos aproximados, cabezal navegable, zoom y selección sincronizada con la lista de escenas. El cabezal sirve para navegación visual; no es reproducción en tiempo real ni permite todavía recortar/reordenar clips.
 - Género, premisa, protagonistas, conflicto, tono, narrador, desenlace, plataforma, duración, estilo de dibujo y animación.
 - Generación de historias por capítulos con Ollama/Qwen 2.5 3B local, en segundo plano y con cancelación entre solicitudes.
 - Detección del equipo y estimación inicial de tiempos.
