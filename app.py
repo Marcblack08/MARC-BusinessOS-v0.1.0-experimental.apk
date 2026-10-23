@@ -197,6 +197,7 @@ class App(tk.Tk):
 
         grid = tk.Frame(form_card, bg=self.colors["panel"])
         grid.pack(fill="x")
+        self.form_widgets = []
         for c in range(3):
             grid.columnconfigure(c, weight=1, uniform="story_cols")
         self._field(grid, "Nombre del proyecto", self.title_var, 0, 0)
@@ -230,9 +231,14 @@ class App(tk.Tk):
         self.generate_button.pack(side="left")
         self.cancel_button = ttk.Button(actions, text="Cancelar generación", command=self.cancel_generation, state="disabled")
         self.cancel_button.pack(side="left", padx=(8, 0))
-        ttk.Button(actions, text="Guardar", command=self.save_project).pack(side="left", padx=(8, 0))
-        ttk.Button(actions, text="Aprobar guion", command=self.approve_script).pack(side="left", padx=(8, 0))
-        ttk.Button(actions, text="Exportar MP4", command=self.export_video).pack(side="left", padx=(8, 0))
+        self.save_button = ttk.Button(actions, text="Guardar", command=self.save_project)
+        self.save_button.pack(side="left", padx=(8, 0))
+        self.approve_button = ttk.Button(actions, text="Aprobar guion", command=self.approve_script)
+        self.approve_button.pack(side="left", padx=(8, 0))
+        self.export_button = ttk.Button(actions, text="Exportar MP4", command=self.export_video)
+        self.export_button.pack(side="left", padx=(8, 0))
+        self.progressbar = ttk.Progressbar(right, mode="indeterminate")
+        self.progressbar.pack(fill="x", pady=(0, 8))
 
         editor_card = tk.Frame(right, bg=self.colors["panel"], padx=13, pady=11,
                                highlightthickness=1, highlightbackground=self.colors["border"])
@@ -267,6 +273,7 @@ class App(tk.Tk):
         else:
             widget = ttk.Entry(cell, textvariable=variable, font=("Segoe UI", 9))
         widget.pack(fill="x")
+        self.form_widgets.append((widget, "readonly" if values is not None else "normal"))
         return widget
 
     def new_project(self):
@@ -358,19 +365,37 @@ class App(tk.Tk):
         self.save_project(reset_approval=True, quiet=True)
         self.cancel_event.clear()
         self.generation_running = True
-        self.generate_button.configure(state="disabled")
-        self.cancel_button.configure(state="normal")
+        self._set_generation_state(True)
+        self.script_text.configure(state="normal")
         self.script_text.delete("1.0", "end")
         self.script_text.insert("1.0",
             f"TÍTULO: {data['title']}\nGÉNERO: {data['genre']}\nDURACIÓN OBJETIVO: {minutes} minuto(s)\n"
             "MODELO: Qwen 2.5 3B · ejecución local\n\n")
+        self.script_text.configure(state="disabled")
         self.status_var.set(f"Preparando estructura de historia y {chapter_count} capítulo(s)…")
         worker = threading.Thread(target=self._generation_worker, args=(data, chapter_count), daemon=True)
         worker.start()
 
+    def _set_generation_state(self, active):
+        state = "disabled" if active else "normal"
+        self.generate_button.configure(state=state)
+        self.cancel_button.configure(state="normal" if active else "disabled")
+        self.project_list.configure(state=state)
+        self.save_button.configure(state=state)
+        self.approve_button.configure(state=state)
+        self.export_button.configure(state=state)
+        for widget, idle_state in self.form_widgets:
+            widget.configure(state="disabled" if active else idle_state)
+        self.script_text.configure(state="disabled" if active else "normal")
+        if active:
+            self.progressbar.start(12)
+        else:
+            self.progressbar.stop()
+
     def cancel_generation(self):
         if self.generation_running:
             self.cancel_event.set()
+            self.cancel_button.configure(state="disabled")
             self.status_var.set("Cancelación solicitada. Se guardará el borrador parcial sin aprobar.")
 
     def _generation_worker(self, data, chapter_count):
@@ -526,31 +551,34 @@ class App(tk.Tk):
                 if kind == "status":
                     self.status_var.set(event[1])
                 elif kind == "chapter":
+                    self.script_text.configure(state="normal")
                     self.script_text.insert("end", event[1])
                     self.script_text.see("end")
+                    self.script_text.configure(state="disabled")
                     self.update_idletasks()
                     self.status_var.set(f"Capítulo {event[2]} de {event[3]} terminado. Guardando borrador…")
                     self.save_project(reset_approval=True, quiet=True)
                 elif kind == "done":
+                    self.script_text.configure(state="normal")
                     self.script_text.insert("end", "\n\n[REVISIÓN HUMANA PENDIENTE]\nRevisa continuidad, nombres, ritmo y duración. El guion no está aprobado.")
+                    self.script_text.configure(state="disabled")
                     self.save_project(reset_approval=True, quiet=True)
+                    self.generation_running = False
+                    self._set_generation_state(False)
                     self.status_var.set(f"Generación terminada: {event[1]} capítulo(s). Revisa el borrador y apruébalo manualmente.")
-                    self.generation_running = False
-                    self.generate_button.configure(state="normal")
-                    self.cancel_button.configure(state="disabled")
                 elif kind == "cancelled":
+                    self.script_text.configure(state="normal")
                     self.save_project(reset_approval=True, quiet=True)
-                    self.status_var.set("Generación cancelada. El borrador parcial se conservó sin aprobar.")
                     self.generation_running = False
-                    self.generate_button.configure(state="normal")
-                    self.cancel_button.configure(state="disabled")
+                    self._set_generation_state(False)
+                    self.status_var.set("Generación cancelada. El borrador parcial se conservó sin aprobar.")
                 elif kind == "error":
+                    self.script_text.configure(state="normal")
                     self.save_project(reset_approval=True, quiet=True)
+                    self.generation_running = False
+                    self._set_generation_state(False)
                     messagebox.showerror("Error de generación", "La IA local no pudo completar el guion.\n\n" + event[1])
                     self.status_var.set("La generación se detuvo. El borrador parcial se conserva sin aprobar.")
-                    self.generation_running = False
-                    self.generate_button.configure(state="normal")
-                    self.cancel_button.configure(state="disabled")
         except queue.Empty:
             pass
         self.after(180, self._poll_generation_events)
@@ -578,9 +606,14 @@ class App(tk.Tk):
         rows = self.conn.execute("SELECT id,title,approved FROM projects ORDER BY id DESC").fetchall()
         self.project_rows = rows
         self.project_list.delete(0, "end")
-        for row in rows:
+        selected_index = None
+        for index, row in enumerate(rows):
             mark = "✓" if row["approved"] else "•"
             self.project_list.insert("end", f"{mark}  {row['title']}  · #{row['id']}")
+            if row["id"] == self.current_id:
+                selected_index = index
+        if selected_index is not None:
+            self.project_list.selection_set(selected_index)
 
     def load_selected(self, _event=None):
         selection = self.project_list.curselection()
