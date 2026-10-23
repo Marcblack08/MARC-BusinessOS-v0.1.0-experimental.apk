@@ -2334,9 +2334,9 @@ Write-Output 'NARRATION_OK'
         if not has_scene_images:
             continue_text_only = messagebox.askyesno(
                 "Faltan imágenes para el vídeo",
-                "El guion está listo, pero ninguna escena tiene una imagen asignada.\\n\\n"
+                "El guion está listo, pero ninguna escena tiene una imagen asignada.\n\n"
                 "Si continúas, el MP4 tendrá tarjetas de texto sobre fondos oscuros; "
-                "MARC NO generará ilustraciones automáticamente durante la exportación.\\n\\n"
+                "MARC NO generará ilustraciones automáticamente durante la exportación.\n\n"
                 "Pulsa «No» para volver a ESCENAS y asignar imágenes, o «Sí» para continuar con vídeo de texto."
             )
             if not continue_text_only:
