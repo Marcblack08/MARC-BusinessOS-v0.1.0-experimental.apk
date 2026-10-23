@@ -535,6 +535,17 @@ class App(tk.Tk):
         tk.Label(scene_inspector, textvariable=self.preview_scene_text_var, bg=self.colors["input"],
                  fg=self.colors["muted"], font=("Segoe UI", 9), wraplength=260,
                  justify="left", anchor="nw").pack(fill="both", expand=True)
+        inspector_actions = tk.Frame(scene_inspector, bg=self.colors["input"])
+        inspector_actions.pack(fill="x", pady=(8, 0))
+        self.inspector_assign_image_button = ttk.Button(
+            inspector_actions, text="＋ Imagen", command=self.assign_scene_image)
+        self.inspector_assign_image_button.pack(side="left", fill="x", expand=True)
+        self.inspector_generate_image_button = ttk.Button(
+            inspector_actions, text="✦ IA", command=self.generate_scene_image)
+        self.inspector_generate_image_button.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        self.inspector_duration_button = ttk.Button(
+            scene_inspector, text="Editar duración…", command=self._edit_timeline_duration)
+        self.inspector_duration_button.pack(fill="x", pady=(5, 0))
         monitor_actions = tk.Frame(preview_dock, bg=self.colors["panel"])
         monitor_actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5, 0))
         ttk.Button(monitor_actions, text="◀ Escena", command=lambda: self._step_preview_scene(-1)).pack(side="left")
