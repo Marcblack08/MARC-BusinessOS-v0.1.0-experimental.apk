@@ -125,6 +125,7 @@ class App(tk.Tk):
         self.continuity_state = ""
         self.voice_assignments = {}
         self._vlc_instance = None
+        self._vlc_module = None
         self._vlc_player = None
         self._vlc_dll_dir_handle = None
         self.preview_player_active = False
@@ -2143,6 +2144,7 @@ Write-Output 'NARRATION_OK'
                                 pass
                         break
             import vlc
+            self._vlc_module = vlc
             self._vlc_instance = vlc.Instance("--quiet", "--no-video-title-show")
             if self._vlc_instance is None:
                 raise RuntimeError("VLC no pudo inicializar su motor.")
@@ -2158,7 +2160,7 @@ Write-Output 'NARRATION_OK'
         if self.preview_player_active and self._vlc_player is not None:
             try:
                 state = self._vlc_player.get_state()
-                if state == self._vlc_instance.State.Paused:
+                if state == self._vlc_module.State.Paused:
                     self._vlc_player.play()
                     self.preview_playback_status_var.set("Reanudando vídeo dentro de MARC")
                     self._schedule_preview_poll()
@@ -2265,12 +2267,13 @@ Write-Output 'NARRATION_OK'
                     f"{current // 60000:02d}:{(current // 1000) % 60:02d} / "
                     f"{length // 60000:02d}:{(length // 1000) % 60:02d}"
                 )
-            vlc_state = self._vlc_instance.State
+            vlc_state = self._vlc_module.State
             if state == vlc_state.Ended:
                 self.stop_preview_video()
                 self.preview_playback_status_var.set("Vídeo finalizado")
                 return
             if state == vlc_state.Error:
+                self.stop_preview_video()
                 self.preview_playback_status_var.set("El motor VLC notificó un error de reproducción.")
                 return
         except Exception as exc:
