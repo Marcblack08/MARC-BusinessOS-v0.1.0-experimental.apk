@@ -827,6 +827,7 @@ class App(tk.Tk):
         canvas_y = self.timeline_canvas.canvasy(event.y)
         if 36 <= canvas_y <= 82 and self.scene_data:
             durations = allocate_scene_durations(self.scene_data, self._timeline_duration_seconds())
+            durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
             elapsed = 0
             for index, duration in enumerate(durations):
                 if elapsed <= seconds < elapsed + duration or index == len(durations) - 1:
@@ -929,6 +930,7 @@ class App(tk.Tk):
 
     def _load_scene_assets(self, project_id=None):
         self.scene_assets = {}
+        self.scene_duration_overrides = {}
         self.last_export_path = ""
         self.audio_track_path = ""
         self.music_track_path = ""
