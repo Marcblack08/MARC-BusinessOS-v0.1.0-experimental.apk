@@ -2593,16 +2593,27 @@ Write-Output 'NARRATION_OK'
                 self.generation_queue.put(("status", "Diseñando la biblia canónica de personajes, escenarios y trama…"))
                 plan_prompt = (
                     "Eres showrunner y novelista profesional de ficción seriada en español. Diseña una historia específica, no una plantilla genérica. "
-                    "Entrega una BIBLIA CANÓNICA que incluya: premisa distintiva; reglas del mundo; perfiles de protagonistas, antagonistas y secundarios "
+                    "Entrega dos secciones con estos encabezados exactos: [BIBLIA CANONICA] y [ESCALETA DE CAPITULOS]. "
+                    "En la BIBLIA CANONICA incluye premisa distintiva; reglas del mundo; perfiles de protagonistas, antagonistas y secundarios "
                     "(objetivos, contradicciones, secretos, relaciones, voz verbal, rasgos físicos estables); escenarios reutilizables con detalles visuales; "
-                    "cronología; hechos que no pueden cambiar; arcos de personajes; misterios abiertos y consecuencias. Después crea una escaleta de "
-                    f"{chapter_count} capítulo(s). No escribas todavía el guion final.\nGénero: {data['genre']}. Premisa: {data['topic']}. "
+                    "cronología; hechos que no pueden cambiar; arcos de personajes; misterios abiertos y consecuencias. En la ESCALETA DE CAPITULOS resume "
+                    f"{chapter_count} capítulo(s) concretos. No escribas todavía el guion final.\nGénero: {data['genre']}. Premisa: {data['topic']}. "
                     f"Protagonista: {protagonist}. Conflicto: {conflict}. Tono: {data['tone']}. Narrador: {data['narrator']}. "
                     f"Desenlace: {data['ending']}. Dirección visual: {data['drawing_style']}; animación: {data['animation_style']}. "
                     f"Duración: {data['duration']} min. Modo: {data['video_mode']}. Evita aperturas cliché, coincidencias gratuitas y personajes expositivos."
                 )
                 plan = self._ollama_request(plan_prompt, max_tokens=min(1500, 550 + chapter_count * 28))
-                story_bible = plan
+                canon_match = re.search(
+                    r"(?is)\[BIBLIA CANONICA\](.*?)(?=\[ESCALETA DE CAPITULOS\]|$)", plan
+                )
+                outline_match = re.search(r"(?is)\[ESCALETA DE CAPITULOS\](.*)$", plan)
+                if canon_match:
+                    story_bible = canon_match.group(1).strip()
+                else:
+                    story_bible = plan.strip()
+                if outline_match:
+                    plan = outline_match.group(1).strip()
+            self.generation_queue.put(("story_bible", story_bible))
             self.generation_queue.put(("status", "Estructura preparada. Escribiendo con gancho, escenas y diálogos…"))
             previous_excerpt = data.get("continuity_state", "") if is_continuation else ""
             completed = 0
@@ -2843,6 +2854,11 @@ Write-Output 'NARRATION_OK'
                     self.pc_info = event[1]
                     self.pc_summary_var.set(event[1]["summary"])
                     self.estimate_var.set(self._estimate_time(int(self.duration_var.get() or "10"), event[1]))
+                elif kind == "story_bible":
+                    self.story_bible = event[1] or self.story_bible
+                    if self.current_id is not None:
+                        self.save_project(reset_approval=True, quiet=True)
+                    self.status_var.set("Biblia narrativa guardada; se conservará aunque canceles el borrador.")
                 elif kind == "status":
                     self.status_var.set(event[1])
                 elif kind == "voice_models":
