@@ -1,51 +1,62 @@
 # MARC Video Studio AI Desktop
 
-Aplicación de escritorio local para crear guiones narrativos con Ollama/Qwen, revisarlos y exportar un MP4 de escenas tipográficas mediante FFmpeg.
+Aplicación de escritorio local para desarrollar historias con Ollama/Qwen, organizar escenas, asignar o generar ilustraciones localmente y exportar MP4 con FFmpeg.
 
 ## Estado real del proyecto
-El código fuente está en desarrollo. La sintaxis de Python se valida mediante GitHub Actions. La ejecución completa, el render en Windows y el empaquetado deben probarse en el PC objetivo antes de considerar una versión estable. El empaquetado de Windows usa PyInstaller y puede generar un instalador con asistente mediante Inno Setup 6. No es un MSI firmado; el instalador debe probarse en Windows antes de distribuirlo.
+El código fuente está en desarrollo. La validación automatizada comprueba la sintaxis de Python y pruebas unitarias de las funciones de escenas. La ejecución completa de la interfaz, la generación con Ollama/ComfyUI, el render y la instalación requieren una prueba real en Windows antes de considerar una versión estable. No se distribuye todavía un instalador binario probado dentro del repositorio.
 
-## Mejoras actuales
-- Interfaz azul tecnológico con biblioteca de proyectos y paneles.
-- Configuración narrativa independiente.
-- Estilos seleccionables de dibujo y animación para orientar la dirección visual del guion.
-- Barra de progreso con porcentaje, capítulos completados y estimación de palabras.
-- Generación por capítulos con Ollama/Qwen 2.5 3B en segundo plano.
-- Guardado local SQLite con migraciones compatibles.
-- Aprobación humana obligatoria antes de exportar; editar invalida la aprobación.
-- Búsqueda automática y selección manual de FFmpeg.
+## Funciones presentes en el código
+- Interfaz de cine oscuro y azul eléctrico, maximizada, con biblioteca y paneles redimensionables.
+- Pestañas **Guion**, **Escenas** y **Vista previa**.
+- Género, premisa, protagonistas, conflicto, tono, narrador, desenlace, plataforma, duración, estilo de dibujo y animación.
+- Generación de historias por capítulos con Ollama/Qwen 2.5 3B local, en segundo plano y con cancelación entre solicitudes.
+- Detección del equipo y estimación inicial de tiempos.
+- Persistencia local en SQLite con migraciones para bases existentes.
+- Tabla de escenas con título, palabras, duración asignada y recurso visual.
+- Asignación de imágenes propias a las escenas.
+- Integración opcional con ComfyUI local en `http://127.0.0.1:8188` para generar una imagen fija por escena.
+- Render MP4 en segundo plano, con barra de progreso y cancelación. Imágenes asignadas reciben movimiento sencillo de cámara; las escenas sin imágenes se renderizan como tarjetas de texto.
+- Importación de una pista de voz o música local, con opción para repetirla hasta el final del vídeo.
+- Aprobación humana obligatoria antes de exportar; modificar el guion invalida la aprobación.
+- Búsqueda y selección manual de FFmpeg.
+- Script local de instalación de dependencias y constructor de app/instalador.
 
 ## Requisitos
 - Windows 10/11 de 64 bits.
-- Python 3.11+ con Tcl/Tk para ejecutar desde código.
-- Ollama instalado y modelo local `qwen2.5:3b` descargado.
+- Python 3.11+ para ejecución desde el código fuente.
+- Ollama y el modelo local `qwen2.5:3b` para generar guiones.
 - FFmpeg para exportar MP4.
-- Equipo objetivo: Intel Core i5 de 4.ª generación, 16 GB de RAM, SSD y NVIDIA GTX 750. La generación larga puede tardar por CPU.
+- Opcional: ComfyUI local y un checkpoint compatible para generación de imágenes.
+- Equipo objetivo: Intel Core i5 de 4.ª generación, 16 GB RAM, SSD y NVIDIA GTX 750. Las historias largas tardarán más; la GTX 750 tiene recursos limitados para modelos de imagen modernos.
 
-## Instalación y ejecución
-1. Instala Python 3.11+.
-2. Instala Ollama y descarga una vez el modelo con `ollama run qwen2.5:3b`.
-3. Descarga FFmpeg Essentials; puedes dejarlo fuera de PATH y elegir `ffmpeg.exe` desde MARC.
-4. Ejecuta `install_windows.bat`.
-5. Abre MARC con `start_windows.bat`.
+## Instalación desde el código
+1. Descarga o clona el repositorio.
+2. Ejecuta `install_windows.bat` para detectar Python y preparar `.venv`.
+3. Ejecuta `start_windows.bat`.
+4. Instala Ollama por separado y descarga el modelo una vez con `ollama run qwen2.5:3b`.
+5. Instala FFmpeg por separado. MARC intenta detectarlo automáticamente y también permite seleccionar `ffmpeg.exe`.
 
-Para crear la aplicación de escritorio y, opcionalmente, el instalador con asistente:
-1. Instala Inno Setup 6 desde https://jrsoftware.org/isinfo.php.
-2. Ejecuta `build_windows.bat`.
-3. La carpeta de la aplicación se genera en `dist`; el instalador Setup.exe se genera en `dist-installer` si Inno Setup se encuentra instalado.
-4. Prueba la instalación y la desinstalación en Windows antes de distribuirla. Los proyectos y la base de datos de la aplicación empaquetada se guardan en `%LOCALAPPDATA%\\MARC Video Studio AI Desktop`.
+## Construir la aplicación de Windows
+**En tu PC de desarrollo:**
+1. Ejecuta `install_windows.bat`.
+2. Ejecuta `build_windows.bat` para ejecutar las validaciones, compilar la aplicación con PyInstaller y, si está instalado Inno Setup 6, producir `Setup.exe`.
+3. Prueba el programa y la instalación en un Windows limpio antes de distribuirlos.
 
-Ollama/Qwen y FFmpeg no quedan integrados en el instalador: deben instalarse por separado para las funciones de IA local y exportación.
+**Desde GitHub Actions:** entra en Actions → **Build Windows desktop installer** → **Run workflow**. Si la ejecución termina correctamente, descarga el artefacto `MARC-Video-Studio-Windows` desde esa ejecución. El artefacto incluye el instalador y la carpeta de aplicación portable. Este flujo se debe validar también antes de distribuirlo a usuarios finales.
 
-## Flujo de producción
-1. Completa premisa y parámetros.
-2. MARC propone un plan y genera capítulos.
-3. Revisa y edita el guion.
-4. Pulsa **Aprobar guion**.
-5. Exporta el MP4.
+Ollama, sus modelos, ComfyUI/checkpoints y FFmpeg no se incluyen en el instalador; se instalan por separado. En la versión empaquetada, los proyectos y la base de datos se guardan en `%LOCALAPPDATA%\\MARC Video Studio AI Desktop`.
 
-## Limitaciones importantes
-- Los estilos de dibujo/animación se guardan y orientan el diseño narrativo, pero el motor actual no genera imágenes ni animación real automáticamente.
-- La exportación actual utiliza escenas de texto con fondos. No incorpora voz, música, imágenes generadas ni montaje de clips.
-- La duración real depende del texto final y del ritmo de narración; el cálculo mostrado es orientativo.
-- Cancelar la IA actúa después de que termine la solicitud de Ollama que esté en curso.
+## Flujo de trabajo
+1. Configura la premisa, género y duración.
+2. Genera el guion con la IA local.
+3. Revisa el guion y las escenas; importa imágenes o genera ilustraciones con ComfyUI si está instalado.
+4. Opcionalmente, añade una pista de narración/música local.
+5. Aprueba el guion.
+6. Exporta MP4 y abre el resultado desde la pestaña **Vista previa**.
+
+## Límites importantes
+- La integración de ComfyUI genera **imágenes fijas**, no vídeo neuronal completo. El render aplica movimiento de cámara sencillo a imágenes y tarjetas tipográficas donde no haya recursos.
+- MARC no genera una voz sintética automáticamente. Puedes importar una pista de voz o música que ya tengas.
+- La estimación de tiempo es orientativa; ComfyUI depende mucho del checkpoint y del hardware y puede tardar mucho o no funcionar en GPUs antiguas.
+- La vista previa abre el archivo MP4 en el reproductor predeterminado del sistema, no dentro de una superficie de reproducción integrada.
+- La validación de CI no sustituye las pruebas del programa gráfico, generación local y exportación sobre el PC real.
