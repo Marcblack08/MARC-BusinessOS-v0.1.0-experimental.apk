@@ -872,6 +872,7 @@ class App(tk.Tk):
         for button in (self.generate_button, self.save_button, self.approve_button,
                        self.export_button, self.delete_button, self.assign_image_button,
                        self.clear_image_button, self.refresh_scenes_button,
+                       self.select_audio_button, self.clear_audio_button,
                        self.detect_models_button, self.generate_image_button):
             button.configure(state=state)
         self.project_list.configure(state=state)
@@ -1159,6 +1160,7 @@ class App(tk.Tk):
             widget.configure(state="disabled" if active else idle_state)
         self.script_text.configure(state="disabled" if active else "normal")
         for button in (self.assign_image_button, self.clear_image_button, self.refresh_scenes_button,
+                       self.select_audio_button, self.clear_audio_button,
                        self.detect_models_button, self.generate_image_button):
             button.configure(state=state)
         self.image_model_combo.configure(state="disabled" if active else "readonly")
@@ -1619,6 +1621,7 @@ class App(tk.Tk):
         for button in (self.save_button, self.approve_button,
                        self.export_button, self.delete_button, self.assign_image_button,
                        self.clear_image_button, self.refresh_scenes_button,
+                       self.select_audio_button, self.clear_audio_button,
                        self.detect_models_button, self.generate_image_button):
             button.configure(state=state)
         self.project_list.configure(state=state)
