@@ -1,8 +1,8 @@
 import unittest
 
 from scene_engine import (
-    allocate_scene_durations, build_srt_subtitles, ffmpeg_filter_path,
-    parse_script_scenes, scene_motion_filter
+    allocate_scene_durations, build_audio_filter_graph, build_srt_subtitles,
+    ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
 )
 
 
@@ -57,6 +57,29 @@ class SceneEngineTests(unittest.TestCase):
     def test_srt_rejects_mismatched_scene_durations(self):
         with self.assertRaises(ValueError):
             build_srt_subtitles([{"text": "Texto"}], [])
+
+    def test_audio_filter_graph_for_voice_only(self):
+        graph = build_audio_filter_graph(True, False, voice_input_index=0)
+        self.assertIn("[0:a:0]volume=1.000,apad[aout]", graph)
+        self.assertNotIn("amix", graph)
+
+    def test_audio_filter_graph_for_music_only(self):
+        graph = build_audio_filter_graph(False, True, music_input_index=0)
+        self.assertIn("[0:a:0]volume=0.180,apad[aout]", graph)
+        self.assertNotIn("amix", graph)
+
+    def test_audio_filter_graph_mixes_voice_and_background_music(self):
+        graph = build_audio_filter_graph(True, True, voice_input_index=0, music_input_index=1)
+        self.assertIn("[0:a:0]volume=1.000,apad[voice]", graph)
+        self.assertIn("[1:a:0]volume=0.180,apad[music]", graph)
+        self.assertIn("[voice][music]amix=inputs=2", graph)
+        self.assertTrue(graph.endswith("[aout]"))
+
+    def test_audio_filter_graph_requires_audio_input_indexes(self):
+        with self.assertRaises(ValueError):
+            build_audio_filter_graph(True, False)
+        with self.assertRaises(ValueError):
+            build_audio_filter_graph(False, True)
 
     def test_filter_path_escapes_windows_colon_and_apostrophe(self):
         escaped = ffmpeg_filter_path(r"C:\Users\Marc's files\scene:01.txt")
