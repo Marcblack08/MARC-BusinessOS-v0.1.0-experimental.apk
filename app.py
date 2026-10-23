@@ -1231,6 +1231,7 @@ class App(tk.Tk):
         scene_dir = PROJECTS_DIR / str(project_id) / "render_work"
         scene_dir.mkdir(parents=True, exist_ok=True)
         output_path = Path(output)
+        temp_output_path = output_path.with_name(output_path.stem + ".marc_rendering.mp4")
 
         def run_ffmpeg(cmd, log_name, cwd=None):
             log_path = scene_dir / log_name
@@ -1318,11 +1319,12 @@ class App(tk.Tk):
             self.generation_queue.put(("render_progress", total, total + 1, "Uniendo escenas y finalizando MP4…"))
             concat_cmd = [
                 ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", "concat.txt",
-                "-c", "copy", "-movflags", "+faststart", str(output_path)
+                "-c", "copy", "-movflags", "+faststart", str(temp_output_path)
             ]
             run_ffmpeg(concat_cmd, "concat.log", cwd=scene_dir)
-            if not output_path.is_file() or output_path.stat().st_size == 0:
+            if not temp_output_path.is_file() or temp_output_path.stat().st_size == 0:
                 raise RuntimeError("FFmpeg terminó, pero no se encontró un archivo MP4 válido.")
+            temp_output_path.replace(output_path)
             project_dir = PROJECTS_DIR / str(project_id)
             (project_dir / "last_export.txt").write_text(str(output_path), encoding="utf-8")
             self.generation_queue.put(("render_done", str(output_path), total, sum(durations)))
@@ -1333,6 +1335,12 @@ class App(tk.Tk):
                 self.generation_queue.put(("render_error", str(exc)))
         except Exception as exc:
             self.generation_queue.put(("render_error", str(exc)))
+        finally:
+            try:
+                if temp_output_path.exists():
+                    temp_output_path.unlink()
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":
