@@ -506,22 +506,161 @@ class App(tk.Tk):
         tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
                  font=("Segoe UI", 9), anchor="w").grid(row=3, column=0, sticky="ew", pady=(6, 0))
 
+    def _project_assets_dir(self, project_id=None):
+        project_id = project_id if project_id is not None else self.current_id
+        if project_id is None:
+            return None
+        return PROJECTS_DIR / str(project_id) / "assets"
+
+    def _load_scene_assets(self, project_id=None):
+        self.scene_assets = {}
+        self.last_export_path = ""
+        if project_id is None:
+            project_id = self.current_id
+        if project_id is None:
+            return
+        project_dir = PROJECTS_DIR / str(project_id)
+        manifest = project_dir / "scene_assets.json"
+        last_video = project_dir / "last_export.txt"
+        try:
+            if manifest.is_file():
+                loaded = json.loads(manifest.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    self.scene_assets = {str(k): str(v) for k, v in loaded.items()}
+        except (OSError, json.JSONDecodeError):
+            self.scene_assets = {}
+        try:
+            if last_video.is_file():
+                candidate = last_video.read_text(encoding="utf-8").strip()
+                if candidate and Path(candidate).is_file():
+                    self.last_export_path = candidate
+        except OSError:
+            self.last_export_path = ""
+        if hasattr(self, "preview_status_var"):
+            self.preview_status_var.set(
+                f"Último vídeo: {self.last_export_path}" if self.last_export_path
+                else "Todavía no hay un MP4 exportado para este proyecto."
+            )
+
+    def _save_scene_assets(self):
+        assets_dir = self._project_assets_dir()
+        if assets_dir is None:
+            return
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        manifest = assets_dir.parent / "scene_assets.json"
+        manifest.write_text(json.dumps(self.scene_assets, ensure_ascii=False, indent=2), encoding="utf-8")
+
     def _refresh_scene_outline(self, script):
         if not hasattr(self, "scene_outline"):
             return
+        old_selection = self.scene_outline.curselection()
+        selected_index = old_selection[0] if old_selection else None
         self.scene_outline.delete(0, "end")
-        import re
-        headings = re.findall(r"(?im)^\\s*(?:\\[CAP[IÍ]TULO[^\\]]*\\]|(?:ESCENA|SECUENCIA|CAP[IÍ]TULO)\\s+[^\\n]{1,100})\\s*$", script)
-        if headings:
-            for number, heading in enumerate(headings, 1):
-                clean = " ".join(heading.strip(" []").split())
-                self.scene_outline.insert("end", f"{number:02d}   {clean}")
-        elif script.strip():
-            chunks = [part.strip() for part in re.split(r"\\n\\s*\\n", script) if len(part.strip()) > 80]
-            for number, chunk in enumerate(chunks[:80], 1):
-                self.scene_outline.insert("end", f"{number:02d}   {' '.join(chunk.split())[:100]}")
-        else:
-            self.scene_outline.insert("end", "Genera o abre un guion para organizar las escenas.")
+        self.scene_data = parse_script_scenes(script)
+        try:
+            target_seconds = max(60, int(self.duration_var.get() or "10") * 60)
+        except (ValueError, tk.TclError):
+            target_seconds = 600
+        durations = allocate_scene_durations(self.scene_data, target_seconds)
+        for idx, scene in enumerate(self.scene_data):
+            asset = self.scene_assets.get(str(idx + 1), "")
+            has_asset = bool(asset and Path(asset).is_file())
+            visual_status = Path(asset).name if has_asset else "Tarjeta de texto"
+            self.scene_outline.insert(
+                "end",
+                f"{idx + 1:02d}  {scene['title'][:27]} · {scene['word_count']} palabras · "
+                f"{self._format_eta(durations[idx])} · {visual_status}"
+            )
+        if not self.scene_data:
+            self.scene_outline.insert("end", "Genera o abre un guion para preparar las escenas.")
+        elif selected_index is not None:
+            self.scene_outline.selection_set(min(selected_index, len(self.scene_data) - 1))
+        if hasattr(self, "scene_summary_var"):
+            self.scene_summary_var.set(
+                f"{len(self.scene_data)} escenas · {sum(s['word_count'] for s in self.scene_data)} palabras"
+            )
+
+    def assign_scene_image(self):
+        if self.generation_running or self.render_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine la generación o exportación.")
+            return
+        if self.current_id is None:
+            self.save_project(quiet=True)
+        if self.current_id is None:
+            messagebox.showwarning("Guarda el proyecto", "Completa el título y la premisa antes de asignar imágenes.")
+            return
+        selection = self.scene_outline.curselection()
+        if not selection or not self.scene_data:
+            messagebox.showinfo("Selecciona una escena", "Primero genera o abre un guion y selecciona una escena.")
+            return
+        source = filedialog.askopenfilename(
+            title="Selecciona la imagen de esta escena",
+            filetypes=[("Imágenes", "*.png *.jpg *.jpeg *.webp *.bmp"), ("Todos los archivos", "*.*")]
+        )
+        if not source:
+            return
+        source_path = Path(source)
+        if source_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
+            messagebox.showerror("Formato no compatible", "Selecciona una imagen PNG, JPG, WEBP o BMP.")
+            return
+        scene_number = selection[0] + 1
+        assets_dir = self._project_assets_dir()
+        if assets_dir is None:
+            return
+        try:
+            assets_dir.mkdir(parents=True, exist_ok=True)
+            destination = assets_dir / f"scene_{scene_number:03d}{source_path.suffix.lower()}"
+            shutil.copy2(source_path, destination)
+            self.scene_assets[str(scene_number)] = str(destination.resolve())
+            self._save_scene_assets()
+            self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
+            self.scene_outline.selection_set(scene_number - 1)
+            self.status_var.set(f"Imagen asignada a la escena {scene_number}. Se usará durante el render.")
+        except OSError as exc:
+            messagebox.showerror("No se pudo copiar la imagen", str(exc))
+
+    def clear_scene_image(self):
+        selection = self.scene_outline.curselection()
+        if not selection:
+            messagebox.showinfo("Selecciona una escena", "Selecciona la escena cuya imagen quieres quitar.")
+            return
+        scene_number = selection[0] + 1
+        self.scene_assets.pop(str(scene_number), None)
+        try:
+            self._save_scene_assets()
+        except OSError as exc:
+            messagebox.showerror("No se pudo guardar el recurso", str(exc))
+            return
+        self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
+        self.scene_outline.selection_set(scene_number - 1)
+        self.status_var.set(f"Se quitó la imagen de la escena {scene_number}; se usará una tarjeta de texto.")
+
+    def choose_preview_video(self):
+        path = filedialog.askopenfilename(
+            title="Selecciona un vídeo para previsualizar",
+            filetypes=[("Vídeos", "*.mp4 *.mov *.mkv *.webm"), ("Todos los archivos", "*.*")]
+        )
+        if path:
+            self.last_export_path = str(Path(path).resolve())
+            self.preview_status_var.set(f"Vídeo seleccionado: {self.last_export_path}")
+
+    def open_last_video(self):
+        path = self.last_export_path
+        if not path or not Path(path).is_file():
+            self.choose_preview_video()
+            path = self.last_export_path
+        if not path or not Path(path).is_file():
+            return
+        try:
+            if os.name == "nt":
+                os.startfile(path)
+            elif platform.system() == "Darwin":
+                subprocess.Popen(["open", path])
+            else:
+                subprocess.Popen(["xdg-open", path])
+            self.status_var.set(f"Abriendo vídeo en el reproductor del sistema: {Path(path).name}")
+        except (OSError, AttributeError) as exc:
+            messagebox.showerror("No se pudo abrir el vídeo", str(exc))
 
     def _field(self, parent, label, variable, row, col, values=None, span=1):
         cell = tk.Frame(parent, bg=self.colors["panel"])
