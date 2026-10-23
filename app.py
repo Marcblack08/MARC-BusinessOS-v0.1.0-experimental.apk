@@ -305,8 +305,9 @@ class App(tk.Tk):
         self.project_list.bind("<<ListboxSelect>>", self.load_selected)
         lib_buttons = tk.Frame(library, bg=self.colors["panel"], padx=8, pady=8)
         lib_buttons.grid(row=3, column=0, sticky="ew")
-        ttk.Button(lib_buttons, text="+ Nuevo proyecto", style="Accent.TButton",
-                   command=self.new_project).pack(fill="x", pady=(0, 6))
+        self.new_project_button = ttk.Button(lib_buttons, text="+ Nuevo proyecto", style="Accent.TButton",
+                                              command=self.new_project)
+        self.new_project_button.pack(fill="x", pady=(0, 6))
         self.delete_button = ttk.Button(lib_buttons, text="Eliminar proyecto", command=self.delete_project)
         self.delete_button.pack(fill="x")
 
@@ -732,8 +733,8 @@ class App(tk.Tk):
             self.scene_summary_var.set(f"{len(self.scene_data)} escenas · {total_words} palabras · objetivo {self.duration_var.get()} min · audio: {audio_label}")
 
     def assign_scene_image(self):
-        if self.generation_running or self.render_running:
-            messagebox.showinfo("Proceso en curso", "Espera a que termine la generación o exportación.")
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
             return
         if self.current_id is None:
             self.save_project(quiet=True)
@@ -923,8 +924,8 @@ Write-Output 'NARRATION_OK'
     def _set_voice_state(self, active):
         state = "disabled" if active else "normal"
         for button in (
-            self.generate_button, self.save_button, self.approve_button, self.export_button,
-            self.delete_button, self.assign_image_button, self.clear_image_button,
+            self.generate_button, self.new_project_button, self.save_button, self.approve_button,
+            self.export_button, self.delete_button, self.assign_image_button, self.clear_image_button,
             self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
             self.detect_models_button, self.generate_image_button, self.detect_voice_button,
             self.generate_voice_button
@@ -1100,7 +1101,7 @@ Write-Output 'NARRATION_OK'
             self.generation_queue.put(("image_models_error", str(exc), quiet))
 
     def generate_scene_image(self):
-        if self.generation_running or self.render_running or self.image_generation_running:
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
             return
         if self.current_id is None:
@@ -1143,12 +1144,15 @@ Write-Output 'NARRATION_OK'
         state = "disabled" if active else "normal"
         self.cancel_button.configure(state="normal" if self.generation_running else "disabled")
         self.cancel_render_button.configure(state="normal" if self.render_running else "disabled")
-        for button in (self.generate_button, self.save_button, self.approve_button,
+        for button in (self.generate_button, self.new_project_button, self.save_button, self.approve_button,
                        self.export_button, self.delete_button, self.assign_image_button,
                        self.clear_image_button, self.refresh_scenes_button,
                        self.select_audio_button, self.clear_audio_button,
-                       self.detect_models_button, self.generate_image_button):
+                       self.detect_models_button, self.generate_image_button,
+                       self.detect_voice_button, self.generate_voice_button):
             button.configure(state=state)
+        self.cancel_voice_button.configure(state="disabled")
+        self.voice_combo.configure(state="disabled" if active else "readonly")
         self.project_list.configure(state=state)
         self._set_scene_list_state(active)
         self.cancel_button.configure(state="normal" if self.generation_running else "disabled")
@@ -1299,8 +1303,8 @@ Write-Output 'NARRATION_OK'
         return widget
 
     def new_project(self):
-        if self.generation_running:
-            messagebox.showinfo("Generación en curso", "Espera o cancela la generación actual antes de crear otro proyecto.")
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual antes de crear otro proyecto.")
             return
         self.current_id = None
         self.title_var.set("")
@@ -1386,8 +1390,8 @@ Write-Output 'NARRATION_OK'
         data = self.get_form()
         if not data:
             return
-        if self.generation_running:
-            messagebox.showinfo("Generación en curso", "Ya hay una generación en proceso.")
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
             return
         minutes = data["duration"]
         self.estimate_var.set(self._estimate_time(minutes))
@@ -1433,11 +1437,14 @@ Write-Output 'NARRATION_OK'
         for widget, idle_state in self.form_widgets:
             widget.configure(state="disabled" if active else idle_state)
         self.script_text.configure(state="disabled" if active else "normal")
-        for button in (self.assign_image_button, self.clear_image_button, self.refresh_scenes_button,
-                       self.select_audio_button, self.clear_audio_button,
-                       self.detect_models_button, self.generate_image_button):
+        for button in (self.new_project_button, self.assign_image_button, self.clear_image_button,
+                       self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
+                       self.detect_models_button, self.generate_image_button, self.detect_voice_button,
+                       self.generate_voice_button):
             button.configure(state=state)
+        self.cancel_voice_button.configure(state="disabled")
         self.image_model_combo.configure(state="disabled" if active else "readonly")
+        self.voice_combo.configure(state="disabled" if active else "readonly")
         self._set_scene_list_state(active)
         # La barra es determinista: solo avanza cuando un capítulo termina realmente.
         if not active:
@@ -1890,7 +1897,7 @@ Write-Output 'NARRATION_OK'
         self.status_var.set("Proyecto eliminado.")
 
     def export_video(self):
-        if self.render_running or self.generation_running:
+        if self.render_running or self.generation_running or self.image_generation_running or self.voice_generation_running:
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
             return
         if self.current_id is None:
@@ -1960,12 +1967,15 @@ Write-Output 'NARRATION_OK'
         self.generate_button.configure(state=state)
         self.cancel_button.configure(state="disabled" if not active else "disabled")
         self.cancel_render_button.configure(state="normal" if active else "disabled")
-        for button in (self.save_button, self.approve_button,
+        for button in (self.new_project_button, self.save_button, self.approve_button,
                        self.export_button, self.delete_button, self.assign_image_button,
                        self.clear_image_button, self.refresh_scenes_button,
                        self.select_audio_button, self.clear_audio_button,
-                       self.detect_models_button, self.generate_image_button):
+                       self.detect_models_button, self.generate_image_button,
+                       self.detect_voice_button, self.generate_voice_button):
             button.configure(state=state)
+        self.cancel_voice_button.configure(state="disabled")
+        self.voice_combo.configure(state="disabled" if active else "readonly")
         self.project_list.configure(state=state)
         self.cancel_button.configure(state="disabled")
         for widget, idle_state in self.form_widgets:
