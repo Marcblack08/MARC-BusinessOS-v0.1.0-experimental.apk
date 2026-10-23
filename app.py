@@ -116,6 +116,8 @@ class App(tk.Tk):
         self._style()
         self._build()
         self.refresh_projects()
+        self.timeline_playhead_seconds = 0
+        self.timeline_selected_scene = 1
         self.after(700, self.detect_pc_async)
         self.check_tools()
         self.after(180, self._poll_generation_events)
@@ -527,9 +529,54 @@ class App(tk.Tk):
         scene_scroll.grid(row=0, column=1, sticky="ns")
         self.scene_outline.configure(yscrollcommand=scene_scroll.set)
         self.scene_outline.bind("<Double-1>", lambda _event: self.assign_scene_image())
+        self.scene_outline.bind("<<TreeviewSelect>>", self._timeline_scene_selected)
         tk.Label(scenes_tab, text="La generación de ilustraciones se ejecuta en ComfyUI en tu PC. Requiere instalarlo y descargar al menos un checkpoint compatible. No usa claves API ni servicios en la nube.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1000, justify="left").grid(row=7, column=0, sticky="w", pady=(8, 0))
+
+        timeline_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=12, pady=10)
+        studio_tabs.add(timeline_tab, text="  ▰  MONTAJE  ")
+        timeline_tab.grid_columnconfigure(0, weight=1)
+        timeline_tab.grid_rowconfigure(2, weight=1)
+        timeline_head = tk.Frame(timeline_tab, bg=self.colors["panel"])
+        timeline_head.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        tk.Label(timeline_head, text="LÍNEA DE TIEMPO", bg=self.colors["panel"],
+                 fg=self.colors["text"], font=("Segoe UI", 12, "bold")).pack(side="left")
+        self.timeline_time_var = tk.StringVar(value="00:00 / 10:00")
+        tk.Label(timeline_head, textvariable=self.timeline_time_var, bg=self.colors["panel"],
+                 fg="#69b8ff", font=("Consolas", 10, "bold")).pack(side="right")
+        timeline_tools = tk.Frame(timeline_tab, bg=self.colors["panel"])
+        timeline_tools.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        ttk.Button(timeline_tools, text="◀ Escena", command=lambda: self._step_timeline_scene(-1)).pack(side="left")
+        ttk.Button(timeline_tools, text="Escena ▶", command=lambda: self._step_timeline_scene(1)).pack(side="left", padx=(5, 12))
+        ttk.Button(timeline_tools, text="＋ Imagen", command=self.assign_scene_image).pack(side="left")
+        ttk.Button(timeline_tools, text="＋ Voz", command=self.select_audio_track).pack(side="left", padx=(5, 0))
+        ttk.Button(timeline_tools, text="＋ Música", command=self.select_music_track).pack(side="left", padx=(5, 0))
+        tk.Label(timeline_tools, text="Zoom", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 9)).pack(side="left", padx=(18, 5))
+        self.timeline_zoom_var = tk.DoubleVar(value=2.0)
+        self.timeline_zoom_scale = ttk.Scale(timeline_tools, from_=1.0, to=4.0,
+                                             variable=self.timeline_zoom_var,
+                                             command=lambda _value: self._draw_timeline())
+        self.timeline_zoom_scale.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        timeline_shell = tk.Frame(timeline_tab, bg="#080e18",
+                                  highlightthickness=1, highlightbackground=self.colors["border"])
+        timeline_shell.grid(row=2, column=0, sticky="nsew")
+        timeline_shell.grid_rowconfigure(0, weight=1)
+        timeline_shell.grid_columnconfigure(0, weight=1)
+        self.timeline_canvas = tk.Canvas(timeline_shell, bg="#080e18", height=245,
+                                        highlightthickness=0, borderwidth=0)
+        self.timeline_canvas.grid(row=0, column=0, sticky="nsew")
+        timeline_xscroll = ttk.Scrollbar(timeline_shell, orient="horizontal",
+                                         command=self.timeline_canvas.xview)
+        timeline_xscroll.grid(row=1, column=0, sticky="ew")
+        self.timeline_canvas.configure(xscrollcommand=timeline_xscroll.set)
+        self.timeline_canvas.bind("<Button-1>", self._timeline_click)
+        self.timeline_canvas.bind("<B1-Motion>", self._timeline_drag)
+        tk.Label(timeline_tab,
+                 text="Selecciona un clip de vídeo para vincularlo a su escena. Haz clic o arrastra en la regla para mover el cabezal. La edición modifica el proyecto local; el render final sigue usando el guion aprobado y sus recursos.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8),
+                 wraplength=1100, justify="left").grid(row=3, column=0, sticky="ew", pady=(7, 0))
 
         preview_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=14, pady=12)
         studio_tabs.add(preview_tab, text="  ▣  VISTA PREVIA  ")
@@ -649,8 +696,159 @@ class App(tk.Tk):
                  wraplength=1050, justify="left").grid(row=6, column=0, sticky="nw", pady=(2, 0))
 
         self.status_var = tk.StringVar(value="Listo. Define una historia o abre un proyecto de la biblioteca.")
+        self.after(250, lambda: studio_tabs.select(timeline_tab))
+        self.after(300, self._draw_timeline)
         tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
                  font=("Segoe UI", 9), anchor="w").grid(row=3, column=0, sticky="ew", pady=(6, 0))
+
+    def _timeline_duration_seconds(self):
+        try:
+            return max(60, int(self.duration_var.get() or "10") * 60)
+        except (ValueError, tk.TclError):
+            return 600
+
+    def _draw_timeline(self):
+        """Render a lightweight, selectable multi-track edit timeline."""
+        canvas = getattr(self, "timeline_canvas", None)
+        if canvas is None or not canvas.winfo_exists():
+            return
+        canvas.delete("all")
+        zoom = max(1.0, min(4.0, float(self.timeline_zoom_var.get() if hasattr(self, "timeline_zoom_var") else 2.0)))
+        total = self._timeline_duration_seconds()
+        scale = zoom
+        left = 116
+        width = left + total * scale + 32
+        height = 236
+        self.timeline_scale_px = scale
+        self.timeline_left_px = left
+        self.timeline_canvas.configure(scrollregion=(0, 0, width, height))
+        bg = "#080e18"
+        muted = self.colors["muted"]
+        border = "#203651"
+        canvas.create_rectangle(0, 0, width, height, fill=bg, outline=bg)
+        canvas.create_rectangle(0, 0, left - 1, height, fill="#0d1726", outline="#0d1726")
+        # Time ruler
+        canvas.create_text(12, 16, text="TIEMPO", anchor="w", fill=muted,
+                           font=("Segoe UI", 8, "bold"))
+        tick = 30 if total <= 600 else 60
+        for seconds in range(0, total + 1, tick):
+            x = left + seconds * scale
+            canvas.create_line(x, 28, x, height, fill="#18283b", width=1)
+            canvas.create_line(x, 24, x, 32, fill="#5d7591", width=1)
+            canvas.create_text(x + 3, 15, text=f"{seconds // 60:02d}:{seconds % 60:02d}",
+                               anchor="w", fill="#9aadc6", font=("Consolas", 8))
+        lanes = [
+            ("VÍDEO", 36, 82, "#2678b9"),
+            ("NARRACIÓN", 91, 125, "#159d8a"),
+            ("MÚSICA", 134, 168, "#8060c7"),
+            ("SUBTÍTULOS", 177, 211, "#b7791f"),
+        ]
+        for label, y1, y2, color in lanes:
+            canvas.create_rectangle(0, y1, width, y2, fill="#0b1421", outline="#142338")
+            canvas.create_text(12, (y1 + y2) / 2, text=label, anchor="w",
+                               fill=color, font=("Segoe UI", 8, "bold"))
+        durations = allocate_scene_durations(self.scene_data, total) if self.scene_data else []
+        elapsed = 0
+        for index, scene in enumerate(self.scene_data):
+            seconds = durations[index] if index < len(durations) else 5
+            x1 = left + elapsed * scale
+            x2 = left + (elapsed + seconds) * scale
+            asset = self.scene_assets.get(str(index + 1), "")
+            has_image = bool(asset and Path(asset).is_file())
+            color = "#245f91" if has_image else "#36475d"
+            selected = getattr(self, "timeline_selected_scene", 1) == index + 1
+            canvas.create_rectangle(x1 + 1, 39, max(x1 + 5, x2 - 2), 79,
+                                    fill=color, outline="#55c5ff" if selected else "#42617f",
+                                    width=2 if selected else 1, tags=(f"timeline_scene_{index + 1}",))
+            max_chars = max(5, int((x2 - x1 - 8) / 7))
+            title = scene.get("title", f"Escena {index + 1}")
+            if len(title) > max_chars:
+                title = title[:max(3, max_chars - 1)] + "…"
+            canvas.create_text(x1 + 6, 48, text=f"{index + 1:02d} · {title}",
+                               anchor="nw", fill="#ffffff", font=("Segoe UI", 8, "bold"),
+                               tags=(f"timeline_scene_{index + 1}",))
+            canvas.create_text(x1 + 6, 66, text="Imagen" if has_image else "Tarjeta",
+                               anchor="nw", fill="#d7e7f8", font=("Segoe UI", 7),
+                               tags=(f"timeline_scene_{index + 1}",))
+            # Caption blocks align to the scene cuts.
+            canvas.create_rectangle(x1 + 1, 181, max(x1 + 5, x2 - 2), 207,
+                                    fill="#60451d", outline="#b7791f")
+            elapsed += seconds
+        # Audio clips are represented by their actual imported assets; they span the
+        # project target because FFmpeg mixes them against the final sequence.
+        for path, y1, y2, color, label in (
+            (self.audio_track_path, 96, 120, "#159d8a", "Narración local"),
+            (self.music_track_path, 139, 163, "#8060c7", "Música de fondo"),
+        ):
+            if path and Path(path).is_file():
+                canvas.create_rectangle(left + 1, y1, left + total * scale - 2, y2,
+                                        fill=color, outline=color)
+                canvas.create_text(left + 8, (y1 + y2) / 2, text=Path(path).name,
+                                   anchor="w", fill="#ffffff", font=("Segoe UI", 8, "bold"))
+            else:
+                canvas.create_text(left + 8, (y1 + y2) / 2, text=f"Sin pista · {label}",
+                                   anchor="w", fill="#62758b", font=("Segoe UI", 8))
+        playhead = max(0, min(total, int(getattr(self, "timeline_playhead_seconds", 0))))
+        px = left + playhead * scale
+        canvas.create_line(px, 25, px, 215, fill="#ffcf5a", width=2, tags=("playhead",))
+        canvas.create_polygon(px - 5, 25, px + 5, 25, px, 32, fill="#ffcf5a", outline="#ffcf5a")
+        canvas.xview_moveto(max(0.0, min(1.0, (px - 180) / max(1, width))))
+        if hasattr(self, "timeline_time_var"):
+            self.timeline_time_var.set(f"{playhead // 60:02d}:{playhead % 60:02d} / {total // 60:02d}:{total % 60:02d}")
+
+    def _timeline_scene_selected(self, _event=None):
+        number = self._scene_selection_number()
+        if number is not None:
+            self.timeline_selected_scene = number
+            if hasattr(self, "scene_data") and number <= len(self.scene_data):
+                durations = allocate_scene_durations(self.scene_data, self._timeline_duration_seconds())
+                self.timeline_playhead_seconds = sum(durations[:number - 1])
+            self._draw_timeline()
+
+    def _timeline_seconds_from_event(self, event):
+        canvas = self.timeline_canvas
+        x = canvas.canvasx(event.x)
+        left = getattr(self, "timeline_left_px", 116)
+        scale = max(0.1, getattr(self, "timeline_scale_px", 2.0))
+        return max(0, min(self._timeline_duration_seconds(), int((x - left) / scale)))
+
+    def _timeline_click(self, event):
+        seconds = self._timeline_seconds_from_event(event)
+        self.timeline_playhead_seconds = seconds
+        canvas_y = self.timeline_canvas.canvasy(event.y)
+        if 36 <= canvas_y <= 82 and self.scene_data:
+            durations = allocate_scene_durations(self.scene_data, self._timeline_duration_seconds())
+            elapsed = 0
+            for index, duration in enumerate(durations):
+                if elapsed <= seconds < elapsed + duration or index == len(durations) - 1:
+                    self.timeline_selected_scene = index + 1
+                    if hasattr(self, "scene_outline") and self.scene_outline.exists():
+                        iid = f"scene_{index + 1}"
+                        if iid in self.scene_outline.get_children(""):
+                            self.scene_outline.selection_set(iid)
+                            self.scene_outline.see(iid)
+                    break
+                elapsed += duration
+        self._draw_timeline()
+
+    def _timeline_drag(self, event):
+        self.timeline_playhead_seconds = self._timeline_seconds_from_event(event)
+        self._draw_timeline()
+
+    def _step_timeline_scene(self, step):
+        if not self.scene_data:
+            messagebox.showinfo("Sin escenas", "Genera o abre un guion para poder navegar por escenas.")
+            return
+        current = max(1, min(len(self.scene_data), int(getattr(self, "timeline_selected_scene", 1))))
+        target = max(1, min(len(self.scene_data), current + step))
+        self.timeline_selected_scene = target
+        durations = allocate_scene_durations(self.scene_data, self._timeline_duration_seconds())
+        self.timeline_playhead_seconds = sum(durations[:target - 1])
+        iid = f"scene_{target}"
+        if iid in self.scene_outline.get_children(""):
+            self.scene_outline.selection_set(iid)
+            self.scene_outline.see(iid)
+        self._draw_timeline()
 
     def _project_assets_dir(self, project_id=None):
         project_id = project_id if project_id is not None else self.current_id
@@ -779,6 +977,7 @@ class App(tk.Tk):
             voice_label = Path(self.audio_track_path).name if self.audio_track_path and Path(self.audio_track_path).is_file() else "sin narración"
             music_label = Path(self.music_track_path).name if self.music_track_path and Path(self.music_track_path).is_file() else "sin música"
             self.scene_summary_var.set(f"{len(self.scene_data)} escenas · {total_words} palabras · objetivo {self.duration_var.get()} min · {voice_label} · {music_label}")
+        self._draw_timeline()
 
     def assign_scene_image(self):
         if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
@@ -848,6 +1047,7 @@ class App(tk.Tk):
                 self.music_track_label_var.set(f"{music_path.name}\n{music_path}")
             else:
                 self.music_track_label_var.set("Sin música de fondo.")
+        self._draw_timeline()
 
     def detect_local_voices(self, quiet=False):
         if self.voice_generation_running:
