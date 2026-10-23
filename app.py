@@ -456,9 +456,10 @@ class App(tk.Tk):
         preview_dock = tk.Frame(lower, bg=self.colors["panel"], padx=9, pady=7,
                                 highlightthickness=1, highlightbackground=self.colors["border"])
         preview_dock.grid(row=2, column=0, sticky="ew", pady=(0, 7))
-        preview_dock.grid_columnconfigure(0, weight=1)
+        preview_dock.grid_columnconfigure(0, weight=3, uniform="monitor")
+        preview_dock.grid_columnconfigure(1, weight=2, uniform="monitor")
         monitor_header = tk.Frame(preview_dock, bg=self.colors["panel"])
-        monitor_header.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+        monitor_header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 5))
         tk.Label(monitor_header, text="MONITOR / STORYBOARD", bg=self.colors["panel"],
                  fg=self.colors["text"], font=("Segoe UI", 10, "bold")).pack(side="left")
         self.preview_scene_var = tk.StringVar(value="SIN ESCENAS")
@@ -466,14 +467,28 @@ class App(tk.Tk):
                  fg="#69b8ff", font=("Segoe UI", 8, "bold")).pack(side="right")
         monitor = tk.Frame(preview_dock, bg="#03070d", highlightthickness=1,
                            highlightbackground=self.colors["border"])
-        monitor.grid(row=1, column=0, sticky="ew")
+        monitor.grid(row=1, column=0, sticky="nsew", padx=(0, 6))
         monitor.grid_columnconfigure(0, weight=1)
+        monitor.grid_rowconfigure(0, weight=1)
         self.preview_canvas = tk.Canvas(monitor, bg="#03070d", highlightthickness=0,
-                                        height=158, width=800)
-        self.preview_canvas.grid(row=0, column=0, sticky="ew")
+                                        height=196, width=520)
+        self.preview_canvas.grid(row=0, column=0, sticky="nsew")
         self.preview_canvas.bind("<Configure>", lambda _event: self._render_preview_frame())
+        scene_inspector = tk.Frame(preview_dock, bg=self.colors["input"], padx=10, pady=8,
+                                   highlightthickness=1, highlightbackground=self.colors["border"])
+        scene_inspector.grid(row=1, column=1, sticky="nsew")
+        tk.Label(scene_inspector, text="ESCENA ACTUAL", bg=self.colors["input"],
+                 fg="#69b8ff", font=("Segoe UI", 8, "bold")).pack(anchor="w")
+        self.preview_scene_title_var = tk.StringVar(value="Genera un guion")
+        tk.Label(scene_inspector, textvariable=self.preview_scene_title_var, bg=self.colors["input"],
+                 fg=self.colors["text"], font=("Segoe UI", 11, "bold"),
+                 wraplength=330, justify="left").pack(anchor="w", pady=(7, 5))
+        self.preview_scene_text_var = tk.StringVar(value="Al seleccionar una escena aparecerán aquí su resumen y referencia visual.")
+        tk.Label(scene_inspector, textvariable=self.preview_scene_text_var, bg=self.colors["input"],
+                 fg=self.colors["muted"], font=("Segoe UI", 9), wraplength=330,
+                 justify="left", anchor="nw").pack(fill="both", expand=True)
         monitor_actions = tk.Frame(preview_dock, bg=self.colors["panel"])
-        monitor_actions.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+        monitor_actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5, 0))
         ttk.Button(monitor_actions, text="◀ Escena", command=lambda: self._step_preview_scene(-1)).pack(side="left")
         ttk.Button(monitor_actions, text="Escena ▶", command=lambda: self._step_preview_scene(1)).pack(side="left", padx=(5, 0))
         ttk.Button(monitor_actions, text="Abrir MP4", style="Accent.TButton",
@@ -1871,6 +1886,15 @@ Write-Output 'NARRATION_OK'
             self.preview_scene_var.set(
                 f"ESCENA {number:02d} / {len(scenes):02d}" if scenes else "STORYBOARD · SIN ESCENAS"
             )
+        if hasattr(self, "preview_scene_title_var"):
+            if scenes and number <= len(scenes):
+                scene = scenes[number - 1]
+                self.preview_scene_title_var.set(scene.get("title", f"Escena {number}"))
+                summary = re.sub(r"\s+", " ", scene.get("text", "")).strip()
+                self.preview_scene_text_var.set(summary[:420] or "Esta escena todavía no tiene texto.")
+            else:
+                self.preview_scene_title_var.set("Genera un guion")
+                self.preview_scene_text_var.set("El resumen de la escena y su referencia visual aparecerán aquí.")
 
     def choose_preview_video(self):
         path = filedialog.askopenfilename(
