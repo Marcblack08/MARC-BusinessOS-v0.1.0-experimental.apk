@@ -584,37 +584,40 @@ class App(tk.Tk):
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8),
                  wraplength=1100, justify="left").grid(row=3, column=0, sticky="ew", pady=(7, 0))
 
-        preview_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=14, pady=12)
+        preview_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=18, pady=16)
         studio_tabs.add(preview_tab, text="  ▣  VISTA PREVIA  ")
         preview_tab.grid_columnconfigure(0, weight=1)
         preview_tab.grid_rowconfigure(1, weight=1)
-        tk.Label(preview_tab, text="MONITOR DE VÍDEO", bg=self.colors["panel"], fg=self.colors["text"],
-                 font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 10))
+        preview_head = tk.Frame(preview_tab, bg=self.colors["panel"])
+        preview_head.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        tk.Label(preview_head, text="MONITOR DE VÍDEO", bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 14, "bold")).pack(side="left")
+        self.preview_scene_var = tk.StringVar(value="ESCENA 01  ·  STORYBOARD")
+        tk.Label(preview_head, textvariable=self.preview_scene_var, bg=self.colors["panel"],
+                 fg="#69b8ff", font=("Segoe UI", 9, "bold")).pack(side="right")
         monitor = tk.Frame(preview_tab, bg="#03070d", highlightthickness=1,
                            highlightbackground=self.colors["border"])
         monitor.grid(row=1, column=0, sticky="nsew")
         monitor.grid_columnconfigure(0, weight=1)
         monitor.grid_rowconfigure(0, weight=1)
-        self.preview_canvas = tk.Canvas(monitor, bg="#03070d", highlightthickness=0, height=220)
+        self.preview_canvas = tk.Canvas(monitor, bg="#03070d", highlightthickness=0,
+                                        height=380, width=900)
         self.preview_canvas.grid(row=0, column=0, sticky="nsew")
-        self.preview_canvas.create_rectangle(24, 24, 976, 200, outline="#203651", width=1)
-        self.preview_canvas.create_text(500, 95, text="M A R C   /   S T U D I O",
-                                        fill="#168bff", font=("Segoe UI", 20, "bold"))
-        self.preview_canvas.create_text(500, 132, text="La vista previa aparecerá cuando exista un vídeo renderizado",
-                                        fill="#9aadc6", font=("Segoe UI", 10))
-        tk.Label(preview_tab, text="El vídeo se abre en el reproductor predeterminado de Windows. La generación completa de dibujos sigue siendo opcional y requiere recursos visuales.",
-                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
-                 wraplength=1000, justify="left").grid(row=2, column=0, sticky="w", pady=(8, 0))
-        self.preview_status_var = tk.StringVar(value="Todavía no hay un MP4 exportado para este proyecto.")
+        self.preview_canvas.bind("<Configure>", lambda _event: self._render_preview_frame())
+        preview_transport = tk.Frame(preview_tab, bg=self.colors["panel"])
+        preview_transport.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        ttk.Button(preview_transport, text="◀ Escena anterior",
+                   command=lambda: self._step_preview_scene(-1)).pack(side="left")
+        ttk.Button(preview_transport, text="Siguiente escena ▶",
+                   command=lambda: self._step_preview_scene(1)).pack(side="left", padx=(6, 0))
+        ttk.Button(preview_transport, text="Abrir último MP4", style="Accent.TButton",
+                   command=self.open_last_video).pack(side="right")
+        ttk.Button(preview_transport, text="Elegir MP4",
+                   command=self.choose_preview_video).pack(side="right", padx=(0, 6))
+        self.preview_status_var = tk.StringVar(value="El monitor muestra el storyboard de la escena seleccionada. Exporta para crear el MP4 final.")
         tk.Label(preview_tab, textvariable=self.preview_status_var, bg=self.colors["panel"],
-                 fg=self.colors["text"], font=("Segoe UI", 9, "bold"),
-                 wraplength=1000, justify="left").grid(row=3, column=0, sticky="w", pady=(12, 6))
-        preview_actions = tk.Frame(preview_tab, bg=self.colors["panel"])
-        preview_actions.grid(row=4, column=0, sticky="w")
-        ttk.Button(preview_actions, text="Abrir último vídeo", style="Accent.TButton",
-                   command=self.open_last_video).pack(side="left")
-        ttk.Button(preview_actions, text="Elegir MP4 para previsualizar",
-                   command=self.choose_preview_video).pack(side="left", padx=(8, 0))
+                 fg=self.colors["muted"], font=("Segoe UI", 9),
+                 wraplength=1100, justify="left").grid(row=3, column=0, sticky="ew", pady=(10, 0))
         audio_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=16, pady=14)
         studio_tabs.add(audio_tab, text="  ♪  AUDIO  ")
         audio_tab.grid_columnconfigure(0, weight=1)
@@ -827,6 +830,7 @@ class App(tk.Tk):
                 durations = allocate_scene_durations(self.scene_data, self._timeline_duration_seconds())
                 self.timeline_playhead_seconds = sum(durations[:number - 1])
             self._draw_timeline()
+            self._render_preview_frame()
 
     def _timeline_seconds_from_event(self, event):
         canvas = self.timeline_canvas
@@ -1062,6 +1066,7 @@ class App(tk.Tk):
                         self._format_eta(durations[idx]), visual_status)
             )
         if not self.scene_data:
+            self.timeline_selected_scene = 1
             self.scene_outline.insert(
                 "", "end", iid="scene_empty",
                 values=("", "Genera o abre un guion para ver las escenas", "", "", "")
@@ -1069,6 +1074,9 @@ class App(tk.Tk):
         elif old_selection and 1 <= old_selection <= len(self.scene_data):
             self.scene_outline.selection_set(f"scene_{old_selection}")
             self.scene_outline.see(f"scene_{old_selection}")
+            self.timeline_selected_scene = old_selection
+        else:
+            self.timeline_selected_scene = 1
         if hasattr(self, "scene_summary_var"):
             voice_label = Path(self.audio_track_path).name if self.audio_track_path and Path(self.audio_track_path).is_file() else "sin narración"
             music_label = Path(self.music_track_path).name if self.music_track_path and Path(self.music_track_path).is_file() else "sin música"
@@ -1562,6 +1570,69 @@ Write-Output 'NARRATION_OK'
             self.generation_queue.put(("audio_mux_done", output, project_id))
         except Exception as exc:
             self.generation_queue.put(("audio_mux_error", str(exc)))
+
+    def _step_preview_scene(self, delta):
+        total = len(getattr(self, "scene_data", []))
+        if not total:
+            self.preview_status_var.set("Genera o abre un guion para navegar por las escenas.")
+            self._render_preview_frame()
+            return
+        current = getattr(self, "timeline_selected_scene", 1)
+        target = max(1, min(total, current + delta))
+        self.timeline_selected_scene = target
+        item = f"scene_{target}"
+        if hasattr(self, "scene_outline") and item in self.scene_outline.get_children(""):
+            self.scene_outline.selection_set(item)
+            self.scene_outline.see(item)
+        self._render_preview_frame()
+
+    def _render_preview_frame(self):
+        if not hasattr(self, "preview_canvas"):
+            return
+        canvas = self.preview_canvas
+        canvas.delete("all")
+        width = max(320, canvas.winfo_width())
+        height = max(220, canvas.winfo_height())
+        number = getattr(self, "timeline_selected_scene", 1)
+        scenes = getattr(self, "scene_data", [])
+        image_path = getattr(self, "scene_assets", {}).get(str(number), "")
+        if image_path and Path(image_path).is_file():
+            try:
+                from PIL import Image, ImageTk
+                image = Image.open(image_path).convert("RGB")
+                image.thumbnail((width - 40, height - 40), Image.Resampling.LANCZOS)
+                self._preview_photo = ImageTk.PhotoImage(image)
+                canvas.create_image(width // 2, height // 2, image=self._preview_photo, anchor="center")
+                canvas.create_rectangle(12, 12, width - 12, height - 12, outline="#2b527b", width=1)
+            except Exception:
+                canvas.create_text(width // 2, height // 2,
+                    text="Imagen asignada\nInstala Pillow para mostrarla en el monitor",
+                    fill="#a8bdd7", font=("Segoe UI", 12), justify="center")
+        elif scenes and 1 <= number <= len(scenes):
+            scene = scenes[number - 1]
+            canvas.create_rectangle(18, 18, width - 18, height - 18, fill="#101d30", outline="#24466c", width=2)
+            canvas.create_text(width // 2, height * 0.24, text=f"STORYBOARD  /  ESCENA {number:02d}",
+                               fill="#55b5ff", font=("Segoe UI", 10, "bold"))
+            title = scene.get("title", f"Escena {number}")
+            canvas.create_text(width // 2, height * 0.43, text=title[:100], width=width - 100,
+                               fill="#f2f7ff", font=("Segoe UI", 18, "bold"), justify="center")
+            body = re.sub(r"\\s+", " ", scene.get("text", scene.get("content", ""))).strip()
+            if not body:
+                body = "Asigna una ilustración a esta escena para visualizar su composición."
+            canvas.create_text(width // 2, height * 0.63, text=body[:260], width=width - 120,
+                               fill="#a9bad0", font=("Segoe UI", 10), justify="center")
+            canvas.create_text(width // 2, height * 0.86, text="MARC  •  MONITOR DE STORYBOARD",
+                               fill="#47749e", font=("Segoe UI", 8, "bold"))
+        else:
+            canvas.create_rectangle(18, 18, width - 18, height - 18, fill="#101d30", outline="#24466c", width=2)
+            canvas.create_text(width // 2, height * 0.42, text="MARC  /  VIDEO STUDIO",
+                               fill="#168bff", font=("Segoe UI", 22, "bold"))
+            canvas.create_text(width // 2, height * 0.55,
+                               text="Genera un guion para crear el storyboard de tu vídeo",
+                               fill="#a9bad0", font=("Segoe UI", 11))
+        if hasattr(self, "preview_scene_var"):
+            total = len(scenes)
+            self.preview_scene_var.set(f"ESCENA {number:02d} / {total:02d}" if total else "STORYBOARD · SIN ESCENAS")
 
     def choose_preview_video(self):
         path = filedialog.askopenfilename(
