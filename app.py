@@ -106,6 +106,7 @@ class App(tk.Tk):
         self.loop_audio_var = None
         self.voice_generation_running = False
         self.voice_cancel_event = threading.Event()
+        self.available_voice_names = []
         self.comfy_available = False
         self.image_generation_running = False
         self._style()
@@ -857,8 +858,7 @@ class App(tk.Tk):
             messagebox.showwarning("Guarda el proyecto", "Completa el título y la premisa antes de generar la narración.")
             return
         chosen_voice = self.voice_var.get().strip() or "(Automática)"
-        voices = tuple(self.voice_combo.cget("values"))
-        if chosen_voice != "(Automática)" and chosen_voice not in voices:
+        if chosen_voice != "(Automática)" and chosen_voice not in self.available_voice_names:
             messagebox.showwarning("Voz no disponible", "Pulsa «Detectar voces» y selecciona una voz instalada.")
             return
         if self.audio_track_path and Path(self.audio_track_path).is_file():
@@ -1331,6 +1331,7 @@ Write-Output 'NARRATION_OK'
         self.scene_assets = {}
         self.last_export_path = ""
         self.audio_track_path = ""
+        self._refresh_audio_track_label()
         if self.loop_audio_var is not None:
             self.loop_audio_var.set(False)
         if hasattr(self, "preview_status_var"):
@@ -1624,13 +1625,14 @@ Write-Output 'NARRATION_OK'
                     self.status_var.set(event[1])
                 elif kind == "voice_models":
                     voices, quiet = event[1], event[2]
+                    self.available_voice_names = list(voices)
                     options = ["(Automática)"] + voices
                     self.voice_combo.configure(values=options)
                     if self.voice_var.get() not in options:
                         self.voice_var.set("(Automática)")
                     if voices:
                         self.voice_status_var.set(
-                            f"{len(voices)} voz/ces local(es) disponible(s). Selecciona una voz y genera narración."
+                            f"{len(voices)} voz(es) local(es) disponible(s). Selecciona una voz y genera narración."
                         )
                     else:
                         self.voice_status_var.set(
