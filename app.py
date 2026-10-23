@@ -352,6 +352,8 @@ class App(tk.Tk):
         self.new_project_button.pack(fill="x", pady=(0, 6))
         self.delete_button = ttk.Button(lib_buttons, text="Eliminar proyecto", command=self.delete_project)
         self.delete_button.pack(fill="x")
+        self.continue_series_button = ttk.Button(lib_buttons, text="↗ Continuar historia", command=self.create_continuation)
+        self.continue_series_button.pack(fill="x", pady=(6, 0))
 
         editor = tk.Frame(workspace, bg=self.colors["bg"])
         workspace.add(editor, minsize=620, stretch="always")
@@ -366,9 +368,18 @@ class App(tk.Tk):
         controls_area = tk.Frame(vertical, bg=self.colors["bg"])
         self.controls_area = controls_area
         vertical.add(controls_area, minsize=285, width=325, stretch="never")
-        card = tk.Frame(controls_area, bg=self.colors["panel"], padx=10, pady=10,
+        controls_area.grid_rowconfigure(0, weight=1)
+        controls_area.grid_columnconfigure(0, weight=1)
+        self.config_canvas = tk.Canvas(controls_area, bg=self.colors["bg"], highlightthickness=0, borderwidth=0)
+        self.config_canvas.grid(row=0, column=0, sticky="nsew")
+        config_scroll = ttk.Scrollbar(controls_area, orient="vertical", command=self.config_canvas.yview)
+        config_scroll.grid(row=0, column=1, sticky="ns")
+        self.config_canvas.configure(yscrollcommand=config_scroll.set)
+        card = tk.Frame(self.config_canvas, bg=self.colors["panel"], padx=10, pady=10,
                         highlightthickness=1, highlightbackground=self.colors["border"])
-        card.pack(fill="both", expand=True)
+        self.config_canvas_window = self.config_canvas.create_window((0, 0), window=card, anchor="nw")
+        card.bind("<Configure>", lambda _event: self.config_canvas.configure(scrollregion=self.config_canvas.bbox("all")))
+        self.config_canvas.bind("<Configure>", lambda event: self.config_canvas.itemconfigure(self.config_canvas_window, width=event.width))
         tk.Label(card, text="CONFIGURACIÓN DE HISTORIA", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 13, "bold")).pack(anchor="w")
         tk.Label(card, text="Define narrativa, formato y dirección visual. Los paneles se pueden redimensionar.",
@@ -386,6 +397,9 @@ class App(tk.Tk):
         self.ending_var = tk.StringVar(value="Justicia y superación")
         self.drawing_style_var = tk.StringVar(value="Anime cinematográfico")
         self.animation_style_var = tk.StringVar(value="2D fluida")
+        self.video_mode_var = tk.StringVar(value=SERIES_VIDEO_MODE)
+        self.resolution_var = tk.StringVar(value="1080p (Full HD)")
+        self.fps_var = tk.StringVar(value="30")
 
         form = tk.Frame(card, bg=self.colors["panel"])
         form.pack(fill="x", expand=True)
@@ -398,8 +412,8 @@ class App(tk.Tk):
                             "Fantasía", "Misterio y suspenso", "Terror", "Acción y aventura", "Ciencia ficción",
                             "Drama familiar", "Educativo y directo", "Documental", "Promocional"])
         self._field(form, "Plataforma", self.platform_var, 1, 1, values=list(PLATFORMS))
-        self._field(form, "Duración (min)", self.duration_var, 2, 0,
-                    values=[str(i) for i in (1, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120)])
+        self.duration_field = self._field(form, "Duración (min)", self.duration_var, 2, 0,
+                    values=[str(i) for i in (1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120)])
         self._field(form, "Tono", self.tone_var, 2, 1,
                     values=["Dramático e intenso", "Oscuro y misterioso", "Emotivo", "Inspirador",
                             "Épico", "Ligero y humorístico", "Realista"])
@@ -420,9 +434,16 @@ class App(tk.Tk):
                             "Cut-out / recortes", "3D cinematográfica", "Stop motion",
                             "Pixel animation", "Presentación animada"])
         self._field(form, "Premisa / idea", self.topic_var, 6, 0, span=2)
-        tk.Label(form, text="Los estilos guían la generación; las ilustraciones se asignan en ESCENAS.",
+        self.video_mode_field = self._field(form, "Modo de producción", self.video_mode_var, 7, 0, span=2,
+                    values=[SHORT_VIDEO_MODE, SERIES_VIDEO_MODE])
+        self.video_mode_field.bind("<<ComboboxSelected>>", lambda _event: self._on_video_mode_changed())
+        self._field(form, "Resolución de salida", self.resolution_var, 8, 0,
+                    values=list(RESOLUTION_PROFILES))
+        self._field(form, "Fotogramas por segundo", self.fps_var, 8, 1,
+                    values=list(FPS_OPTIONS))
+        tk.Label(form, text="En modo corto, el objetivo es 2 minutos. La resolución elegida se respeta durante la exportación.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8),
-                 justify="left", wraplength=280).grid(row=7, column=0, columnspan=2,
+                 justify="left", wraplength=280).grid(row=9, column=0, columnspan=2,
                                                         sticky="w", padx=5, pady=(5, 2))
 
         lower = tk.Frame(vertical, bg=self.colors["bg"])
