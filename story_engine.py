@@ -13,9 +13,11 @@ FPS_OPTIONS = ("24", "25", "30", "60")
 SHORT_VIDEO_MODE = "Corto (2 minutos)"
 SERIES_VIDEO_MODE = "Novela / Serie"
 
-_SPEAKER_LINE = re.compile(
-    r"^\s*\[([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ0-9 _.'-]{0,35})\]\s*:\s*(.+?)\s*$",
-    re.MULTILINE,
+_SPEAKER_PATTERN = r"\[([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ0-9 _.'-]{0,35})\]\s*:\s*"
+_SPEAKER_LINE = re.compile(r"^\s*" + _SPEAKER_PATTERN + r"(.+?)\s*$", re.MULTILINE)
+_SPEAKER_INLINE = re.compile(
+    _SPEAKER_PATTERN + r"(.*?)(?=\s+" + _SPEAKER_PATTERN + r"|$)",
+    re.IGNORECASE,
 )
 
 
@@ -46,7 +48,7 @@ def extract_speaker_names(script: str) -> list[str]:
     """Find explicit [SPEAKER]: dialogue/narration labels in script order."""
     result: list[str] = []
     seen: set[str] = set()
-    for match in _SPEAKER_LINE.finditer(script or ""):
+    for match in _SPEAKER_INLINE.finditer(script or ""):
         name = re.sub(r"\s+", " ", match.group(1)).strip()
         key = name.casefold()
         if key not in seen:
@@ -62,9 +64,12 @@ def narration_segments(script: str) -> list[tuple[str, str]]:
         line = raw_line.strip()
         if not line:
             continue
-        match = _SPEAKER_LINE.match(line)
-        if match:
-            segments.append((re.sub(r"\s+", " ", match.group(1)).strip(), match.group(2).strip()))
+        matches = list(_SPEAKER_INLINE.finditer(line))
+        if matches:
+            for match in matches:
+                spoken = match.group(2).strip()
+                if spoken:
+                    segments.append((re.sub(r"\s+", " ", match.group(1)).strip(), spoken))
         elif not line.startswith("[") and len(line.split()) > 1:
             segments.append(("NARRADOR", line))
     return segments
