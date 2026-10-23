@@ -659,6 +659,7 @@ class App(tk.Tk):
         self.scene_assets = {}
         self.last_export_path = ""
         self.audio_track_path = ""
+        self.music_track_path = ""
         if project_id is None:
             project_id = self.current_id
         if project_id is None:
@@ -688,6 +689,14 @@ class App(tk.Tk):
                     self.audio_track_path = candidate_audio
         except OSError:
             self.audio_track_path = ""
+        music_manifest = project_dir / "music_track.txt"
+        try:
+            if music_manifest.is_file():
+                candidate_music = music_manifest.read_text(encoding="utf-8").strip()
+                if candidate_music and Path(candidate_music).is_file():
+                    self.music_track_path = candidate_music
+        except OSError:
+            self.music_track_path = ""
         if hasattr(self, "preview_status_var"):
             self.preview_status_var.set(
                 f"Último vídeo: {self.last_export_path}" if self.last_export_path
@@ -707,6 +716,11 @@ class App(tk.Tk):
             audio_manifest.write_text(self.audio_track_path, encoding="utf-8")
         elif audio_manifest.exists():
             audio_manifest.unlink()
+        music_manifest = assets_dir.parent / "music_track.txt"
+        if self.music_track_path and Path(self.music_track_path).is_file():
+            music_manifest.write_text(self.music_track_path, encoding="utf-8")
+        elif music_manifest.exists():
+            music_manifest.unlink()
 
     def _set_scene_list_state(self, disabled):
         try:
@@ -759,8 +773,9 @@ class App(tk.Tk):
             self.scene_outline.selection_set(f"scene_{old_selection}")
             self.scene_outline.see(f"scene_{old_selection}")
         if hasattr(self, "scene_summary_var"):
-            audio_label = Path(self.audio_track_path).name if self.audio_track_path and Path(self.audio_track_path).is_file() else "sin audio"
-            self.scene_summary_var.set(f"{len(self.scene_data)} escenas · {total_words} palabras · objetivo {self.duration_var.get()} min · audio: {audio_label}")
+            voice_label = Path(self.audio_track_path).name if self.audio_track_path and Path(self.audio_track_path).is_file() else "sin narración"
+            music_label = Path(self.music_track_path).name if self.music_track_path and Path(self.music_track_path).is_file() else "sin música"
+            self.scene_summary_var.set(f"{len(self.scene_data)} escenas · {total_words} palabras · objetivo {self.duration_var.get()} min · {voice_label} · {music_label}")
 
     def assign_scene_image(self):
         if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
@@ -816,15 +831,6 @@ class App(tk.Tk):
         self.scene_outline.selection_set(f"scene_{scene_number}")
         self.scene_outline.see(f"scene_{scene_number}")
         self.status_var.set(f"Se quitó la imagen de la escena {scene_number}; se usará una tarjeta de texto.")
-
-    def _refresh_audio_track_label(self):
-        if not hasattr(self, "audio_track_label_var"):
-            return
-        if self.audio_track_path and Path(self.audio_track_path).is_file():
-            path = Path(self.audio_track_path)
-            self.audio_track_label_var.set(f"{path.name}\n{path}")
-        else:
-            self.audio_track_label_var.set("Sin pista de audio. Puedes importar una o generar narración local.")
 
     def _refresh_audio_track_label(self):
         if not hasattr(self, "audio_track_label_var"):
@@ -957,7 +963,7 @@ Write-Output 'NARRATION_OK'
             self.export_button, self.delete_button, self.assign_image_button, self.clear_image_button,
             self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
             self.detect_models_button, self.generate_image_button, self.detect_voice_button,
-            self.generate_voice_button, self.export_srt_button
+            self.generate_voice_button, self.export_srt_button, self.select_music_button, self.clear_music_button
         ):
             button.configure(state=state)
         self.cancel_button.configure(state="disabled")
@@ -1081,7 +1087,7 @@ Write-Output 'NARRATION_OK'
             messagebox.showwarning("Guarda el proyecto", "Completa el título y la premisa antes de asignar audio.")
             return
         source = filedialog.askopenfilename(
-            title="Selecciona narración o música",
+            title="Selecciona una pista de narración o voz",
             filetypes=[("Audio", "*.wav *.mp3 *.m4a *.aac *.flac *.ogg"), ("Todos los archivos", "*.*")]
         )
         if not source:
@@ -1101,7 +1107,7 @@ Write-Output 'NARRATION_OK'
             self._save_scene_assets()
             self._refresh_audio_track_label()
             self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
-            self.status_var.set(f"Pista de audio asignada: {destination.name}")
+            self.status_var.set(f"Pista de narración asignada: {destination.name}")
         except OSError as exc:
             messagebox.showerror("No se pudo copiar el audio", str(exc))
 
@@ -1111,15 +1117,59 @@ Write-Output 'NARRATION_OK'
             return
         self.audio_track_path = ""
         try:
-            if self.current_id is not None:
-                manifest = PROJECTS_DIR / str(self.current_id) / "audio_track.txt"
-                if manifest.exists():
-                    manifest.unlink()
+            self._save_scene_assets()
             self._refresh_audio_track_label()
             self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
             self.status_var.set("Se quitó la pista de audio del proyecto.")
         except OSError as exc:
             messagebox.showerror("No se pudo quitar el audio", str(exc))
+
+    def select_music_track(self):
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        if self.current_id is None:
+            self.save_project(quiet=True)
+        if self.current_id is None:
+            messagebox.showwarning("Guarda el proyecto", "Completa el título y la premisa antes de asignar música.")
+            return
+        source = filedialog.askopenfilename(
+            title="Selecciona la música de fondo",
+            filetypes=[("Audio", "*.wav *.mp3 *.m4a *.aac *.flac *.ogg"), ("Todos los archivos", "*.*")]
+        )
+        if not source:
+            return
+        source_path = Path(source)
+        if source_path.suffix.lower() not in {".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"}:
+            messagebox.showerror("Formato no compatible", "Selecciona WAV, MP3, M4A, AAC, FLAC u OGG.")
+            return
+        assets_dir = self._project_assets_dir()
+        if assets_dir is None:
+            return
+        try:
+            assets_dir.mkdir(parents=True, exist_ok=True)
+            destination = assets_dir / ("background_music" + source_path.suffix.lower())
+            shutil.copy2(source_path, destination)
+            self.music_track_path = str(destination.resolve())
+            self._save_scene_assets()
+            self._refresh_audio_track_label()
+            self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
+            self.status_var.set(f"Música de fondo asignada: {destination.name}")
+        except OSError as exc:
+            messagebox.showerror("No se pudo copiar la música", str(exc))
+
+    def clear_music_track(self):
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        self.music_track_path = ""
+        try:
+            self._save_scene_assets()
+            self._refresh_audio_track_label()
+            self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
+            self.status_var.set("Se quitó la música de fondo del proyecto.")
+        except OSError as exc:
+            messagebox.showerror("No se pudo quitar la música", str(exc))
 
     def choose_preview_video(self):
         path = filedialog.askopenfilename(
@@ -1220,7 +1270,7 @@ Write-Output 'NARRATION_OK'
                        self.clear_image_button, self.refresh_scenes_button,
                        self.select_audio_button, self.clear_audio_button,
                        self.detect_models_button, self.generate_image_button,
-                       self.detect_voice_button, self.generate_voice_button, self.export_srt_button):
+                       self.detect_voice_button, self.generate_voice_button, self.export_srt_button, self.select_music_button, self.clear_music_button):
             button.configure(state=state)
         self.cancel_voice_button.configure(state="disabled")
         self.voice_combo.configure(state="disabled" if active else "readonly")
@@ -1397,9 +1447,10 @@ Write-Output 'NARRATION_OK'
         self.scene_assets = {}
         self.last_export_path = ""
         self.audio_track_path = ""
+        self.music_track_path = ""
         self._refresh_audio_track_label()
-        if self.loop_audio_var is not None:
-            self.loop_audio_var.set(False)
+        if self.loop_music_var is not None:
+            self.loop_music_var.set(True)
         if hasattr(self, "preview_status_var"):
             self.preview_status_var.set("Todavía no hay un MP4 exportado para este proyecto.")
         self._refresh_scene_outline("")
@@ -1512,7 +1563,7 @@ Write-Output 'NARRATION_OK'
         for button in (self.new_project_button, self.assign_image_button, self.clear_image_button,
                        self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
                        self.detect_models_button, self.generate_image_button, self.detect_voice_button,
-                       self.generate_voice_button, self.export_srt_button):
+                       self.generate_voice_button, self.export_srt_button, self.select_music_button, self.clear_music_button):
             button.configure(state=state)
         self.cancel_voice_button.configure(state="disabled")
         self.image_model_combo.configure(state="disabled" if active else "readonly")
@@ -2019,8 +2070,10 @@ Write-Output 'NARRATION_OK'
                 "Para obtener escenas ilustradas, asigna imágenes propias o genera ilustraciones con ComfyUI en la pestaña ESCENAS."
             )
         audio_path = self.audio_track_path if self.audio_track_path and Path(self.audio_track_path).is_file() else ""
-        loop_audio = bool(self.loop_audio_var.get()) if self.loop_audio_var is not None else False
-        render_steps = len(scenes) + 1 + (1 if audio_path else 0)
+        music_path = self.music_track_path if self.music_track_path and Path(self.music_track_path).is_file() else ""
+        loop_music = bool(self.loop_music_var.get()) if self.loop_music_var is not None else True
+        has_any_audio = bool(audio_path or music_path)
+        render_steps = len(scenes) + 1 + (1 if has_any_audio else 0)
         self.render_cancel_event.clear()
         self.render_running = True
         self._set_render_state(True)
@@ -2031,7 +2084,7 @@ Write-Output 'NARRATION_OK'
         args = (
             ffmpeg, str(Path(output).resolve()), int(row["id"]), width, height,
             scenes, durations, asset_map, row["animation_style"] or "2D fluida",
-            audio_path, loop_audio
+            audio_path, music_path, loop_music
         )
         threading.Thread(target=self._render_video_worker, args=args, daemon=True).start()
 
@@ -2064,7 +2117,8 @@ Write-Output 'NARRATION_OK'
             self.status_var.set("Cancelación solicitada. Se detendrá el proceso FFmpeg actual.")
 
     def _render_video_worker(self, ffmpeg, output, project_id, width, height,
-                             scenes, durations, asset_map, animation_style, audio_path="", loop_audio=False):
+                             scenes, durations, asset_map, animation_style,
+                             audio_path="", music_path="", loop_music=True):
         scene_dir = PROJECTS_DIR / str(project_id) / "render_work"
         scene_dir.mkdir(parents=True, exist_ok=True)
         output_path = Path(output)
@@ -2096,7 +2150,9 @@ Write-Output 'NARRATION_OK'
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
             total = len(scenes)
-            has_audio = bool(audio_path and Path(audio_path).is_file())
+            has_voice = bool(audio_path and Path(audio_path).is_file())
+            has_music = bool(music_path and Path(music_path).is_file())
+            has_audio = has_voice or has_music
             final_steps = total + 1 + (1 if has_audio else 0)
             font_size = max(20, min(44, width // 28))
             for index, scene in enumerate(scenes):
@@ -2175,25 +2231,37 @@ Write-Output 'NARRATION_OK'
                 audio_video_path = scene_dir / "with_audio.mp4"
                 if audio_video_path.exists():
                     audio_video_path.unlink()
-                self.generation_queue.put(("render_progress", total + 2, final_steps, "Mezclando la pista de audio…"))
-                audio_input = []
-                audio_filter = []
-                audio_map = ["-map", "0:a:0"]
-                if loop_audio:
-                    audio_input.extend(["-stream_loop", "-1"])
-                audio_input.extend(["-i", str(Path(audio_path).resolve()), "-i", str(temp_output_path)])
-                if not loop_audio:
-                    audio_filter = ["-filter_complex", "[0:a:0]apad[aout]", "-map", "[aout]"]
-                    audio_map = []
-                mux_cmd = [
-                    ffmpeg, "-y", *audio_input,
-                    "-map", "1:v:0", *audio_map, *audio_filter,
+                self.generation_queue.put(("render_progress", total + 2, final_steps, "Mezclando narración y música de fondo…"))
+                mux_cmd = [ffmpeg, "-y"]
+                audio_inputs = []
+                filter_parts = []
+                track_labels = []
+                input_index = 0
+                if has_voice:
+                    mux_cmd.extend(["-i", str(Path(audio_path).resolve())])
+                    filter_parts.append(f"[{input_index}:a:0]volume=1.0,apad[voice]")
+                    track_labels.append("[voice]")
+                    input_index += 1
+                if has_music:
+                    if loop_music:
+                        mux_cmd.extend(["-stream_loop", "-1"])
+                    mux_cmd.extend(["-i", str(Path(music_path).resolve())])
+                    filter_parts.append(f"[{input_index}:a:0]volume=0.18,apad[music]")
+                    track_labels.append("[music]")
+                    input_index += 1
+                video_input_index = input_index
+                mux_cmd.extend(["-i", str(temp_output_path)])
+                if len(track_labels) == 2:
+                    filter_parts.append("[voice][music]amix=inputs=2:duration=longest:dropout_transition=2[aout]")
+                mux_cmd.extend([
+                    "-filter_complex", ";".join(filter_parts),
+                    "-map", f"{video_input_index}:v:0", "-map", "[aout]",
                     "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
                     "-movflags", "+faststart", str(audio_video_path)
-                ]
+                ])
                 run_ffmpeg(mux_cmd, "mux_audio.log", cwd=scene_dir)
                 if not audio_video_path.is_file() or audio_video_path.stat().st_size == 0:
-                    raise RuntimeError("FFmpeg no pudo combinar el audio con el vídeo.")
+                    raise RuntimeError("FFmpeg no pudo combinar la narración/música con el vídeo.")
                 temp_output_path.unlink()
                 audio_video_path.replace(temp_output_path)
             temp_output_path.replace(output_path)
