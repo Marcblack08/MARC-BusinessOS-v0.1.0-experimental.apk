@@ -701,6 +701,19 @@ class App(tk.Tk):
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1050, justify="left").grid(row=6, column=0, sticky="nw", pady=(2, 0))
 
+        mux_actions = tk.Frame(audio_tab, bg=self.colors["panel"])
+        mux_actions.grid(row=7, column=0, sticky="ew", pady=(12, 0))
+        ttk.Button(
+            mux_actions, text="Añadir audio al último vídeo",
+            style="Accent.TButton", command=self.add_audio_to_last_video
+        ).pack(side="left")
+        tk.Label(
+            mux_actions,
+            text="Aplica la voz y/o música al MP4 ya exportado sin volver a renderizar las escenas.",
+            bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
+            wraplength=800, justify="left"
+        ).pack(side="left", padx=(10, 0))
+
         self.status_var = tk.StringVar(value="Listo. Define una historia o abre un proyecto de la biblioteca.")
         self.after(250, lambda: studio_tabs.select(timeline_tab))
         self.after(300, self._draw_timeline)
@@ -1461,6 +1474,94 @@ Write-Output 'NARRATION_OK'
             self.status_var.set("Se quitó la música de fondo del proyecto.")
         except OSError as exc:
             messagebox.showerror("No se pudo quitar la música", str(exc))
+
+    def add_audio_to_last_video(self):
+        if self.render_running or getattr(self, "audio_mux_running", False) or self.voice_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        video = self.last_export_path
+        if not video or not Path(video).is_file():
+            messagebox.showwarning(
+                "No hay vídeo reciente",
+                "Este proyecto no tiene un último vídeo disponible. Exporta un MP4 primero o selecciónalo en VISTA PREVIA."
+            )
+            return
+        voice = self.audio_track_path if self.audio_track_path and Path(self.audio_track_path).is_file() else ""
+        music = self.music_track_path if self.music_track_path and Path(self.music_track_path).is_file() else ""
+        if not voice and not music:
+            messagebox.showwarning("No hay audio", "Genera/importa una narración o importa música de fondo primero.")
+            return
+        ffmpeg = self._find_ffmpeg()
+        if not ffmpeg:
+            selected = filedialog.askopenfilename(
+                title="Selecciona ffmpeg.exe",
+                filetypes=[("FFmpeg ejecutable", "ffmpeg.exe"), ("Ejecutables", "*.exe")]
+            )
+            if not selected or Path(selected).name.lower() != "ffmpeg.exe":
+                messagebox.showerror("FFmpeg no encontrado", "Selecciona el archivo ffmpeg.exe para añadir el audio.")
+                return
+            ffmpeg = selected
+        source_path = Path(video).resolve()
+        output = filedialog.asksaveasfilename(
+            title="Guardar vídeo con audio",
+            defaultextension=".mp4",
+            filetypes=[("Vídeo MP4", "*.mp4")],
+            initialfile=f"{source_path.stem}_con_audio.mp4",
+            initialdir=str(source_path.parent)
+        )
+        if not output:
+            return
+        output_path = Path(output).resolve()
+        if output_path == source_path:
+            messagebox.showwarning("Elige otro nombre", "Guarda el vídeo con audio en un archivo nuevo para conservar el original.")
+            return
+        loop_music = bool(self.loop_music_var.get()) if self.loop_music_var is not None else True
+        project_id = self.current_id
+        self.audio_mux_running = True
+        self.status_var.set("Añadiendo narración y música al último vídeo sin volver a renderizar las imágenes…")
+        self.progress_label_var.set("Mezclando audio con el último vídeo")
+        self.progress_detail_var.set("FFmpeg está copiando el vídeo y procesando las pistas de sonido.")
+        threading.Thread(
+            target=self._add_audio_to_video_worker,
+            args=(ffmpeg, str(source_path), str(output_path), voice, music, loop_music, project_id),
+            daemon=True
+        ).start()
+
+    def _add_audio_to_video_worker(self, ffmpeg, source, output, voice, music, loop_music, project_id):
+        try:
+            cmd = [ffmpeg, "-y", "-i", source]
+            voice_index = None
+            music_index = None
+            next_index = 1
+            if voice:
+                voice_index = next_index
+                cmd.extend(["-i", voice])
+                next_index += 1
+            if music:
+                if loop_music:
+                    cmd.extend(["-stream_loop", "-1"])
+                music_index = next_index
+                cmd.extend(["-i", music])
+            graph = build_audio_filter_graph(
+                bool(voice), bool(music), voice_index, music_index,
+                voice_gain=1.0, music_gain=0.18
+            )
+            cmd.extend(["-map", "0:v:0", "-filter_complex", graph, "-map", "[aout]",
+                        "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                        "-shortest", "-movflags", "+faststart", output])
+            log_path = Path(output).with_suffix(".audio-mix.log")
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+            with log_path.open("w", encoding="utf-8", errors="replace") as log:
+                result = subprocess.run(
+                    cmd, stdout=subprocess.DEVNULL, stderr=log,
+                    timeout=60 * 60 * 4, creationflags=creationflags
+                )
+            if result.returncode != 0 or not Path(output).is_file() or Path(output).stat().st_size == 0:
+                detail = log_path.read_text(encoding="utf-8", errors="replace")[-2600:]
+                raise RuntimeError(f"FFmpeg no pudo mezclar el audio.\\n{detail}")
+            self.generation_queue.put(("audio_mux_done", output, project_id))
+        except Exception as exc:
+            self.generation_queue.put(("audio_mux_error", str(exc)))
 
     def choose_preview_video(self):
         path = filedialog.askopenfilename(
@@ -2234,6 +2335,30 @@ Write-Output 'NARRATION_OK'
                     self.progress_detail_var.set(f"100% · {event[2]} escenas · duración aproximada {self._format_eta(event[3])}")
                     self.status_var.set(f"MP4 creado: {self.last_export_path}")
                     messagebox.showinfo("Exportación terminada", f"Vídeo MP4 creado en:\n{self.last_export_path}\n\nPuedes abrirlo desde la pestaña VISTA PREVIA.")
+                elif kind == "audio_mux_done":
+                    self.audio_mux_running = False
+                    self.last_export_path = event[1]
+                    project_id = event[2]
+                    if project_id is not None:
+                        try:
+                            manifest = PROJECTS_DIR / str(project_id) / "last_export.txt"
+                            manifest.parent.mkdir(parents=True, exist_ok=True)
+                            manifest.write_text(self.last_export_path, encoding="utf-8")
+                        except OSError:
+                            pass
+                    if hasattr(self, "preview_status_var"):
+                        self.preview_status_var.set(f"Último vídeo con audio: {self.last_export_path}")
+                    self.progressbar.configure(maximum=100, value=100)
+                    self.progress_label_var.set("Vídeo con audio listo")
+                    self.progress_detail_var.set("Las imágenes se copiaron sin volver a renderizarlas; se aplicaron las pistas seleccionadas.")
+                    self.status_var.set(f"Vídeo con audio creado: {self.last_export_path}")
+                    messagebox.showinfo("Audio añadido", f"Se creó el vídeo con audio:\\n{self.last_export_path}")
+                elif kind == "audio_mux_error":
+                    self.audio_mux_running = False
+                    self.progress_label_var.set("No se pudo añadir el audio")
+                    self.progress_detail_var.set("Revisa el registro de FFmpeg junto al archivo de salida.")
+                    self.status_var.set("Falló la mezcla de audio.")
+                    messagebox.showerror("Error al mezclar audio", event[1])
                 elif kind == "render_cancelled":
                     self.render_running = False
                     self._set_render_state(False)
