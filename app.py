@@ -1542,7 +1542,7 @@ class App(tk.Tk):
     def edit_character_voices(self):
         """Map explicit script speaker labels to installed Windows voices."""
         script = self.script_text.get("1.0", "end-1c")
-        speakers = [name for name in extract_speaker_names(script) if name.casefold() != "narrador"]
+        speakers = extract_speaker_names(script)
         if not speakers:
             messagebox.showinfo(
                 "No hay personajes etiquetados",
@@ -1569,7 +1569,7 @@ class App(tk.Tk):
         tk.Label(body, text="ASIGNACIÓN DE VOCES", bg=self.colors["panel"],
                  fg=self.colors["text"], font=("Segoe UI", 13, "bold")).pack(anchor="w")
         tk.Label(body,
-                 text="Elige una voz local para cada personaje. «Voz principal» utiliza la voz general seleccionada en Audio.",
+                 text="Elige una voz local para el narrador y cada personaje. «Voz principal» utiliza la voz general seleccionada en Audio.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=560, justify="left").pack(anchor="w", pady=(5, 12))
         scroll = tk.Canvas(body, bg=self.colors["input"], highlightthickness=0)
