@@ -1042,8 +1042,10 @@ class App(tk.Tk):
         for widget, idle_state in self.form_widgets:
             widget.configure(state="disabled" if active else idle_state)
         self.script_text.configure(state="disabled" if active else "normal")
-        for button in (self.assign_image_button, self.clear_image_button, self.refresh_scenes_button):
+        for button in (self.assign_image_button, self.clear_image_button, self.refresh_scenes_button,
+                       self.detect_models_button, self.generate_image_button):
             button.configure(state=state)
+        self.image_model_combo.configure(state="disabled" if active else "readonly")
         self.scene_outline.configure(state=state)
         # La barra es determinista: solo avanza cuando un capítulo termina realmente.
         if not active:
@@ -1216,6 +1218,62 @@ class App(tk.Tk):
                     self.estimate_var.set(self._estimate_time(int(self.duration_var.get() or "10"), event[1]))
                 elif kind == "status":
                     self.status_var.set(event[1])
+                elif kind == "image_models":
+                    models, quiet = event[1], event[2]
+                    self.comfy_available = True
+                    self.image_model_combo.configure(values=models)
+                    current_model = self.image_model_var.get()
+                    if current_model in models:
+                        self.image_model_var.set(current_model)
+                    elif models:
+                        self.image_model_var.set(models[0])
+                    self.image_ai_status_var.set(
+                        f"ComfyUI conectado · {len(models)} modelo(s) local(es) disponibles"
+                        if models else
+                        "ComfyUI conectado, pero falta un checkpoint en models/checkpoints"
+                    )
+                    if not models and not quiet:
+                        messagebox.showwarning(
+                            "No hay modelos de imagen",
+                            "ComfyUI responde, pero no tiene checkpoints detectados. Instala un modelo compatible en ComfyUI/models/checkpoints y pulsa Detectar ComfyUI."
+                        )
+                elif kind == "image_models_error":
+                    detail, quiet = event[1], event[2]
+                    self.comfy_available = False
+                    self.image_model_combo.configure(values=[])
+                    self.image_model_var.set("")
+                    self.image_ai_status_var.set("ComfyUI local no detectado · las imágenes propias siguen disponibles")
+                    if not quiet:
+                        messagebox.showinfo(
+                            "Generador local de imágenes no detectado",
+                            "MARC puede renderizar imágenes que importes sin ComfyUI. Para generar ilustraciones localmente, instala/abre ComfyUI en http://127.0.0.1:8188 y coloca un checkpoint compatible.\n\nDetalle: " + detail
+                        )
+                elif kind == "image_progress":
+                    self.progress_label_var.set(f"Ilustración IA · escena {event[1]}")
+                    self.progress_detail_var.set(event[2])
+                    self.status_var.set(event[2])
+                elif kind == "image_done":
+                    project_id, scene_number, image_path, prompt = event[1], event[2], event[3], event[4]
+                    self.image_generation_running = False
+                    self._set_image_state(False)
+                    if self.current_id == project_id:
+                        self.scene_assets[str(scene_number)] = image_path
+                        self._save_scene_assets()
+                        self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
+                        self.scene_outline.selection_clear(0, "end")
+                        self.scene_outline.selection_set(scene_number - 1)
+                    self.progress_label_var.set(f"Ilustración generada · escena {scene_number}")
+                    self.progress_detail_var.set("Imagen guardada localmente en los recursos del proyecto.")
+                    self.status_var.set("Ilustración IA generada y asignada a la escena.")
+                    messagebox.showinfo("Ilustración lista", f"Se generó la imagen local para la escena {scene_number}.\n\nPuedes exportar el MP4 cuando el guion esté aprobado.")
+                elif kind == "image_error":
+                    scene_number, detail = event[1], event[2]
+                    self.image_generation_running = False
+                    self._set_image_state(False)
+                    self.progress_label_var.set(f"Ilustración fallida · escena {scene_number}")
+                    self.progress_detail_var.set("Comprueba ComfyUI, el checkpoint y su consola.")
+                    self.status_var.set("No se pudo generar la ilustración local.")
+                    messagebox.showerror("Error de ilustración IA", detail)
                 elif kind == "chapter":
                     self.completed_chapters = event[2]
                     percent = round((self.completed_chapters / max(1, event[3])) * 100)
@@ -1443,12 +1501,14 @@ class App(tk.Tk):
         self.cancel_render_button.configure(state="normal" if active else "disabled")
         for button in (self.cancel_button, self.save_button, self.approve_button,
                        self.export_button, self.delete_button, self.assign_image_button,
-                       self.clear_image_button, self.refresh_scenes_button):
+                       self.clear_image_button, self.refresh_scenes_button,
+                       self.detect_models_button, self.generate_image_button):
             button.configure(state=state)
         self.project_list.configure(state=state)
         for widget, idle_state in self.form_widgets:
             widget.configure(state="disabled" if active else idle_state)
         self.script_text.configure(state="disabled" if active else "normal")
+        self.image_model_combo.configure(state="disabled" if active else "readonly")
         self.scene_outline.configure(state=state)
 
     def cancel_export(self):
