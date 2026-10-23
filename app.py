@@ -124,6 +124,12 @@ class App(tk.Tk):
         self.story_bible = ""
         self.continuity_state = ""
         self.voice_assignments = {}
+        self._vlc_instance = None
+        self._vlc_player = None
+        self._vlc_dll_dir_handle = None
+        self.preview_player_active = False
+        self._preview_poll_pending = False
+        self._updating_preview_seek = False
         self.ai_available = False
         self.generation_queue = queue.Queue()
         self.cancel_event = threading.Event()
@@ -522,6 +528,9 @@ class App(tk.Tk):
                                         height=196, width=520)
         self.preview_canvas.grid(row=0, column=0, sticky="nsew")
         self.preview_canvas.bind("<Configure>", lambda _event: self._render_preview_frame())
+        self.preview_video_host = tk.Frame(monitor, bg="#03070d", borderwidth=0, highlightthickness=0)
+        self.preview_video_host.grid(row=0, column=0, sticky="nsew")
+        self.preview_video_host.grid_remove()
         scene_inspector = tk.Frame(preview_dock, bg=self.colors["input"], padx=10, pady=8,
                                    highlightthickness=1, highlightbackground=self.colors["border"])
         scene_inspector.grid(row=1, column=1, sticky="nsew")
@@ -549,11 +558,35 @@ class App(tk.Tk):
         monitor_actions = tk.Frame(preview_dock, bg=self.colors["panel"])
         monitor_actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5, 0))
         ttk.Button(monitor_actions, text="◀ Escena", command=lambda: self._step_preview_scene(-1)).pack(side="left")
-        ttk.Button(monitor_actions, text="Escena ▶", command=lambda: self._step_preview_scene(1)).pack(side="left", padx=(5, 0))
-        ttk.Button(monitor_actions, text="Abrir MP4", style="Accent.TButton",
+        ttk.Button(monitor_actions, text="Escena ▶", command=lambda: self._step_preview_scene(1)).pack(side="left", padx=(5, 8))
+        self.preview_play_button = ttk.Button(monitor_actions, text="▶ Reproducir", style="Accent.TButton",
+                                              command=self.play_preview_video)
+        self.preview_play_button.pack(side="left")
+        self.preview_pause_button = ttk.Button(monitor_actions, text="Ⅱ Pausar",
+                                               command=self.pause_preview_video)
+        self.preview_pause_button.pack(side="left", padx=(4, 0))
+        self.preview_stop_button = ttk.Button(monitor_actions, text="■ Detener",
+                                              command=self.stop_preview_video)
+        self.preview_stop_button.pack(side="left", padx=(4, 0))
+        ttk.Button(monitor_actions, text="Abrir externo",
                    command=self.open_last_video).pack(side="right")
         ttk.Button(monitor_actions, text="Elegir MP4",
                    command=self.choose_preview_video).pack(side="right", padx=(0, 5))
+        self.preview_seek_var = tk.DoubleVar(value=0)
+        seek_row = tk.Frame(preview_dock, bg=self.colors["panel"])
+        seek_row.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(3, 0))
+        self.preview_seek_scale = ttk.Scale(seek_row, from_=0, to=1000, variable=self.preview_seek_var,
+                                           command=self._seek_preview_video)
+        self.preview_seek_scale.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.preview_seek_scale.bind("<ButtonPress-1>", lambda _event: setattr(self, "_seeking_preview", True))
+        self.preview_seek_scale.bind("<ButtonRelease-1>", lambda _event: setattr(self, "_seeking_preview", False))
+        self.preview_time_var = tk.StringVar(value="00:00 / 00:00")
+        tk.Label(seek_row, textvariable=self.preview_time_var, bg=self.colors["panel"],
+                 fg=self.colors["muted"], font=("Consolas", 8)).pack(side="right")
+        self.preview_playback_status_var = tk.StringVar(value="Storyboard listo · selecciona una escena o elige un MP4")
+        tk.Label(preview_dock, textvariable=self.preview_playback_status_var,
+                 bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 8), anchor="w").grid(row=4, column=0, columnspan=2, sticky="ew", pady=(3, 0))
 
         script_card = tk.Frame(lower, bg=self.colors["panel"], padx=10, pady=9,
                                highlightthickness=1, highlightbackground=self.colors["border"])
@@ -2018,6 +2051,8 @@ Write-Output 'NARRATION_OK'
         for canvas in canvases:
             if canvas is None:
                 continue
+            if canvas is getattr(self, "preview_canvas", None) and getattr(self, "preview_player_active", False):
+                continue
             try:
                 if not canvas.winfo_exists():
                     continue
@@ -2085,23 +2120,154 @@ Write-Output 'NARRATION_OK'
                 self.preview_scene_title_var.set("Genera un guion")
                 self.preview_scene_text_var.set("El resumen de la escena y su referencia visual aparecerán aquí.")
 
-    def choose_preview_video(self):
-        path = filedialog.askopenfilename(
-            title="Selecciona un vídeo para previsualizar",
-            filetypes=[("Vídeos", "*.mp4 *.mov *.mkv *.webm"), ("Todos los archivos", "*.*")]
-        )
-        if path:
-            self.last_export_path = str(Path(path).resolve())
-            self.preview_status_var.set(f"Vídeo seleccionado: {self.last_export_path}")
+    def _ensure_vlc_player(self):
+        """Initialize optional embedded VLC playback; external playback remains the fallback."""
+        if self._vlc_player is not None:
+            return True
+        try:
+            if os.name == "nt":
+                candidates = []
+                for root in (
+                    os.environ.get("ProgramFiles", r"C:\Program Files"),
+                    os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+                    str(Path.home() / "AppData/Local/Programs"),
+                ):
+                    candidates.extend((Path(root) / "VideoLAN" / "VLC", Path(root) / "VLC"))
+                for folder in candidates:
+                    if (folder / "libvlc.dll").is_file():
+                        os.environ["PATH"] = str(folder) + os.pathsep + os.environ.get("PATH", "")
+                        if hasattr(os, "add_dll_directory"):
+                            try:
+                                self._vlc_dll_dir_handle = os.add_dll_directory(str(folder))
+                            except OSError:
+                                pass
+                        break
+            import vlc
+            self._vlc_instance = vlc.Instance("--quiet", "--no-video-title-show")
+            if self._vlc_instance is None:
+                raise RuntimeError("VLC no pudo inicializar su motor.")
+            self._vlc_player = self._vlc_instance.media_player_new()
+            return self._vlc_player is not None
+        except Exception as exc:
+            self._vlc_instance = None
+            self._vlc_player = None
+            self._vlc_error = str(exc)
+            return False
 
-    def open_last_video(self):
+    def play_preview_video(self):
         path = self.last_export_path
         if not path or not Path(path).is_file():
             self.choose_preview_video()
             path = self.last_export_path
         if not path or not Path(path).is_file():
             return
+        if not self._ensure_vlc_player():
+            detail = getattr(self, "_vlc_error", "No se encontró el motor VLC.")
+            answer = messagebox.askyesno(
+                "Reproducción integrada no disponible",
+                "Para reproducir dentro de MARC, instala VLC Media Player de 64 bits y vuelve a intentarlo.\n\n"
+                f"Detalle: {detail}\n\n¿Abrir este MP4 en el reproductor externo de Windows?"
+            )
+            if answer:
+                self.open_video_externally(path)
+            return
         try:
+            self.preview_video_host.grid()
+            self.preview_video_host.update_idletasks()
+            if os.name == "nt":
+                self._vlc_player.set_hwnd(self.preview_video_host.winfo_id())
+            elif platform.system() == "Darwin":
+                self._vlc_player.set_nsobject(self.preview_video_host.winfo_id())
+            else:
+                self._vlc_player.set_xwindow(self.preview_video_host.winfo_id())
+            media = self._vlc_instance.media_new(str(Path(path).resolve()))
+            self._vlc_player.set_media(media)
+            self.preview_canvas.delete("all")
+            self.preview_player_active = True
+            self._vlc_player.play()
+            self.preview_playback_status_var.set(f"Reproduciendo dentro de MARC · {Path(path).name}")
+            self.preview_status_var.set(f"Monitor integrado: {Path(path).name}")
+            self._schedule_preview_poll()
+        except Exception as exc:
+            self.preview_player_active = False
+            self.preview_video_host.grid_remove()
+            self._render_preview_frame()
+            messagebox.showerror("No se pudo iniciar la reproducción integrada", str(exc))
+
+    def pause_preview_video(self):
+        if self._vlc_player is not None and self.preview_player_active:
+            try:
+                self._vlc_player.pause()
+                self.preview_playback_status_var.set("Vídeo en pausa")
+            except Exception as exc:
+                self.preview_playback_status_var.set(f"No se pudo pausar el vídeo: {exc}")
+
+    def stop_preview_video(self):
+        if self._vlc_player is not None:
+            try:
+                self._vlc_player.stop()
+            except Exception:
+                pass
+        self.preview_player_active = False
+        if hasattr(self, "preview_video_host"):
+            self.preview_video_host.grid_remove()
+        if hasattr(self, "preview_seek_var"):
+            self._updating_preview_seek = True
+            self.preview_seek_var.set(0)
+            self._updating_preview_seek = False
+            self.preview_time_var.set("00:00 / 00:00")
+        if hasattr(self, "preview_playback_status_var"):
+            self.preview_playback_status_var.set("Reproducción detenida · monitor de storyboard")
+        self._render_preview_frame()
+
+    def _seek_preview_video(self, value):
+        if self._updating_preview_seek or not self.preview_player_active or self._vlc_player is None:
+            return
+        if getattr(self, "_seeking_preview", False):
+            try:
+                length = self._vlc_player.get_length()
+                if length > 0:
+                    self._vlc_player.set_time(int(length * float(value) / 1000))
+            except Exception:
+                pass
+
+    def _schedule_preview_poll(self):
+        if self.preview_player_active and not self._preview_poll_pending:
+            self._preview_poll_pending = True
+            self.after(150, self._poll_preview_playback)
+
+    def _poll_preview_playback(self):
+        self._preview_poll_pending = False
+        if not self.preview_player_active or self._vlc_player is None:
+            return
+        try:
+            state = self._vlc_player.get_state()
+            length = max(0, int(self._vlc_player.get_length()))
+            current = max(0, int(self._vlc_player.get_time()))
+            if not getattr(self, "_seeking_preview", False) and length > 0:
+                self._updating_preview_seek = True
+                self.preview_seek_var.set(min(1000, current * 1000 / length))
+                self._updating_preview_seek = False
+            if length > 0:
+                self.preview_time_var.set(
+                    f"{current // 60000:02d}:{(current // 1000) % 60:02d} / "
+                    f"{length // 60000:02d}:{(length // 1000) % 60:02d}"
+                )
+            vlc_state = self._vlc_instance.State
+            if state == vlc_state.Ended:
+                self.stop_preview_video()
+                self.preview_playback_status_var.set("Vídeo finalizado")
+                return
+            if state == vlc_state.Error:
+                self.preview_playback_status_var.set("El motor VLC notificó un error de reproducción.")
+                return
+        except Exception as exc:
+            self.preview_playback_status_var.set(f"Error de reproducción: {exc}")
+        self._schedule_preview_poll()
+
+    def open_video_externally(self, path):
+        try:
+            path = str(Path(path).resolve())
             if os.name == "nt":
                 os.startfile(path)
             elif platform.system() == "Darwin":
@@ -2111,6 +2277,25 @@ Write-Output 'NARRATION_OK'
             self.status_var.set(f"Abriendo vídeo en el reproductor del sistema: {Path(path).name}")
         except (OSError, AttributeError) as exc:
             messagebox.showerror("No se pudo abrir el vídeo", str(exc))
+
+    def choose_preview_video(self):
+        path = filedialog.askopenfilename(
+            title="Selecciona un vídeo para previsualizar",
+            filetypes=[("Vídeos", "*.mp4 *.mov *.mkv *.webm"), ("Todos los archivos", "*.*")]
+        )
+        if path:
+            self.last_export_path = str(Path(path).resolve())
+            self.preview_status_var.set(f"Vídeo seleccionado: {self.last_export_path}")
+            self.preview_playback_status_var.set(f"Listo para reproducir · {Path(path).name}")
+
+    def open_last_video(self):
+        path = self.last_export_path
+        if not path or not Path(path).is_file():
+            self.choose_preview_video()
+            path = self.last_export_path
+        if not path or not Path(path).is_file():
+            return
+        self.open_video_externally(path)
 
     def detect_image_models(self, quiet=False):
         if self.image_generation_running:
