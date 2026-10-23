@@ -2521,7 +2521,8 @@ Write-Output 'NARRATION_OK'
         audio_path = self.audio_track_path if self.audio_track_path and Path(self.audio_track_path).is_file() else ""
         music_path = self.music_track_path if self.music_track_path and Path(self.music_track_path).is_file() else ""
         loop_music = bool(self.loop_music_var.get()) if self.loop_music_var is not None else True
-        has_any_audio = bool(audio_path or music_path)
+        # En Windows, la narración se crea automáticamente si no se importó una pista de voz.
+        has_any_audio = bool(audio_path or music_path or os.name == "nt")
         render_steps = len(scenes) + 1 + (1 if has_any_audio else 0)
         self.render_cancel_event.clear()
         self.render_running = True
