@@ -101,6 +101,8 @@ class App(tk.Tk):
         self.scene_data = []
         self.scene_assets = {}
         self.last_export_path = ""
+        self.audio_track_path = ""
+        self.loop_audio_var = None
         self.comfy_available = False
         self.image_generation_running = False
         self._style()
@@ -470,6 +472,10 @@ class App(tk.Tk):
         self.refresh_scenes_button = ttk.Button(scene_actions, text="Actualizar escenas",
                                                 command=lambda: self._refresh_scene_outline(self.script_text.get("1.0", "end-1c")))
         self.refresh_scenes_button.pack(side="left", padx=(6, 0))
+        self.select_audio_button = ttk.Button(scene_actions, text="Añadir audio", command=self.select_audio_track)
+        self.select_audio_button.pack(side="left", padx=(14, 0))
+        self.clear_audio_button = ttk.Button(scene_actions, text="Quitar audio", command=self.clear_audio_track)
+        self.clear_audio_button.pack(side="left", padx=(6, 0))
 
         image_ai_bar = tk.Frame(scenes_tab, bg=self.colors["panel"])
         image_ai_bar.grid(row=4, column=0, sticky="ew", pady=(0, 8))
@@ -545,6 +551,13 @@ class App(tk.Tk):
                    command=self.open_last_video).pack(side="left")
         ttk.Button(preview_actions, text="Elegir MP4 para previsualizar",
                    command=self.choose_preview_video).pack(side="left", padx=(8, 0))
+        self.loop_audio_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            preview_tab, text="Repetir la pista si es más corta que el vídeo (útil para música)",
+            variable=self.loop_audio_var, bg=self.colors["panel"], fg=self.colors["text"],
+            activebackground=self.colors["panel"], activeforeground=self.colors["text"],
+            selectcolor=self.colors["input"], font=("Segoe UI", 9)
+        ).grid(row=5, column=0, sticky="w", pady=(12, 0))
 
         self.status_var = tk.StringVar(value="Listo. Define una historia o abre un proyecto de la biblioteca.")
         tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
@@ -645,7 +658,8 @@ class App(tk.Tk):
             self.scene_outline.selection_set(f"scene_{old_selection}")
             self.scene_outline.see(f"scene_{old_selection}")
         if hasattr(self, "scene_summary_var"):
-            self.scene_summary_var.set(f"{len(self.scene_data)} escenas · {total_words} palabras · duración objetivo {self.duration_var.get()} min")
+            audio_label = Path(self.audio_track_path).name if self.audio_track_path and Path(self.audio_track_path).is_file() else "sin audio"
+            self.scene_summary_var.set(f"{len(self.scene_data)} escenas · {total_words} palabras · objetivo {self.duration_var.get()} min · audio: {audio_label}")
 
     def assign_scene_image(self):
         if self.generation_running or self.render_running:
