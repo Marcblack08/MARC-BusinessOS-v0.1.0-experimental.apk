@@ -80,8 +80,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_NAME)
-        self.geometry("1180x720")
-        self.minsize(960, 630)
+        self.geometry("1440x900")
+        self.minsize(1080, 680)
         self.conn = db_connect()
         self.current_id = None
         self.ai_available = False
@@ -199,60 +199,83 @@ class App(tk.Tk):
         style.map("TCombobox", fieldbackground=[("readonly", self.colors["input"])], foreground=[("readonly", self.colors["text"])])
 
     def _build(self):
-        outer = ttk.Frame(self, padding=18)
-        outer.pack(fill="both", expand=True)
-        header = tk.Frame(outer, bg=self.colors["bg"])
-        header.pack(fill="x", pady=(0, 16))
-        title_col = tk.Frame(header, bg=self.colors["bg"])
-        title_col.pack(side="left", fill="x", expand=True)
-        tk.Label(title_col, text="MARC  /  STUDIO", bg=self.colors["bg"], fg="#69b0ff",
-                 font=("Segoe UI", 23, "bold")).pack(anchor="w")
-        tk.Label(title_col, text="Tu estudio creativo con inteligencia artificial local",
-                 bg=self.colors["bg"], fg=self.colors["muted"], font=("Segoe UI", 10)).pack(anchor="w", pady=(2, 0))
-        header_actions = tk.Frame(header, bg=self.colors["bg"])
-        header_actions.pack(side="right", anchor="e")
-        self.ai_badge = tk.Label(header_actions, text="● IA LOCAL · COMPROBANDO",
-                                 bg=self.colors["bg"], fg=self.colors["warning"], font=("Segoe UI", 9, "bold"))
-        self.ai_badge.pack(anchor="e", pady=(0, 5))
-        self.ffmpeg_badge = tk.Label(header_actions, text="● FFmpeg · COMPROBANDO",
-                                     bg=self.colors["bg"], fg=self.colors["muted"], font=("Segoe UI", 9, "bold"))
-        self.ffmpeg_badge.pack(anchor="e", pady=(0, 7))
-        ttk.Button(header_actions, text="Comprobar herramientas", command=self.check_tools).pack(anchor="e", pady=(0, 5))
-        ttk.Button(header_actions, text="Diagnóstico de PC", command=self.detect_pc_async).pack(anchor="e")
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
-        body = ttk.Frame(outer)
-        body.pack(fill="both", expand=True)
-        sidebar = tk.Frame(body, bg=self.colors["panel"], width=238, padx=13, pady=14,
+        shell = tk.Frame(self, bg=self.colors["bg"])
+        shell.grid(row=0, column=0, sticky="nsew")
+        shell.grid_rowconfigure(1, weight=1)
+        shell.grid_columnconfigure(0, weight=1)
+
+        top = tk.Frame(shell, bg="#09101d", padx=18, pady=12,
+                       highlightthickness=1, highlightbackground=self.colors["border"])
+        top.grid(row=0, column=0, sticky="ew")
+        top.grid_columnconfigure(0, weight=1)
+        brand = tk.Frame(top, bg="#09101d")
+        brand.grid(row=0, column=0, sticky="w")
+        tk.Label(brand, text="MARC", bg="#09101d", fg="#edf4ff",
+                 font=("Segoe UI", 18, "bold")).pack(side="left")
+        tk.Label(brand, text=" / VIDEO STUDIO", bg="#09101d", fg="#2da8ff",
+                 font=("Segoe UI", 18, "bold")).pack(side="left")
+        tk.Label(brand, text="   AI CREATIVE WORKSPACE", bg="#09101d", fg=self.colors["muted"],
+                 font=("Segoe UI", 8, "bold")).pack(side="left", padx=(12, 0), pady=(7, 0))
+        head_right = tk.Frame(top, bg="#09101d")
+        head_right.grid(row=0, column=1, sticky="e")
+        self.ai_badge = tk.Label(head_right, text="● IA LOCAL · COMPROBANDO",
+                                 bg="#09101d", fg=self.colors["warning"], font=("Segoe UI", 9, "bold"))
+        self.ai_badge.pack(side="left", padx=(0, 14))
+        self.ffmpeg_badge = tk.Label(head_right, text="● FFMPEG · COMPROBANDO",
+                                     bg="#09101d", fg=self.colors["muted"], font=("Segoe UI", 9, "bold"))
+        self.ffmpeg_badge.pack(side="left", padx=(0, 12))
+        ttk.Button(head_right, text="Diagnóstico PC", command=self.detect_pc_async).pack(side="left", padx=(0, 6))
+        ttk.Button(head_right, text="Herramientas", command=self.check_tools).pack(side="left")
+
+        workspace = tk.PanedWindow(shell, orient="horizontal", sashwidth=7, sashrelief="flat",
+                                   bg=self.colors["bg"], bd=0, opaqueresize=True, showhandle=False)
+        workspace.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+        self.workspace_panes = workspace
+
+        library = tk.Frame(workspace, bg=self.colors["panel"], width=220,
                            highlightthickness=1, highlightbackground=self.colors["border"])
-        sidebar.pack(side="left", fill="y", padx=(0, 15))
-        sidebar.pack_propagate(False)
-        tk.Label(sidebar, text="BIBLIOTECA", bg=self.colors["panel"], fg=self.colors["text"],
-                 font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        tk.Label(sidebar, text="Tus proyectos y guiones", bg=self.colors["panel"], fg=self.colors["muted"],
-                 font=("Segoe UI", 9)).pack(anchor="w", pady=(3, 10))
-        self.project_list = tk.Listbox(
-            sidebar, width=25, height=20, bg=self.colors["input"], fg=self.colors["text"],
-            selectbackground=self.colors["accent"], selectforeground="#ffffff",
-            borderwidth=0, highlightthickness=1, highlightbackground=self.colors["border"],
-            font=("Segoe UI", 9), activestyle="none"
-        )
-        self.project_list.pack(fill="both", expand=True, pady=(0, 10))
+        library.grid_rowconfigure(2, weight=1)
+        library.grid_columnconfigure(0, weight=1)
+        workspace.add(library, minsize=175, width=220)
+        tk.Label(library, text="BIBLIOTECA", bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 10, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=13, pady=(14, 2))
+        tk.Label(library, text="Proyectos y guiones", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 9), anchor="w").grid(row=1, column=0, sticky="ew", padx=13, pady=(0, 9))
+        self.project_list = tk.Listbox(library, bg=self.colors["input"], fg=self.colors["text"],
+                                       selectbackground=self.colors["accent"], selectforeground="#fff",
+                                       borderwidth=0, highlightthickness=0, font=("Segoe UI", 9),
+                                       activestyle="none")
+        self.project_list.grid(row=2, column=0, sticky="nsew", padx=8)
         self.project_list.bind("<<ListboxSelect>>", self.load_selected)
-        ttk.Button(sidebar, text="+ Nuevo proyecto", style="Accent.TButton", command=self.new_project).pack(fill="x")
-        self.delete_button = ttk.Button(sidebar, text="Eliminar proyecto", command=self.delete_project)
-        self.delete_button.pack(fill="x", pady=(7, 0))
-        tk.Label(sidebar, text="LOCAL · PRIVADO · SIN API", bg=self.colors["panel"],
-                 fg=self.colors["muted"], font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(16, 0))
+        lib_buttons = tk.Frame(library, bg=self.colors["panel"], padx=8, pady=8)
+        lib_buttons.grid(row=3, column=0, sticky="ew")
+        ttk.Button(lib_buttons, text="+ Nuevo proyecto", style="Accent.TButton",
+                   command=self.new_project).pack(fill="x", pady=(0, 6))
+        self.delete_button = ttk.Button(lib_buttons, text="Eliminar proyecto", command=self.delete_project)
+        self.delete_button.pack(fill="x")
 
-        right = ttk.Frame(body)
-        right.pack(side="left", fill="both", expand=True)
-        form_card = tk.Frame(right, bg=self.colors["panel"], padx=15, pady=13,
-                             highlightthickness=1, highlightbackground=self.colors["border"])
-        form_card.pack(fill="x")
-        tk.Label(form_card, text="CONFIGURA TU HISTORIA", bg=self.colors["panel"], fg=self.colors["text"],
+        editor = tk.Frame(workspace, bg=self.colors["bg"])
+        workspace.add(editor, minsize=620, stretch="always")
+        editor.grid_rowconfigure(0, weight=1)
+        editor.grid_columnconfigure(0, weight=1)
+
+        vertical = tk.PanedWindow(editor, orient="vertical", sashwidth=7, sashrelief="flat",
+                                  bg=self.colors["bg"], bd=0, opaqueresize=True, showhandle=False)
+        vertical.grid(row=0, column=0, sticky="nsew")
+        self.vertical_panes = vertical
+
+        controls_area = tk.Frame(vertical, bg=self.colors["bg"])
+        vertical.add(controls_area, minsize=245, height=340, stretch="never")
+        card = tk.Frame(controls_area, bg=self.colors["panel"], padx=13, pady=10,
+                        highlightthickness=1, highlightbackground=self.colors["border"])
+        card.pack(fill="both", expand=True)
+        tk.Label(card, text="CONFIGURACIÓN DE HISTORIA", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        tk.Label(form_card, text="Define la idea, el género y los personajes. La IA desarrollará el guion por capítulos.",
-                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).pack(anchor="w", pady=(3, 10))
+        tk.Label(card, text="Define narrativa, formato y dirección visual. Los paneles se pueden redimensionar.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).pack(anchor="w", pady=(3, 7))
 
         self.title_var = tk.StringVar()
         self.topic_var = tk.StringVar()
@@ -267,93 +290,107 @@ class App(tk.Tk):
         self.drawing_style_var = tk.StringVar(value="Anime cinematográfico")
         self.animation_style_var = tk.StringVar(value="2D fluida")
 
-        grid = tk.Frame(form_card, bg=self.colors["panel"])
-        grid.pack(fill="x")
+        form = tk.Frame(card, bg=self.colors["panel"])
+        form.pack(fill="x", expand=True)
         self.form_widgets = []
-        for c in range(3):
-            grid.columnconfigure(c, weight=1, uniform="story_cols")
-        self._field(grid, "Nombre del proyecto", self.title_var, 0, 0)
-        self._field(grid, "Género / tipo de contenido", self.style_var, 0, 1,
-                    values=["Novela dramática", "Reencarnación y venganza", "Superación personal",
-                            "Romance", "Fantasía", "Misterio y suspenso", "Terror", "Acción y aventura",
-                            "Ciencia ficción", "Drama familiar", "Educativo y directo", "Documental", "Promocional"])
-        self._field(grid, "Plataforma", self.platform_var, 0, 2, values=list(PLATFORMS))
-        self._field(grid, "Idea o premisa de la historia", self.topic_var, 1, 0, span=2)
-        self._field(grid, "Duración objetivo (minutos)", self.duration_var, 1, 2,
+        for c in range(4):
+            form.columnconfigure(c, weight=1, uniform="fields")
+        self._field(form, "Nombre del proyecto", self.title_var, 0, 0)
+        self._field(form, "Género", self.style_var, 0, 1,
+                    values=["Novela dramática", "Reencarnación y venganza", "Superación personal", "Romance",
+                            "Fantasía", "Misterio y suspenso", "Terror", "Acción y aventura", "Ciencia ficción",
+                            "Drama familiar", "Educativo y directo", "Documental", "Promocional"])
+        self._field(form, "Plataforma", self.platform_var, 0, 2, values=list(PLATFORMS))
+        self._field(form, "Duración (min)", self.duration_var, 0, 3,
                     values=[str(i) for i in (1, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120)])
-        self._field(grid, "Protagonista (opcional)", self.protagonist_var, 2, 0)
-        self._field(grid, "Conflicto central (opcional)", self.conflict_var, 2, 1)
-        self._field(grid, "Tono narrativo", self.tone_var, 2, 2,
+        self._field(form, "Premisa / idea", self.topic_var, 1, 0, span=2)
+        self._field(form, "Protagonista", self.protagonist_var, 1, 2)
+        self._field(form, "Conflicto central", self.conflict_var, 1, 3)
+        self._field(form, "Tono", self.tone_var, 2, 0,
                     values=["Dramático e intenso", "Oscuro y misterioso", "Emotivo", "Inspirador",
                             "Épico", "Ligero y humorístico", "Realista"])
-        self._field(grid, "Tipo de narrador", self.narrator_var, 3, 0,
+        self._field(form, "Narrador", self.narrator_var, 2, 1,
                     values=["Tercera persona", "Primera persona protagonista", "Primera persona retrospectiva",
                             "Narrador omnisciente"])
-        self._field(grid, "Tipo de desenlace", self.ending_var, 3, 1,
+        self._field(form, "Desenlace", self.ending_var, 2, 2,
                     values=["Justicia y superación", "Final feliz", "Final trágico", "Giro inesperado",
                             "Abierto para continuación", "Agridulce"])
-        self._field(grid, "Estilo de dibujo", self.drawing_style_var, 4, 0,
+        self._field(form, "Estilo de dibujo", self.drawing_style_var, 2, 3,
                     values=["Anime cinematográfico", "Manga en blanco y negro", "Cartoon occidental",
-                            "Cómic realista", "Acuarela ilustrada", "Pixel art", "3D estilizado", "Realismo cinematográfico"])
-        self._field(grid, "Estilo de animación", self.animation_style_var, 4, 1,
-                    values=["2D fluida", "Anime con movimientos dinámicos", "Motion comic", "Cut-out / recortes",
-                            "3D cinematográfica", "Stop motion", "Pixel animation", "Presentación animada"])
-        tk.Label(grid, text="La selección guía la dirección visual.\nLa generación automática de dibujos se incorporará después.",
-                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8), justify="left").grid(
-                     row=4, column=2, sticky="w", padx=8, pady=(10, 4))
+                            "Cómic realista", "Acuarela ilustrada", "Pixel art", "3D estilizado",
+                            "Realismo cinematográfico"])
+        self._field(form, "Estilo de animación", self.animation_style_var, 3, 0,
+                    span=2, values=["2D fluida", "Anime con movimientos dinámicos", "Motion comic",
+                                    "Cut-out / recortes", "3D cinematográfica", "Stop motion",
+                                    "Pixel animation", "Presentación animada"])
+        tk.Label(form, text="La selección visual orienta el guion; no implica todavía generación automática de dibujos.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8),
+                 justify="left", wraplength=320).grid(row=3, column=2, columnspan=2, sticky="w", padx=8, pady=5)
 
-        actions = tk.Frame(right, bg=self.colors["bg"])
-        actions.pack(fill="x", pady=10)
-        self.generate_button = ttk.Button(actions, text="✦ Generar guion con IA", style="Accent.TButton",
+        lower = tk.Frame(vertical, bg=self.colors["bg"])
+        vertical.add(lower, minsize=250, stretch="always")
+        lower.grid_rowconfigure(2, weight=1)
+        lower.grid_columnconfigure(0, weight=1)
+
+        toolrow = tk.Frame(lower, bg=self.colors["bg"])
+        toolrow.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        self.generate_button = ttk.Button(toolrow, text="✦ Generar guion", style="Accent.TButton",
                                           command=self.generate_script)
         self.generate_button.pack(side="left")
-        self.cancel_button = ttk.Button(actions, text="Cancelar generación", command=self.cancel_generation, state="disabled")
-        self.cancel_button.pack(side="left", padx=(8, 0))
-        self.save_button = ttk.Button(actions, text="Guardar", command=self.save_project)
-        self.save_button.pack(side="left", padx=(8, 0))
-        self.approve_button = ttk.Button(actions, text="Aprobar guion", command=self.approve_script)
-        self.approve_button.pack(side="left", padx=(8, 0))
-        self.export_button = ttk.Button(actions, text="Exportar MP4", command=self.export_video)
-        self.export_button.pack(side="left", padx=(8, 0))
-        progress_card = tk.Frame(right, bg=self.colors["panel"], padx=11, pady=9,
-                                  highlightthickness=1, highlightbackground=self.colors["border"])
-        progress_card.pack(fill="x", pady=(0, 8))
-        self.pc_summary_var = tk.StringVar(value="Analizando el equipo para estimar tiempos…")
-        tk.Label(progress_card, textvariable=self.pc_summary_var, bg=self.colors["panel"],
-                 fg=self.colors["muted"], font=("Segoe UI", 8), justify="left", wraplength=850).pack(anchor="w", pady=(0, 5))
-        self.estimate_var = tk.StringVar(value="Estimación disponible tras detectar el equipo.")
-        tk.Label(progress_card, textvariable=self.estimate_var, bg=self.colors["panel"],
-                 fg=self.colors["success"], font=("Segoe UI", 9, "bold"), justify="left", wraplength=850).pack(anchor="w", pady=(0, 5))
-        self.progress_label_var = tk.StringVar(value="Listo para planificar el guion.")
-        tk.Label(progress_card, textvariable=self.progress_label_var, bg=self.colors["panel"],
+        self.cancel_button = ttk.Button(toolrow, text="Cancelar", command=self.cancel_generation, state="disabled")
+        self.cancel_button.pack(side="left", padx=(6, 0))
+        self.save_button = ttk.Button(toolrow, text="Guardar", command=self.save_project)
+        self.save_button.pack(side="left", padx=(6, 0))
+        self.approve_button = ttk.Button(toolrow, text="Aprobar", command=self.approve_script)
+        self.approve_button.pack(side="left", padx=(6, 0))
+        self.export_button = ttk.Button(toolrow, text="Exportar MP4", command=self.export_video)
+        self.export_button.pack(side="left", padx=(6, 0))
+
+        statuscard = tk.Frame(lower, bg=self.colors["panel"], padx=11, pady=8,
+                              highlightthickness=1, highlightbackground=self.colors["border"])
+        statuscard.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        self.pc_summary_var = tk.StringVar(value="Detectando equipo…")
+        tk.Label(statuscard, textvariable=self.pc_summary_var, bg=self.colors["panel"],
+                 fg=self.colors["muted"], font=("Segoe UI", 8), justify="left", wraplength=1100).pack(anchor="w")
+        self.estimate_var = tk.StringVar(value="Calculando estimación de producción…")
+        tk.Label(statuscard, textvariable=self.estimate_var, bg=self.colors["panel"],
+                 fg=self.colors["success"], font=("Segoe UI", 9, "bold"), justify="left", wraplength=1100).pack(anchor="w", pady=(4, 2))
+        self.progress_label_var = tk.StringVar(value="Listo para crear el guion")
+        tk.Label(statuscard, textvariable=self.progress_label_var, bg=self.colors["panel"],
                  fg=self.colors["text"], font=("Segoe UI", 9, "bold")).pack(anchor="w")
-        self.progressbar = ttk.Progressbar(progress_card, mode="determinate", maximum=100, value=0)
-        self.progressbar.pack(fill="x", pady=(6, 4))
-        self.progress_detail_var = tk.StringVar(value="0% · Esperando inicio")
-        tk.Label(progress_card, textvariable=self.progress_detail_var, bg=self.colors["panel"],
+        self.progressbar = ttk.Progressbar(statuscard, mode="determinate", maximum=100, value=0)
+        self.progressbar.pack(fill="x", pady=(4, 3))
+        self.progress_detail_var = tk.StringVar(value="0% · En espera")
+        tk.Label(statuscard, textvariable=self.progress_detail_var, bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 8)).pack(anchor="w")
 
-        editor_card = tk.Frame(right, bg=self.colors["panel"], padx=13, pady=11,
+        script_card = tk.Frame(lower, bg=self.colors["panel"], padx=11, pady=9,
                                highlightthickness=1, highlightbackground=self.colors["border"])
-        editor_card.pack(fill="both", expand=True)
-        editor_header = tk.Frame(editor_card, bg=self.colors["panel"])
-        editor_header.pack(fill="x", pady=(0, 7))
-        tk.Label(editor_header, text="EDITOR DE GUION", bg=self.colors["panel"], fg=self.colors["text"],
+        script_card.grid(row=2, column=0, sticky="nsew")
+        script_card.grid_rowconfigure(1, weight=1)
+        script_card.grid_columnconfigure(0, weight=1)
+        script_head = tk.Frame(script_card, bg=self.colors["panel"])
+        script_head.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        tk.Label(script_head, text="EDITOR DE GUION", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 11, "bold")).pack(side="left")
-        tk.Label(editor_header, text="Edita el texto antes de aprobar", bg=self.colors["panel"],
+        tk.Label(script_head, text="Revisa el texto antes de aprobar y exportar", bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 9)).pack(side="right")
-        self.script_text = tk.Text(
-            editor_card, wrap="word", undo=True, bg=self.colors["input"], fg=self.colors["text"],
-            insertbackground="#ffffff", selectbackground=self.colors["accent"],
-            font=("Segoe UI", 10), relief="flat", padx=13, pady=12,
-            highlightthickness=1, highlightbackground=self.colors["border"]
-        )
-        self.script_text.pack(fill="both", expand=True)
-        self.status_var = tk.StringVar(value="Listo. Completa la premisa y pulsa «Generar guion con IA».")
-        tk.Label(right, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
-                 font=("Segoe UI", 9), anchor="w").pack(fill="x", pady=(8, 2))
-        tk.Label(right, text="La exportación requiere aprobación manual. Modificar un guion aprobado anula su aprobación.",
-                 bg=self.colors["bg"], fg=self.colors["muted"], font=("Segoe UI", 8), anchor="w").pack(fill="x")
+        textframe = tk.Frame(script_card, bg=self.colors["input"])
+        textframe.grid(row=1, column=0, sticky="nsew")
+        textframe.grid_rowconfigure(0, weight=1)
+        textframe.grid_columnconfigure(0, weight=1)
+        self.script_text = tk.Text(textframe, wrap="word", undo=True, bg=self.colors["input"],
+                                   fg=self.colors["text"], insertbackground="#ffffff",
+                                   selectbackground=self.colors["accent"], font=("Segoe UI", 10),
+                                   relief="flat", padx=12, pady=10, highlightthickness=0)
+        self.script_text.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(textframe, orient="vertical", command=self.script_text.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.script_text.configure(yscrollcommand=scrollbar.set)
+
+        self.status_var = tk.StringVar(value="Listo. Define una historia o abre un proyecto de la biblioteca.")
+        tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
+                 font=("Segoe UI", 9), anchor="w").grid(row=3, column=0, sticky="ew", pady=(6, 0))
 
     def _field(self, parent, label, variable, row, col, values=None, span=1):
         cell = tk.Frame(parent, bg=self.colors["panel"])
