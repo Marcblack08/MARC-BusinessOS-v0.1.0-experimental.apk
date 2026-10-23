@@ -389,33 +389,107 @@ class App(tk.Tk):
         tk.Label(statuscard, textvariable=self.progress_detail_var, bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 8)).pack(anchor="w")
 
-        script_card = tk.Frame(lower, bg=self.colors["panel"], padx=11, pady=9,
+        script_card = tk.Frame(lower, bg=self.colors["panel"], padx=10, pady=9,
                                highlightthickness=1, highlightbackground=self.colors["border"])
         script_card.grid(row=2, column=0, sticky="nsew")
-        script_card.grid_rowconfigure(1, weight=1)
+        script_card.grid_rowconfigure(0, weight=1)
         script_card.grid_columnconfigure(0, weight=1)
-        script_head = tk.Frame(script_card, bg=self.colors["panel"])
-        script_head.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        studio_tabs = ttk.Notebook(script_card)
+        studio_tabs.grid(row=0, column=0, sticky="nsew")
+        self.studio_tabs = studio_tabs
+
+        script_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=8, pady=8)
+        studio_tabs.add(script_tab, text="  ✎  GUION  ")
+        script_tab.grid_rowconfigure(1, weight=1)
+        script_tab.grid_columnconfigure(0, weight=1)
+        script_head = tk.Frame(script_tab, bg=self.colors["panel"])
+        script_head.grid(row=0, column=0, sticky="ew", pady=(0, 7))
         tk.Label(script_head, text="EDITOR DE GUION", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 11, "bold")).pack(side="left")
         tk.Label(script_head, text="Revisa el texto antes de aprobar y exportar", bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 9)).pack(side="right")
-        textframe = tk.Frame(script_card, bg=self.colors["input"])
+        textframe = tk.Frame(script_tab, bg=self.colors["input"])
         textframe.grid(row=1, column=0, sticky="nsew")
         textframe.grid_rowconfigure(0, weight=1)
         textframe.grid_columnconfigure(0, weight=1)
         self.script_text = tk.Text(textframe, wrap="word", undo=True, bg=self.colors["input"],
                                    fg=self.colors["text"], insertbackground="#ffffff",
                                    selectbackground=self.colors["accent"], font=("Segoe UI", 10),
-                                   relief="flat", padx=12, pady=10, highlightthickness=0)
+                                   relief="flat", padx=14, pady=12, highlightthickness=0,
+                                   spacing1=2, spacing3=5)
         self.script_text.grid(row=0, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(textframe, orient="vertical", command=self.script_text.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.script_text.configure(yscrollcommand=scrollbar.set)
 
+        scenes_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=14, pady=12)
+        studio_tabs.add(scenes_tab, text="  ▤  ESCENAS  ")
+        scenes_tab.grid_columnconfigure(0, weight=1)
+        scenes_tab.grid_rowconfigure(2, weight=1)
+        tk.Label(scenes_tab, text="PLAN DE MONTAJE", bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w")
+        tk.Label(scenes_tab, text="Organiza la estructura narrativa antes de producir recursos visuales. Esta lista se construye a partir del guion; no simula clips ya generados.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
+                 wraplength=900, justify="left").grid(row=1, column=0, sticky="w", pady=(4, 12))
+        scene_body = tk.Frame(scenes_tab, bg=self.colors["input"], padx=12, pady=10)
+        scene_body.grid(row=2, column=0, sticky="nsew")
+        scene_body.grid_columnconfigure(0, weight=1)
+        scene_body.grid_rowconfigure(1, weight=1)
+        tk.Label(scene_body, text="SECUENCIA NARRATIVA", bg=self.colors["input"], fg="#69b8ff",
+                 font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 8))
+        self.scene_outline = tk.Listbox(scene_body, bg=self.colors["input"], fg=self.colors["text"],
+                                        selectbackground=self.colors["accent"], selectforeground="#ffffff",
+                                        borderwidth=0, highlightthickness=0, activestyle="none",
+                                        font=("Segoe UI", 10), height=8)
+        self.scene_outline.grid(row=1, column=0, sticky="nsew")
+        scene_scroll = ttk.Scrollbar(scene_body, orient="vertical", command=self.scene_outline.yview)
+        scene_scroll.grid(row=1, column=1, sticky="ns")
+        self.scene_outline.configure(yscrollcommand=scene_scroll.set)
+        tk.Label(scenes_tab, text="Siguiente fase: convertir cada unidad narrativa en escenas con duración, recursos y estado de producción.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).grid(row=3, column=0, sticky="w", pady=(10, 0))
+
+        preview_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=14, pady=12)
+        studio_tabs.add(preview_tab, text="  ▣  VISTA PREVIA  ")
+        preview_tab.grid_columnconfigure(0, weight=1)
+        preview_tab.grid_rowconfigure(1, weight=1)
+        tk.Label(preview_tab, text="MONITOR DE VÍDEO", bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 10))
+        monitor = tk.Frame(preview_tab, bg="#03070d", highlightthickness=1,
+                           highlightbackground=self.colors["border"])
+        monitor.grid(row=1, column=0, sticky="nsew")
+        monitor.grid_columnconfigure(0, weight=1)
+        monitor.grid_rowconfigure(0, weight=1)
+        self.preview_canvas = tk.Canvas(monitor, bg="#03070d", highlightthickness=0, height=220)
+        self.preview_canvas.grid(row=0, column=0, sticky="nsew")
+        self.preview_canvas.create_rectangle(24, 24, 976, 200, outline="#203651", width=1)
+        self.preview_canvas.create_text(500, 95, text="M A R C   /   S T U D I O",
+                                        fill="#168bff", font=("Segoe UI", 20, "bold"))
+        self.preview_canvas.create_text(500, 132, text="La vista previa aparecerá cuando exista un vídeo renderizado",
+                                        fill="#9aadc6", font=("Segoe UI", 10))
+        tk.Label(preview_tab, text="Monitor de interfaz. La vista previa de vídeo real requiere un archivo renderizado.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
+                 wraplength=1000, justify="left").grid(row=2, column=0, sticky="w", pady=(8, 0))
+
         self.status_var = tk.StringVar(value="Listo. Define una historia o abre un proyecto de la biblioteca.")
         tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
                  font=("Segoe UI", 9), anchor="w").grid(row=3, column=0, sticky="ew", pady=(6, 0))
+
+    def _refresh_scene_outline(self, script):
+        if not hasattr(self, "scene_outline"):
+            return
+        self.scene_outline.delete(0, "end")
+        import re
+        headings = re.findall(r"(?im)^\\s*(?:\\[CAP[IÍ]TULO[^\\]]*\\]|(?:ESCENA|SECUENCIA|CAP[IÍ]TULO)\\s+[^\\n]{1,100})\\s*$", script)
+        if headings:
+            for number, heading in enumerate(headings, 1):
+                clean = " ".join(heading.strip(" []").split())
+                self.scene_outline.insert("end", f"{number:02d}   {clean}")
+        elif script.strip():
+            chunks = [part.strip() for part in re.split(r"\\n\\s*\\n", script) if len(part.strip()) > 80]
+            for number, chunk in enumerate(chunks[:80], 1):
+                self.scene_outline.insert("end", f"{number:02d}   {' '.join(chunk.split())[:100]}")
+        else:
+            self.scene_outline.insert("end", "Genera o abre un guion para organizar las escenas.")
 
     def _field(self, parent, label, variable, row, col, values=None, span=1):
         cell = tk.Frame(parent, bg=self.colors["panel"])
@@ -452,6 +526,7 @@ class App(tk.Tk):
         self.progress_label_var.set("Listo para planificar el guion.")
         self.progress_detail_var.set("0% · Esperando inicio")
         self.script_text.delete("1.0", "end")
+        self._refresh_scene_outline("")
         self.status_var.set("Proyecto nuevo. Define la premisa y los parámetros narrativos.")
 
     def get_form(self):
@@ -739,6 +814,7 @@ class App(tk.Tk):
                     self.script_text.insert("end", event[1])
                     self.script_text.see("end")
                     self.script_text.configure(state="disabled")
+                    self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
                     self.update_idletasks()
                     self.status_var.set(f"Capítulo {event[2]} de {event[3]} terminado. Guardando borrador…")
                     self.save_project(reset_approval=True, quiet=True)
@@ -840,6 +916,7 @@ class App(tk.Tk):
         self.animation_style_var.set(project["animation_style"] or "2D fluida")
         self.script_text.delete("1.0", "end")
         self.script_text.insert("1.0", project["script"])
+        self._refresh_scene_outline(project["script"] or "")
         self.status_var.set("Este proyecto está aprobado." if project["approved"] else "Proyecto cargado. Guion pendiente de aprobación.")
 
     def delete_project(self):
