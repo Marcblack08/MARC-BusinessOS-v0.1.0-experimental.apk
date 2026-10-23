@@ -47,7 +47,9 @@ def db_connect():
             conflict TEXT NOT NULL DEFAULT '',
             tone TEXT NOT NULL DEFAULT 'Dramático e intenso',
             narrator TEXT NOT NULL DEFAULT 'Tercera persona',
-            ending TEXT NOT NULL DEFAULT 'Justicia y superación'
+            ending TEXT NOT NULL DEFAULT 'Justicia y superación',
+            drawing_style TEXT NOT NULL DEFAULT 'Anime cinematográfico',
+            animation_style TEXT NOT NULL DEFAULT '2D fluida'
         )
     """)
     # Migra bases de datos antiguas sin eliminar los proyectos ya guardados.
@@ -58,6 +60,8 @@ def db_connect():
         "tone": "TEXT NOT NULL DEFAULT 'Dramático e intenso'",
         "narrator": "TEXT NOT NULL DEFAULT 'Tercera persona'",
         "ending": "TEXT NOT NULL DEFAULT 'Justicia y superación'",
+        "drawing_style": "TEXT NOT NULL DEFAULT 'Anime cinematográfico'",
+        "animation_style": "TEXT NOT NULL DEFAULT '2D fluida'",
     }
     for column, declaration in migrations.items():
         if column not in existing:
@@ -175,6 +179,8 @@ class App(tk.Tk):
         self.tone_var = tk.StringVar(value="Dramático e intenso")
         self.narrator_var = tk.StringVar(value="Tercera persona")
         self.ending_var = tk.StringVar(value="Justicia y superación")
+        self.drawing_style_var = tk.StringVar(value="Anime cinematográfico")
+        self.animation_style_var = tk.StringVar(value="2D fluida")
 
         grid = tk.Frame(form_card, bg=self.colors["panel"])
         grid.pack(fill="x")
@@ -201,9 +207,15 @@ class App(tk.Tk):
         self._field(grid, "Tipo de desenlace", self.ending_var, 3, 1,
                     values=["Justicia y superación", "Final feliz", "Final trágico", "Giro inesperado",
                             "Abierto para continuación", "Agridulce"])
-        tk.Label(grid, text="Los guiones largos se generan por capítulos y pueden tardar.",
-                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8)).grid(
-                     row=3, column=2, sticky="w", padx=8, pady=(17, 4))
+        self._field(grid, "Estilo de dibujo", self.drawing_style_var, 4, 0,
+                    values=["Anime cinematográfico", "Manga en blanco y negro", "Cartoon occidental",
+                            "Cómic realista", "Acuarela ilustrada", "Pixel art", "3D estilizado", "Realismo cinematográfico"])
+        self._field(grid, "Estilo de animación", self.animation_style_var, 4, 1,
+                    values=["2D fluida", "Anime con movimientos dinámicos", "Motion comic", "Cut-out / recortes",
+                            "3D cinematográfica", "Stop motion", "Pixel animation", "Presentación animada"])
+        tk.Label(grid, text="La selección guía la dirección visual.\nLa generación automática de dibujos se incorporará después.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8), justify="left").grid(
+                     row=4, column=2, sticky="w", padx=8, pady=(10, 4))
 
         actions = tk.Frame(right, bg=self.colors["bg"])
         actions.pack(fill="x", pady=10)
@@ -218,8 +230,17 @@ class App(tk.Tk):
         self.approve_button.pack(side="left", padx=(8, 0))
         self.export_button = ttk.Button(actions, text="Exportar MP4", command=self.export_video)
         self.export_button.pack(side="left", padx=(8, 0))
-        self.progressbar = ttk.Progressbar(right, mode="indeterminate")
-        self.progressbar.pack(fill="x", pady=(0, 8))
+        progress_card = tk.Frame(right, bg=self.colors["panel"], padx=11, pady=9,
+                                  highlightthickness=1, highlightbackground=self.colors["border"])
+        progress_card.pack(fill="x", pady=(0, 8))
+        self.progress_label_var = tk.StringVar(value="Listo para planificar el guion.")
+        tk.Label(progress_card, textvariable=self.progress_label_var, bg=self.colors["panel"],
+                 fg=self.colors["text"], font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        self.progressbar = ttk.Progressbar(progress_card, mode="determinate", maximum=100, value=0)
+        self.progressbar.pack(fill="x", pady=(6, 4))
+        self.progress_detail_var = tk.StringVar(value="0% · Esperando inicio")
+        tk.Label(progress_card, textvariable=self.progress_detail_var, bg=self.colors["panel"],
+                 fg=self.colors["muted"], font=("Segoe UI", 8)).pack(anchor="w")
 
         editor_card = tk.Frame(right, bg=self.colors["panel"], padx=13, pady=11,
                                highlightthickness=1, highlightbackground=self.colors["border"])
@@ -272,6 +293,11 @@ class App(tk.Tk):
         self.tone_var.set("Dramático e intenso")
         self.narrator_var.set("Tercera persona")
         self.ending_var.set("Justicia y superación")
+        self.drawing_style_var.set("Anime cinematográfico")
+        self.animation_style_var.set("2D fluida")
+        self.progressbar.configure(value=0)
+        self.progress_label_var.set("Listo para planificar el guion.")
+        self.progress_detail_var.set("0% · Esperando inicio")
         self.script_text.delete("1.0", "end")
         self.status_var.set("Proyecto nuevo. Define la premisa y los parámetros narrativos.")
 
@@ -297,7 +323,9 @@ class App(tk.Tk):
             "protagonist": self.protagonist_var.get().strip(),
             "conflict": self.conflict_var.get().strip(),
             "tone": self.tone_var.get(), "narrator": self.narrator_var.get(),
-            "ending": self.ending_var.get()
+            "ending": self.ending_var.get(),
+            "drawing_style": self.drawing_style_var.get(),
+            "animation_style": self.animation_style_var.get()
         }
 
     def _ollama_request(self, prompt, max_tokens=700):
@@ -335,6 +363,12 @@ class App(tk.Tk):
             return
         minutes = data["duration"]
         chapter_count = max(1, math.ceil((minutes * 135) / 360))
+        self.planned_chapters = chapter_count
+        self.completed_chapters = 0
+        self.planned_words = minutes * 135
+        self.progressbar.configure(maximum=chapter_count, value=0)
+        self.progress_label_var.set(f"Plan: {chapter_count} capítulos · objetivo ~{self.planned_words:,} palabras")
+        self.progress_detail_var.set("0% · Preparando la estructura")
         if minutes >= 45:
             confirm = messagebox.askyesno(
                 "Guion largo",
