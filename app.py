@@ -103,7 +103,8 @@ class App(tk.Tk):
         self.scene_assets = {}
         self.last_export_path = ""
         self.audio_track_path = ""
-        self.loop_audio_var = None
+        self.music_track_path = ""
+        self.loop_music_var = None
         self.voice_generation_running = False
         self.voice_cancel_event = threading.Event()
         self.available_voice_names = []
@@ -571,23 +572,36 @@ class App(tk.Tk):
         track_card = tk.Frame(audio_tab, bg=self.colors["input"], padx=13, pady=12,
                               highlightthickness=1, highlightbackground=self.colors["border"])
         track_card.grid(row=2, column=0, sticky="ew", pady=(0, 10))
-        tk.Label(track_card, text="PISTA ACTUAL DEL PROYECTO", bg=self.colors["input"], fg="#69b8ff",
+        tk.Label(track_card, text="NARRACIÓN / VOZ", bg=self.colors["input"], fg="#69b8ff",
                  font=("Segoe UI", 9, "bold")).pack(anchor="w")
-        self.audio_track_label_var = tk.StringVar(value="Sin pista de audio")
+        self.audio_track_label_var = tk.StringVar(value="Sin pista de narración")
         tk.Label(track_card, textvariable=self.audio_track_label_var, bg=self.colors["input"],
-                 fg=self.colors["text"], font=("Segoe UI", 10), anchor="w",
-                 wraplength=1000, justify="left").pack(fill="x", pady=(5, 10))
+                 fg=self.colors["text"], font=("Segoe UI", 9), anchor="w",
+                 wraplength=1000, justify="left").pack(fill="x", pady=(4, 7))
         track_actions = tk.Frame(track_card, bg=self.colors["input"])
-        track_actions.pack(fill="x")
-        self.select_audio_button = ttk.Button(track_actions, text="Añadir voz/música", style="Accent.TButton",
+        track_actions.pack(fill="x", pady=(0, 10))
+        self.select_audio_button = ttk.Button(track_actions, text="Importar narración", style="Accent.TButton",
                                               command=self.select_audio_track)
         self.select_audio_button.pack(side="left")
-        self.clear_audio_button = ttk.Button(track_actions, text="Quitar pista", command=self.clear_audio_track)
+        self.clear_audio_button = ttk.Button(track_actions, text="Quitar narración", command=self.clear_audio_track)
         self.clear_audio_button.pack(side="left", padx=(8, 0))
-        self.loop_audio_var = tk.BooleanVar(value=False)
+        tk.Frame(track_card, bg=self.colors["border"], height=1).pack(fill="x", pady=(0, 10))
+        tk.Label(track_card, text="MÚSICA DE FONDO", bg=self.colors["input"], fg="#69b8ff",
+                 font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        self.music_track_label_var = tk.StringVar(value="Sin música de fondo")
+        tk.Label(track_card, textvariable=self.music_track_label_var, bg=self.colors["input"],
+                 fg=self.colors["text"], font=("Segoe UI", 9), anchor="w",
+                 wraplength=1000, justify="left").pack(fill="x", pady=(4, 7))
+        music_actions = tk.Frame(track_card, bg=self.colors["input"])
+        music_actions.pack(fill="x")
+        self.select_music_button = ttk.Button(music_actions, text="Importar música", command=self.select_music_track)
+        self.select_music_button.pack(side="left")
+        self.clear_music_button = ttk.Button(music_actions, text="Quitar música", command=self.clear_music_track)
+        self.clear_music_button.pack(side="left", padx=(8, 0))
+        self.loop_music_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            track_actions, text="Repetir si es más corta que el vídeo",
-            variable=self.loop_audio_var, bg=self.colors["input"], fg=self.colors["text"],
+            music_actions, text="Repetir música si es más corta que el vídeo",
+            variable=self.loop_music_var, bg=self.colors["input"], fg=self.colors["text"],
             activebackground=self.colors["input"], activeforeground=self.colors["text"],
             selectcolor=self.colors["panel"], font=("Segoe UI", 9)
         ).pack(side="left", padx=(16, 0))
