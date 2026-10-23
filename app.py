@@ -11,12 +11,15 @@ import textwrap
 import threading
 import platform
 import ctypes
+import time
 import urllib.request
 import urllib.error
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from datetime import datetime
 from pathlib import Path
+
+from scene_engine import allocate_scene_durations, ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
 
 APP_NAME = "MARC Video Studio AI Desktop"
 ROOT = Path(__file__).resolve().parent
@@ -89,6 +92,11 @@ class App(tk.Tk):
         self.generation_queue = queue.Queue()
         self.cancel_event = threading.Event()
         self.generation_running = False
+        self.render_running = False
+        self.render_cancel_event = threading.Event()
+        self.scene_data = []
+        self.scene_assets = {}
+        self.last_export_path = ""
         self._style()
         self._build()
         self.refresh_projects()
@@ -370,6 +378,9 @@ class App(tk.Tk):
         self.approve_button.pack(side="left", padx=(6, 0))
         self.export_button = ttk.Button(toolrow, text="Exportar MP4", command=self.export_video)
         self.export_button.pack(side="left", padx=(6, 0))
+        self.cancel_render_button = ttk.Button(toolrow, text="Cancelar render",
+                                               command=self.cancel_export, state="disabled")
+        self.cancel_render_button.pack(side="left", padx=(6, 0))
 
         statuscard = tk.Frame(lower, bg=self.colors["panel"], padx=11, pady=8,
                               highlightthickness=1, highlightbackground=self.colors["border"])
@@ -425,14 +436,24 @@ class App(tk.Tk):
         scenes_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=14, pady=12)
         studio_tabs.add(scenes_tab, text="  ▤  ESCENAS  ")
         scenes_tab.grid_columnconfigure(0, weight=1)
-        scenes_tab.grid_rowconfigure(2, weight=1)
+        scenes_tab.grid_rowconfigure(3, weight=1)
         tk.Label(scenes_tab, text="PLAN DE MONTAJE", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w")
         tk.Label(scenes_tab, text="Organiza la estructura narrativa antes de producir recursos visuales. Esta lista se construye a partir del guion; no simula clips ya generados.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=900, justify="left").grid(row=1, column=0, sticky="w", pady=(4, 12))
+        scene_actions = tk.Frame(scenes_tab, bg=self.colors["panel"])
+        scene_actions.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        self.assign_image_button = ttk.Button(scene_actions, text="Añadir imagen", style="Accent.TButton",
+                                              command=self.assign_scene_image)
+        self.assign_image_button.pack(side="left")
+        self.clear_image_button = ttk.Button(scene_actions, text="Quitar imagen", command=self.clear_scene_image)
+        self.clear_image_button.pack(side="left", padx=(6, 0))
+        self.refresh_scenes_button = ttk.Button(scene_actions, text="Actualizar escenas",
+                                                command=lambda: self._refresh_scene_outline(self.script_text.get("1.0", "end-1c")))
+        self.refresh_scenes_button.pack(side="left", padx=(6, 0))
         scene_body = tk.Frame(scenes_tab, bg=self.colors["input"], padx=12, pady=10)
-        scene_body.grid(row=2, column=0, sticky="nsew")
+        scene_body.grid(row=3, column=0, sticky="nsew")
         scene_body.grid_columnconfigure(0, weight=1)
         scene_body.grid_rowconfigure(1, weight=1)
         tk.Label(scene_body, text="SECUENCIA NARRATIVA", bg=self.colors["input"], fg="#69b8ff",
@@ -445,8 +466,9 @@ class App(tk.Tk):
         scene_scroll = ttk.Scrollbar(scene_body, orient="vertical", command=self.scene_outline.yview)
         scene_scroll.grid(row=1, column=1, sticky="ns")
         self.scene_outline.configure(yscrollcommand=scene_scroll.set)
-        tk.Label(scenes_tab, text="Siguiente fase: convertir cada unidad narrativa en escenas con duración, recursos y estado de producción.",
-                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).grid(row=3, column=0, sticky="w", pady=(10, 0))
+        tk.Label(scenes_tab, text="Selecciona una escena y añade una imagen local. MARC la copiará a los recursos del proyecto y aplicará el movimiento elegido al renderizar.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
+                 wraplength=1000, justify="left").grid(row=4, column=0, sticky="w", pady=(10, 0))
 
         preview_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=14, pady=12)
         studio_tabs.add(preview_tab, text="  ▣  VISTA PREVIA  ")
@@ -466,9 +488,19 @@ class App(tk.Tk):
                                         fill="#168bff", font=("Segoe UI", 20, "bold"))
         self.preview_canvas.create_text(500, 132, text="La vista previa aparecerá cuando exista un vídeo renderizado",
                                         fill="#9aadc6", font=("Segoe UI", 10))
-        tk.Label(preview_tab, text="Monitor de interfaz. La vista previa de vídeo real requiere un archivo renderizado.",
+        tk.Label(preview_tab, text="El vídeo se abre en el reproductor predeterminado de Windows. La generación completa de dibujos sigue siendo opcional y requiere recursos visuales.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1000, justify="left").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        self.preview_status_var = tk.StringVar(value="Todavía no hay un MP4 exportado para este proyecto.")
+        tk.Label(preview_tab, textvariable=self.preview_status_var, bg=self.colors["panel"],
+                 fg=self.colors["text"], font=("Segoe UI", 9, "bold"),
+                 wraplength=1000, justify="left").grid(row=3, column=0, sticky="w", pady=(12, 6))
+        preview_actions = tk.Frame(preview_tab, bg=self.colors["panel"])
+        preview_actions.grid(row=4, column=0, sticky="w")
+        ttk.Button(preview_actions, text="Abrir último vídeo", style="Accent.TButton",
+                   command=self.open_last_video).pack(side="left")
+        ttk.Button(preview_actions, text="Elegir MP4 para previsualizar",
+                   command=self.choose_preview_video).pack(side="left", padx=(8, 0))
 
         self.status_var = tk.StringVar(value="Listo. Define una historia o abre un proyecto de la biblioteca.")
         tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
