@@ -9,6 +9,7 @@ import shutil
 import sqlite3
 import subprocess
 import textwrap
+import re
 import threading
 import platform
 import ctypes
@@ -1682,10 +1683,16 @@ class App(tk.Tk):
                 if self.render_cancel_event.is_set():
                     raise RuntimeError("__MARC_RENDER_CANCELLED__")
                 seconds = int(durations[index])
-                body = scene["text"].strip()
+                source_text = " ".join(scene["text"].split()).strip()
+                sentences = re.split(r"(?<=[.!?…])\s+", source_text)
+                caption = " ".join(sentences[:2]).strip()
+                if len(caption) > 190:
+                    caption = caption[:187].rsplit(" ", 1)[0] + "…"
                 title = scene.get("title", "")
                 if title and not title.lower().startswith("escena "):
-                    body = title + "\n\n" + body
+                    body = title + "\n\n" + caption
+                else:
+                    body = caption or title or f"Escena {index + 1}"
                 wrap_width = 27 if height > width else 48
                 wrapped = []
                 for paragraph in body.splitlines():
@@ -1748,7 +1755,7 @@ class App(tk.Tk):
                 audio_video_path = scene_dir / "with_audio.mp4"
                 if audio_video_path.exists():
                     audio_video_path.unlink()
-                self.generation_queue.put(("render_progress", total + 1, final_steps, "Mezclando la pista de audio…"))
+                self.generation_queue.put(("render_progress", total + 2, final_steps, "Mezclando la pista de audio…"))
                 audio_input = []
                 audio_filter = []
                 audio_map = ["-map", "0:a:0"]
