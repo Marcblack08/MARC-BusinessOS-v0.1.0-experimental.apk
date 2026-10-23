@@ -14,6 +14,7 @@
 - [x] Movimiento sencillo de cámara para imágenes fijas y tratamiento pixel/stop-motion básico.
 - [x] Importación de pista de audio y mezcla dentro del MP4.
 - [x] Generación offline de narración con Windows System.Speech/SAPI y selección de voces instaladas.
+- [x] Exportación de subtítulos SRT por escena con tiempos orientativos y tests unitarios.
 - [x] Instalador de dependencias y constructor PyInstaller/Inno Setup.
 - [x] Flujo de GitHub Actions para construir instalador y carpeta portable manualmente.
 - [x] Pruebas unitarias del parser/tiempos/escape de rutas en CI.
