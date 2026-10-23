@@ -104,6 +104,7 @@ class App(tk.Tk):
         self.render_cancel_event = threading.Event()
         self.scene_data = []
         self.scene_assets = {}
+        self.scene_duration_overrides = {}
         self.last_export_path = ""
         self.audio_track_path = ""
         self.music_track_path = ""
@@ -548,7 +549,10 @@ class App(tk.Tk):
         timeline_tools = tk.Frame(timeline_tab, bg=self.colors["panel"])
         timeline_tools.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         ttk.Button(timeline_tools, text="◀ Escena", command=lambda: self._step_timeline_scene(-1)).pack(side="left")
-        ttk.Button(timeline_tools, text="Escena ▶", command=lambda: self._step_timeline_scene(1)).pack(side="left", padx=(5, 12))
+        ttk.Button(timeline_tools, text="Escena ▶", command=lambda: self._step_timeline_scene(1)).pack(side="left", padx=(5, 8))
+        ttk.Button(timeline_tools, text="Mover clip ◀", command=lambda: self._move_timeline_scene(-1)).pack(side="left", padx=(0, 4))
+        ttk.Button(timeline_tools, text="Mover clip ▶", command=lambda: self._move_timeline_scene(1)).pack(side="left", padx=(0, 8))
+        ttk.Button(timeline_tools, text="Duración…", command=self._edit_timeline_duration).pack(side="left", padx=(0, 8))
         ttk.Button(timeline_tools, text="＋ Imagen", command=self.assign_scene_image).pack(side="left")
         ttk.Button(timeline_tools, text="＋ Voz", command=self.select_audio_track).pack(side="left", padx=(5, 0))
         ttk.Button(timeline_tools, text="＋ Música", command=self.select_music_track).pack(side="left", padx=(5, 0))
@@ -573,6 +577,7 @@ class App(tk.Tk):
         self.timeline_canvas.configure(xscrollcommand=timeline_xscroll.set)
         self.timeline_canvas.bind("<Button-1>", self._timeline_click)
         self.timeline_canvas.bind("<B1-Motion>", self._timeline_drag)
+        self.timeline_canvas.bind("<Double-Button-1>", self._timeline_double_click)
         tk.Label(timeline_tab,
                  text="Selecciona un clip para sincronizarlo con la escena. Haz clic o arrastra en la regla para mover el cabezal; usa los botones para asignar imágenes y pistas. El cabezal es de navegación visual, no una reproducción de vídeo en tiempo real.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8),
@@ -748,6 +753,10 @@ class App(tk.Tk):
             canvas.create_text(12, (y1 + y2) / 2, text=label, anchor="w",
                                fill=color, font=("Segoe UI", 8, "bold"))
         durations = allocate_scene_durations(self.scene_data, total) if self.scene_data else []
+        durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
+        timeline_total = max(total, sum(durations)) if durations else total
+        width = left + timeline_total * scale + 32
+        self.timeline_canvas.configure(scrollregion=(0, 0, width, height))
         elapsed = 0
         for index, scene in enumerate(self.scene_data):
             seconds = durations[index] if index < len(durations) else 5
@@ -835,6 +844,68 @@ class App(tk.Tk):
         self.timeline_playhead_seconds = self._timeline_seconds_from_event(event)
         self._draw_timeline()
 
+    def _timeline_double_click(self, event):
+        y = self.timeline_canvas.canvasy(event.y)
+        if 36 <= y <= 82:
+            self._timeline_click(event)
+            self._edit_timeline_duration()
+
+    def _selected_timeline_scene(self):
+        number = int(getattr(self, "timeline_selected_scene", 1))
+        return number if 1 <= number <= len(self.scene_data) else None
+
+    def _edit_timeline_duration(self):
+        number = self._selected_timeline_scene()
+        if number is None:
+            messagebox.showinfo("Selecciona un clip", "Selecciona una escena en la línea de tiempo primero.")
+            return
+        durations = allocate_scene_durations(self.scene_data, self._timeline_duration_seconds())
+        current = self.scene_duration_overrides.get(str(number), durations[number - 1])
+        from tkinter import simpledialog
+        value = simpledialog.askinteger(
+            "Duración del clip", f"Duración de la escena {number} en segundos (5–3600):",
+            initialvalue=current, minvalue=5, maxvalue=3600, parent=self
+        )
+        if value is None:
+            return
+        self.scene_duration_overrides[str(number)] = int(value)
+        self._save_scene_assets()
+        self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
+        self.save_project(reset_approval=True, quiet=True)
+        self.status_var.set(f"Duración de la escena {number}: {value} s. Revisa y vuelve a aprobar antes de exportar.")
+
+    def _move_timeline_scene(self, step):
+        number = self._selected_timeline_scene()
+        if number is None:
+            messagebox.showinfo("Selecciona un clip", "Selecciona un clip de vídeo antes de moverlo.")
+            return
+        target = number - 1 + step
+        if not 0 <= target < len(self.scene_data):
+            return
+        scenes = list(self.scene_data)
+        scenes[number - 1], scenes[target] = scenes[target], scenes[number - 1]
+        old_assets = dict(self.scene_assets)
+        old_durations = dict(self.scene_duration_overrides)
+        order = list(range(1, len(scenes) + 1))
+        order[number - 1], order[target] = order[target], order[number - 1]
+        self.scene_assets = {str(new_index): old_assets[str(old_index)]
+                             for new_index, old_index in enumerate(order, start=1)
+                             if str(old_index) in old_assets}
+        self.scene_duration_overrides = {str(new_index): old_durations[str(old_index)]
+                                         for new_index, old_index in enumerate(order, start=1)
+                                         if str(old_index) in old_durations}
+        serialized = "\n\n".join(f"[{scene['title']}]\n{scene['text']}" for scene in scenes)
+        self.script_text.configure(state="normal")
+        self.script_text.delete("1.0", "end")
+        self.script_text.insert("1.0", serialized)
+        self._refresh_scene_outline(serialized)
+        self.scene_outline.selection_set(f"scene_{target + 1}")
+        self.scene_outline.see(f"scene_{target + 1}")
+        self.timeline_selected_scene = target + 1
+        self._save_scene_assets()
+        self.save_project(reset_approval=True, quiet=True)
+        self.status_var.set("Clip movido. Sus recursos siguieron a la escena; revisa y vuelve a aprobar el guion.")
+
     def _step_timeline_scene(self, step):
         if not self.scene_data:
             messagebox.showinfo("Sin escenas", "Genera o abre un guion para poder navegar por escenas.")
@@ -867,6 +938,7 @@ class App(tk.Tk):
             return
         project_dir = PROJECTS_DIR / str(project_id)
         manifest = project_dir / "scene_assets.json"
+        duration_manifest = project_dir / "scene_durations.json"
         last_video = project_dir / "last_export.txt"
         try:
             if manifest.is_file():
@@ -875,6 +947,11 @@ class App(tk.Tk):
                     self.scene_assets = {str(k): str(v) for k, v in loaded.items()}
         except (OSError, json.JSONDecodeError):
             self.scene_assets = {}
+        try:
+            loaded_durations = json.loads(duration_manifest.read_text(encoding="utf-8")) if duration_manifest.is_file() else {}
+            self.scene_duration_overrides = {str(k): max(5, min(3600, int(v))) for k, v in loaded_durations.items() if str(k).isdigit()}
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            self.scene_duration_overrides = {}
         try:
             if last_video.is_file():
                 candidate = last_video.read_text(encoding="utf-8").strip()
@@ -912,6 +989,8 @@ class App(tk.Tk):
         assets_dir.mkdir(parents=True, exist_ok=True)
         manifest = assets_dir.parent / "scene_assets.json"
         manifest.write_text(json.dumps(self.scene_assets, ensure_ascii=False, indent=2), encoding="utf-8")
+        duration_manifest = assets_dir.parent / "scene_durations.json"
+        duration_manifest.write_text(json.dumps(self.scene_duration_overrides, ensure_ascii=False, indent=2), encoding="utf-8")
         audio_manifest = assets_dir.parent / "audio_track.txt"
         if self.audio_track_path and Path(self.audio_track_path).is_file():
             audio_manifest.write_text(self.audio_track_path, encoding="utf-8")
@@ -954,6 +1033,7 @@ class App(tk.Tk):
         except (ValueError, tk.TclError):
             target_seconds = 600
         durations = allocate_scene_durations(self.scene_data, target_seconds)
+        durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
         total_words = 0
         for idx, scene in enumerate(self.scene_data):
             asset = self.scene_assets.get(str(idx + 1), "")
@@ -2267,6 +2347,7 @@ Write-Output 'NARRATION_OK'
         width, height = PLATFORMS.get(row["platform"], (1280, 720))
         target_seconds = max(60, int(row["duration_minutes"]) * 60)
         durations = allocate_scene_durations(scenes, target_seconds)
+        durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
         asset_map = dict(self.scene_assets)
         for key, value in list(asset_map.items()):
             if not Path(value).is_file():
