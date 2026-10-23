@@ -692,6 +692,210 @@ class App(tk.Tk):
         except (OSError, AttributeError) as exc:
             messagebox.showerror("No se pudo abrir el vídeo", str(exc))
 
+    def detect_image_models(self, quiet=False):
+        if self.image_generation_running:
+            return
+        self.image_ai_status_var.set("Conectando con ComfyUI local…")
+        threading.Thread(target=self._detect_image_models_worker, args=(quiet,), daemon=True).start()
+
+    def _detect_image_models_worker(self, quiet=False):
+        try:
+            request = urllib.request.Request(
+                COMFYUI_URL + "/object_info/CheckpointLoaderSimple",
+                headers={"Accept": "application/json"}
+            )
+            with urllib.request.urlopen(request, timeout=4) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            node = payload.get("CheckpointLoaderSimple", payload)
+            required = node.get("input", {}).get("required", {})
+            option = required.get("ckpt_name", [])
+            models = option[0] if option and isinstance(option[0], list) else []
+            models = [str(model) for model in models]
+            self.generation_queue.put(("image_models", models, quiet))
+        except Exception as exc:
+            self.generation_queue.put(("image_models_error", str(exc), quiet))
+
+    def generate_scene_image(self):
+        if self.generation_running or self.render_running or self.image_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        if self.current_id is None:
+            self.save_project(quiet=True)
+        if self.current_id is None:
+            messagebox.showwarning("Guarda el proyecto", "Completa el título y la premisa antes de generar imágenes.")
+            return
+        selection = self.scene_outline.curselection()
+        if not selection or not self.scene_data:
+            messagebox.showinfo("Selecciona una escena", "Genera o abre un guion y selecciona la escena que quieras ilustrar.")
+            return
+        model_name = self.image_model_var.get().strip()
+        if not model_name:
+            messagebox.showinfo(
+                "Falta el modelo local",
+                "Pulsa «Detectar ComfyUI». Debes abrir ComfyUI localmente y tener al menos un checkpoint instalado."
+            )
+            self.detect_image_models(quiet=False)
+            return
+        idx = selection[0]
+        scene = dict(self.scene_data[idx])
+        project = self.conn.execute("SELECT * FROM projects WHERE id=?", (self.current_id,)).fetchone()
+        if not project:
+            messagebox.showerror("Proyecto no encontrado", "Vuelve a abrir el proyecto e inténtalo otra vez.")
+            return
+        self.image_generation_running = True
+        self._set_image_state(True)
+        self.progressbar.configure(mode="indeterminate")
+        self.progressbar.start(12)
+        self.progress_label_var.set(f"Generando ilustración para la escena {idx + 1}")
+        self.progress_detail_var.set("IA de imágenes local · ComfyUI")
+        self.status_var.set("Generando una ilustración local. En la GTX 750 puede tardar varios minutos.")
+        args = (
+            int(self.current_id), idx + 1, scene, model_name,
+            self.drawing_style_var.get(), project["platform"], project["topic"]
+        )
+        threading.Thread(target=self._generate_scene_image_worker, args=args, daemon=True).start()
+
+    def _set_image_state(self, active):
+        state = "disabled" if active else "normal"
+        for button in (self.generate_button, self.cancel_button, self.save_button,
+                       self.approve_button, self.export_button, self.delete_button,
+                       self.assign_image_button, self.clear_image_button,
+                       self.refresh_scenes_button, self.detect_models_button,
+                       self.generate_image_button):
+            button.configure(state=state)
+        self.project_list.configure(state=state)
+        self.scene_outline.configure(state=state)
+        self.image_model_combo.configure(state="disabled" if active else "readonly")
+        for widget, idle_state in self.form_widgets:
+            widget.configure(state="disabled" if active else idle_state)
+        self.script_text.configure(state="disabled" if active else "normal")
+        if not active:
+            self.progressbar.stop()
+            self.progressbar.configure(mode="determinate")
+
+    def _generate_scene_image_worker(self, project_id, scene_number, scene, checkpoint, drawing_style, platform_name, project_topic):
+        try:
+            self.generation_queue.put(("image_progress", scene_number, "Preparando el prompt visual local…"))
+            style_prompts = {
+                "Anime cinematográfico": "cinematic Japanese anime film frame, expressive character acting, dramatic lighting, detailed anime background art",
+                "Manga en blanco y negro": "black and white manga illustration, inked line art, screentones, expressive panels, high contrast",
+                "Cartoon occidental": "polished western animated series frame, appealing shapes, clear silhouettes, rich colors",
+                "Cómic realista": "realistic graphic novel illustration, detailed ink and painterly shading, cinematic composition",
+                "Acuarela ilustrada": "hand-painted watercolor storybook illustration, delicate paper texture, expressive brushwork",
+                "Pixel art": "high-quality pixel art scene, coherent pixel grid, carefully limited palette, detailed 16-bit game-art composition",
+                "3D estilizado": "stylized 3D animated film still, detailed materials, cinematic light, expressive characters",
+                "Realismo cinematográfico": "cinematic photorealistic movie still, natural dramatic lighting, carefully composed frame",
+            }
+            style_prompt = style_prompts.get(drawing_style, "cinematic illustrated story scene")
+            story_excerpt = " ".join(str(scene.get("text", "")).split())[:650]
+            visual_description = ""
+            # Qwen optionally converts the prose to a compact English visual description; ComfyUI remains the local image engine.
+            try:
+                visual_description = self._ollama_request(
+                    "Convert this Spanish story excerpt into one concise English image-generation prompt. "
+                    "Describe only visible people, clothing, expression, action, setting, time of day, camera and lighting. "
+                    "Do not add events not in the excerpt. Return only the prompt, no explanations. "
+                    f"Story context: {project_topic}. Scene title: {scene.get('title', '')}. Excerpt: {story_excerpt}",
+                    max_tokens=180
+                )
+            except Exception:
+                visual_description = story_excerpt
+            prompt = (
+                f"{style_prompt}. Story moment: {visual_description}. "
+                "single coherent frame, clear focal subject, strong composition, consistent character design, "
+                "high quality, readable silhouettes, no captions, no writing, no logos, no watermark."
+            )
+            negative = (
+                "text, subtitles, letters, watermark, logo, blurry, low resolution, malformed hands, "
+                "extra fingers, extra limbs, duplicate people, distorted face, bad anatomy, compression artifacts"
+            )
+            if "TikTok" in platform_name or "9:16" in platform_name:
+                width, height = 288, 512
+            elif "1:1" in platform_name:
+                width, height = 512, 512
+            else:
+                width, height = 512, 288
+            client_id = os.urandom(12).hex()
+            workflow = {
+                "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": checkpoint}},
+                "2": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["1", 1]}},
+                "3": {"class_type": "CLIPTextEncode", "inputs": {"text": negative, "clip": ["1", 1]}},
+                "4": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
+                "5": {"class_type": "KSampler", "inputs": {
+                    "seed": random.randint(1, 2**31 - 1), "steps": 18, "cfg": 6.5,
+                    "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0,
+                    "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0]
+                }},
+                "6": {"class_type": "VAEDecode", "inputs": {"samples": ["5", 0], "vae": ["1", 2]}},
+                "7": {"class_type": "SaveImage", "inputs": {
+                    "filename_prefix": f"MARC_Studio/scene_{scene_number:03d}", "images": ["6", 0]
+                }},
+            }
+            body = json.dumps({"prompt": workflow, "client_id": client_id}).encode("utf-8")
+            request = urllib.request.Request(
+                COMFYUI_URL + "/prompt", data=body,
+                headers={"Content-Type": "application/json"}, method="POST"
+            )
+            with urllib.request.urlopen(request, timeout=15) as response:
+                queued = json.loads(response.read().decode("utf-8"))
+            prompt_id = queued.get("prompt_id")
+            if not prompt_id:
+                raise RuntimeError("ComfyUI no aceptó el flujo de imagen: " + json.dumps(queued, ensure_ascii=False)[:1600])
+            self.generation_queue.put(("image_progress", scene_number, "ComfyUI está renderizando la ilustración…"))
+            deadline = time.monotonic() + 2700
+            outputs = None
+            last_status_update = time.monotonic()
+            while time.monotonic() < deadline:
+                request = urllib.request.Request(
+                    COMFYUI_URL + "/history/" + str(prompt_id),
+                    headers={"Accept": "application/json"}
+                )
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    history = json.loads(response.read().decode("utf-8"))
+                entry = history.get(prompt_id, history if "outputs" in history else {})
+                if entry:
+                    candidate_outputs = entry.get("outputs", {})
+                    images = [
+                        image_data for node_output in candidate_outputs.values()
+                        for image_data in node_output.get("images", [])
+                    ]
+                    if images:
+                        outputs = images
+                        break
+                    state = entry.get("status", {})
+                    status_text = str(state.get("status_str", "")).lower() if isinstance(state, dict) else ""
+                    if status_text in {"error", "failed"}:
+                        raise RuntimeError("ComfyUI indicó un error al generar la ilustración.")
+                if time.monotonic() - last_status_update >= 8:
+                    self.generation_queue.put(("image_progress", scene_number, "ComfyUI sigue generando… el tiempo depende del modelo y del equipo."))
+                    last_status_update = time.monotonic()
+                time.sleep(1.5)
+            if not outputs:
+                raise TimeoutError("ComfyUI no entregó una imagen en 45 minutos. Revisa su consola y la memoria de la GPU.")
+            image_info = outputs[0]
+            query = urlencode({
+                "filename": image_info.get("filename", ""),
+                "subfolder": image_info.get("subfolder", ""),
+                "type": image_info.get("type", "output")
+            })
+            request = urllib.request.Request(COMFYUI_URL + "/view?" + query)
+            with urllib.request.urlopen(request, timeout=60) as response:
+                image_bytes = response.read()
+            if not image_bytes:
+                raise RuntimeError("ComfyUI devolvió una imagen vacía.")
+            assets_dir = PROJECTS_DIR / str(project_id) / "assets"
+            assets_dir.mkdir(parents=True, exist_ok=True)
+            destination = assets_dir / f"scene_{scene_number:03d}_ai.png"
+            destination.write_bytes(image_bytes)
+            prompt_record = assets_dir / f"scene_{scene_number:03d}_ai_prompt.txt"
+            prompt_record.write_text(
+                f"Checkpoint: {checkpoint}\nEstilo: {drawing_style}\nPrompt: {prompt}\nNegative: {negative}\n",
+                encoding="utf-8"
+            )
+            self.generation_queue.put(("image_done", project_id, scene_number, str(destination.resolve()), prompt))
+        except Exception as exc:
+            self.generation_queue.put(("image_error", scene_number, str(exc)))
+
     def _field(self, parent, label, variable, row, col, values=None, span=1):
         cell = tk.Frame(parent, bg=self.colors["panel"])
         cell.grid(row=row, column=col, columnspan=span, sticky="ew", padx=6, pady=5)
