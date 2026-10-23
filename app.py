@@ -4162,8 +4162,20 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                     "box=1:boxcolor=0x06101d@0.80:boxborderw=28"
                 )
                 if asset and Path(asset).is_file():
+                    # Keep the generated illustration dominant. Spoken prose is carried by the audio track;
+                    # only a small lower-third scene label is drawn over artwork.
+                    label_file = scene_dir / f"scene_label_{index + 1:03d}.txt"
+                    scene_label = re.sub(r"\\s+", " ", str(title or f"Escena {index + 1}")).strip()[:80]
+                    label_file.write_text(scene_label, encoding="utf-8")
+                    label_path = ffmpeg_filter_path(label_file)
+                    label_size = max(16, min(30, width // 52))
+                    label_filter = (
+                        f"drawtext=textfile='{label_path}':expansion=none:fontcolor=white:"
+                        f"fontsize={label_size}:x=(w-text_w)/2:y=h-text_h-h*0.045:"
+                        "box=1:boxcolor=0x06101d@0.68:boxborderw=14"
+                    )
                     motion = scene_motion_filter(animation_style, width, height, seconds)
-                    video_filter = f"{motion},{draw_filter}"
+                    video_filter = f"{motion},{label_filter}"
                     cmd = [
                         ffmpeg, "-y", "-loop", "1", "-framerate", str(fps), "-i", str(Path(asset).resolve()),
                         "-t", str(seconds), "-vf", video_filter, "-an", "-r", str(fps),
