@@ -20,8 +20,13 @@ from pathlib import Path
 
 APP_NAME = "MARC Video Studio AI Desktop"
 ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / "data"
-PROJECTS_DIR = ROOT / "projects"
+# En una instalación normal, los datos se guardan en el perfil del usuario, no en Program Files.
+if os.name == "nt" and (getattr(__import__("sys"), "frozen", False) or os.environ.get("MARC_USE_USER_DATA") == "1"):
+    APP_DATA_ROOT = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "MARC Video Studio AI Desktop"
+else:
+    APP_DATA_ROOT = ROOT
+DATA_DIR = APP_DATA_ROOT / "data"
+PROJECTS_DIR = APP_DATA_ROOT / "projects"
 DB_PATH = DATA_DIR / "marc_video_studio.db"
 
 PLATFORMS = {
