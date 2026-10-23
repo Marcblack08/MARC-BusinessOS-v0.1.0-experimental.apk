@@ -33,6 +33,18 @@ class StoryEngineTests(unittest.TestCase):
             [("NARRADOR", "La puerta se abrió."), ("JUAN", "¿Quién anda ahí?")],
         )
 
+    def test_narration_segments_parse_several_speakers_inside_one_scene(self):
+        script = "[NARRADOR]: La puerta se abrió. [JUAN]: ¿Quién anda ahí? [LUCIA]: Soy yo."
+        self.assertEqual(extract_speaker_names(script), ["NARRADOR", "JUAN", "LUCIA"])
+        self.assertEqual(
+            narration_segments(script),
+            [
+                ("NARRADOR", "La puerta se abrió."),
+                ("JUAN", "¿Quién anda ahí?"),
+                ("LUCIA", "Soy yo."),
+            ],
+        )
+
     def test_series_context_includes_bible_and_previous_state(self):
         context = build_series_context("Juan busca la carta.", "La carta sigue en su poder.", "La puerta se abrió.")
         self.assertIn("BIBLIA CANÓNICA", context)
