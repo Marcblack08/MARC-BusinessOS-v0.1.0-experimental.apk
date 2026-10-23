@@ -2,6 +2,16 @@ name: Build Windows desktop installer
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "app.py"
+      - "scene_engine.py"
+      - "ollama_client.py"
+      - "tests/**"
+      - "build_windows.bat"
+      - "installer/MARC-Video-Studio.iss"
+      - ".github/workflows/build-windows-installer.yml"
 
 permissions:
   contents: read
@@ -38,7 +48,7 @@ jobs:
         shell: pwsh
         run: |
           $candidates = @(
-            "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
             "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
           )
           $compiler = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
