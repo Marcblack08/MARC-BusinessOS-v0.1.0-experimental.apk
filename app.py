@@ -811,6 +811,9 @@ class App(tk.Tk):
         for widget, idle_state in self.form_widgets:
             widget.configure(state="disabled" if active else idle_state)
         self.script_text.configure(state="disabled" if active else "normal")
+        for button in (self.assign_image_button, self.clear_image_button, self.refresh_scenes_button):
+            button.configure(state=state)
+        self.scene_outline.configure(state=state)
         # La barra es determinista: solo avanza cuando un capítulo termina realmente.
         if not active:
             self.progressbar.stop()
@@ -1035,6 +1038,37 @@ class App(tk.Tk):
                     self._set_generation_state(False)
                     messagebox.showerror("Error de generación", "La IA local no pudo completar el guion.\n\n" + event[1])
                     self.status_var.set("La generación se detuvo. El borrador parcial se conserva sin aprobar.")
+                elif kind == "render_progress":
+                    current, total, detail = event[1], event[2], event[3]
+                    self.progressbar.configure(maximum=total, value=current)
+                    percent = round((current / max(1, total)) * 100)
+                    self.progress_label_var.set(f"Exportación MP4 · {current} de {total} pasos")
+                    self.progress_detail_var.set(f"{percent}% · {detail}")
+                    self.status_var.set(detail)
+                elif kind == "render_done":
+                    self.render_running = False
+                    self._set_render_state(False)
+                    self.last_export_path = event[1]
+                    if hasattr(self, "preview_status_var"):
+                        self.preview_status_var.set(f"Último vídeo exportado: {self.last_export_path}")
+                    self.progressbar.configure(maximum=100, value=100)
+                    self.progress_label_var.set("Vídeo exportado correctamente")
+                    self.progress_detail_var.set(f"100% · {event[2]} escenas · duración aproximada {self._format_eta(event[3])}")
+                    self.status_var.set(f"MP4 creado: {self.last_export_path}")
+                    messagebox.showinfo("Exportación terminada", f"Vídeo MP4 creado en:\n{self.last_export_path}\n\nPuedes abrirlo desde la pestaña VISTA PREVIA.")
+                elif kind == "render_cancelled":
+                    self.render_running = False
+                    self._set_render_state(False)
+                    self.progress_label_var.set("Exportación cancelada")
+                    self.progress_detail_var.set("El render se detuvo por petición del usuario. El MP4 parcial puede no reproducirse.")
+                    self.status_var.set("Exportación cancelada.")
+                elif kind == "render_error":
+                    self.render_running = False
+                    self._set_render_state(False)
+                    self.progress_label_var.set("Error durante la exportación")
+                    self.progress_detail_var.set("Revisa el mensaje de FFmpeg y la disponibilidad de recursos.")
+                    self.status_var.set("No se pudo completar el MP4.")
+                    messagebox.showerror("Error de exportación", event[1])
         except queue.Empty:
             pass
         self.after(180, self._poll_generation_events)
