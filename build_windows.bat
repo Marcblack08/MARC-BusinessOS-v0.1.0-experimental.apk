@@ -13,7 +13,7 @@ if not exist ".venv\Scripts\python.exe" (
   pause
   exit /b 1
 )
-".venv\Scripts\python.exe" -m pip install --upgrade pyinstaller
+".venv\Scripts\python.exe" -m pip install --upgrade pyinstaller pillow
 if errorlevel 1 goto error
 echo [1/3] Limpiando compilacion anterior...
 if exist build rmdir /s /q build
