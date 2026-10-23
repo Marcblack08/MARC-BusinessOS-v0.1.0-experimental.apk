@@ -1,4 +1,4 @@
-# Dependencia visual opcional para previsualizar imágenes de escenas en el monitor.
 Pillow>=10.0
+python-vlc>=3.0.21203
 # Opcional para interfaz web embebida en versiones posteriores:
 # pywebview>=5.0
