@@ -981,6 +981,13 @@ class App(tk.Tk):
                 canvas.create_line(pos, 20, pos, height - 1, fill="#1c2b3e")
                 canvas.create_text(pos + 3, 13, text=f"{seconds//60:02d}:{seconds%60:02d}",
                                    anchor="w", fill="#7489a3", font=("Consolas", 7))
+            if not hasattr(self, "_mini_thumb_cache"):
+                self._mini_thumb_cache = {}
+            try:
+                from PIL import Image, ImageTk
+                pillow_available = True
+            except ImportError:
+                pillow_available = False
             for x1, x2, number in positions:
                 scene = self.scene_data[number - 1]
                 asset = self.scene_assets.get(str(number), "")
@@ -990,12 +997,31 @@ class App(tk.Tk):
                 canvas.create_rectangle(x1, 24, x2 - 2, 45, fill=fill,
                                         outline="#68d3ff" if selected else "#46617d",
                                         width=2 if selected else 1, tags=(f"mini_scene_{number}",))
+                label_x = x1 + 4
+                if has_image and pillow_available and x2 - x1 >= 42:
+                    try:
+                        thumb_width = min(34, max(20, int(x2 - x1 - 8)))
+                        stat = Path(asset).stat()
+                        cache_key = (str(Path(asset).resolve()), stat.st_mtime_ns, thumb_width)
+                        photo = self._mini_thumb_cache.get(cache_key)
+                        if photo is None:
+                            with Image.open(asset) as source:
+                                thumb = source.convert("RGB")
+                            thumb.thumbnail((thumb_width, 17), Image.Resampling.LANCZOS)
+                            photo = ImageTk.PhotoImage(thumb)
+                            self._mini_thumb_cache[cache_key] = photo
+                        canvas.create_image(x1 + 3 + thumb_width / 2, 34, image=photo,
+                                            anchor="center", tags=(f"mini_scene_{number}",))
+                        label_x = x1 + thumb_width + 6
+                    except (OSError, ValueError):
+                        pass
                 clip_label = f"{number:02d} · {scene.get('title', f'Escena {number}')}"
-                max_chars = max(4, int((x2 - x1 - 7) / 6))
+                available = int(x2 - label_x - 4)
+                max_chars = max(3, available // 5)
                 if len(clip_label) > max_chars:
-                    clip_label = clip_label[:max(3, max_chars - 1)] + "…"
-                if x2 - x1 > 26:
-                    canvas.create_text(x1 + 4, 34, text=clip_label, anchor="w",
+                    clip_label = clip_label[:max(2, max_chars - 1)] + "…"
+                if available >= 18:
+                    canvas.create_text(label_x, 34, text=clip_label, anchor="w",
                                        fill="#f4f8ff", font=("Segoe UI", 7, "bold"),
                                        tags=(f"mini_scene_{number}",))
             voice_color = "#159d8a" if self.audio_track_path and Path(self.audio_track_path).is_file() else "#1a2935"
