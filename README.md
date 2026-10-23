@@ -1,41 +1,51 @@
 # MARC Video Studio AI Desktop
 
-Aplicación de escritorio para Windows enfocada en crear borradores de videos para YouTube, TikTok y Facebook con aprobación humana obligatoria antes de renderizar el video final.
+Aplicación de escritorio local para diseñar historias, generar guiones por capítulos con Ollama/Qwen, revisarlos y exportar un MP4 básico con FFmpeg.
 
-## Estado
-**MVP inicial en desarrollo.** Este repositorio contiene el código fuente; todavía no es un instalador EXE compilado ni una versión probada en Windows.
+> **Estado honesto:** las mejoras de interfaz e IA están incorporadas al código de `main`, pero esta revisión aún necesita validación en Windows. No es todavía un instalador EXE compilado. El render actual utiliza tarjetas de texto sobre fondos; aún no genera automáticamente imágenes cinematográficas ni narración de voz.
 
-## Principios del proyecto
-- Funcionamiento local y sin claves API.
-- Sin servicios de IA de pago ni tokens.
-- Aprobación humana explícita del guion antes de renderizar.
-- Proyectos y guiones guardados localmente en SQLite.
-- Perfiles vertical (TikTok/Reels/Shorts) y horizontal (YouTube).
-- Renderizado local con FFmpeg.
-- Equipo objetivo: Intel Core i5 de 4.ª generación, 16 GB RAM y NVIDIA GTX 750.
+## Funcionalidad implementada en el código
+- Interfaz rediseñada en azul tecnológico: azul noche, tarjetas, panel de proyectos y estados de herramientas.
+- Indicador de disponibilidad de Ollama y búsqueda de FFmpeg.
+- Conexión local a `http://127.0.0.1:11434/api/generate`; modelo esperado: `qwen2.5:3b`.
+- Parámetros de guion independientes: género, premisa, protagonista, conflicto central, tono, narrador, desenlace, plataforma y duración.
+- Plan de continuidad y generación secuencial por capítulos para que las historias largas no dependan de una sola respuesta.
+- Generación en segundo plano para mantener la interfaz sensible, progreso por capítulos y cancelación entre solicitudes.
+- Proyectos almacenados en SQLite. La migración añade los nuevos campos sin borrar proyectos guardados.
+- La exportación exige aprobación humana. Guardar cambios en texto o parámetros invalida la aprobación anterior.
+- FFmpeg se busca en PATH y en carpetas habituales de discos locales; también se permite seleccionarlo manualmente.
 
 ## Requisitos
 - Windows 10/11 de 64 bits.
-- Python 3.11+ para ejecutar desde código.
-- FFmpeg instalado y disponible en PATH para exportar MP4.
-- Opcional: Ollama instalado localmente y un modelo pequeño compatible, si se desea generar borradores con un LLM local. El modo básico no requiere IA externa.
+- Python 3.11+ con Tcl/Tk disponible.
+- Ollama instalado y ejecutándose.
+- Modelo local descargado: `qwen2.5:3b`.
+- FFmpeg para exportar MP4.
+- Equipo objetivo de desarrollo: Intel Core i5 de 4.ª generación, 16 GB RAM, SSD y NVIDIA GTX 750. Qwen puede funcionar por CPU; los guiones largos pueden tardar bastante.
 
-## Ejecutar desde el código
-1. Instala Python 3.11 o posterior.
-2. Instala FFmpeg y confirma que `ffmpeg -version` funciona en CMD.
-3. Ejecuta `install_windows.bat`.
-4. Ejecuta `start_windows.bat`.
+## Instalación/ejecución
+1. Instala Python y Ollama desde sus sitios oficiales.
+2. Descarga el modelo una vez desde PowerShell:
+   ```powershell
+   ollama run qwen2.5:3b
+   ```
+   Espera a que termine la descarga. Para uso posterior, deja Ollama abierto/en ejecución.
+3. Extrae FFmpeg Essentials. MARC intenta encontrar `ffmpeg.exe` en `bin`; no es obligatorio añadirlo a PATH.
+4. Ejecuta `install_windows.bat`.
+5. Ejecuta `start_windows.bat`.
 
-## Flujo seguro
-1. Crear proyecto y definir tema, plataforma, duración y estilo.
-2. Generar un guion preliminar local.
-3. Revisar y editar el guion.
-4. Marcar explícitamente **Aprobar guion**.
-5. Solo entonces habilitar la exportación de video.
+## Flujo de trabajo
+1. Define el tema y los parámetros narrativos.
+2. MARC solicita a Qwen una biblia/escaleta de continuidad.
+3. Qwen genera los capítulos en orden y MARC conserva un borrador local.
+4. Edita la historia y pulsa **Aprobar guion**.
+5. Solo entonces puedes exportar el MP4.
 
-La aprobación no publica automáticamente nada en redes sociales. La publicación queda fuera del MVP.
+No se publica automáticamente en redes sociales ni se envía el contenido a una nube de IA; las solicitudes del modelo se dirigen al servicio Ollama local.
 
-## Limitaciones del MVP
-- La generación básica de guiones usa plantillas locales; no se presenta como un modelo generativo avanzado.
-- El render inicial usa escenas tipográficas y fondos de color. No incluye todavía generación local de imágenes ni montaje inteligente de material externo.
-- No se ha compilado ni probado un instalador EXE en Windows.
+## Límites actuales
+- El tamaño de las respuestas depende del modelo local. La división por capítulos mejora la continuidad, pero no garantiza exactamente el número de palabras ni la duración final.
+- Cancelar una generación detiene el proceso después de que termine la solicitud actual de Ollama.
+- La exportación crea tarjetas de texto con FFmpeg, sin voz, música ni imágenes generadas. El montaje avanzado y las herramientas de voz son fases posteriores.
+- El código se actualiza en GitHub; para usar estas mejoras en una copia ya descargada hay que actualizar `app.py` y reiniciar la aplicación.
+- El EXE y la instalación limpia aún no se han verificado en esta máquina de desarrollo.
