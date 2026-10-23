@@ -875,7 +875,7 @@ class App(tk.Tk):
             assets_dir.mkdir(parents=True, exist_ok=True)
             text_path = assets_dir / "narration_text.txt"
             script_path = assets_dir / "synthesize_windows_voice.ps1"
-            output_path = assets_dir / "narration.wav"
+            output_path = assets_dir / "narration.pending.wav"
             text_path.write_text(narration, encoding="utf-8")
             script_path.write_text(
                 r"""param(
@@ -987,10 +987,15 @@ Write-Output 'NARRATION_OK'
                     detail = log_path.read_text(encoding="utf-8", errors="replace")[-2200:]
                     raise RuntimeError(detail or f"PowerShell terminó con código {process.returncode}.")
             output = Path(output_path)
+            if self.voice_cancel_event.is_set():
+                self.generation_queue.put(("voice_cancelled",))
+                return
             if not output.is_file() or output.stat().st_size < 44:
                 detail = log_path.read_text(encoding="utf-8", errors="replace")[-2200:]
                 raise RuntimeError(detail or "Windows no creó un WAV válido.")
-            self.generation_queue.put(("voice_done", project_id, str(output.resolve()), voice_name))
+            final_output = output.with_name("narration.wav")
+            output.replace(final_output)
+            self.generation_queue.put(("voice_done", project_id, str(final_output.resolve()), voice_name))
         except Exception as exc:
             self.generation_queue.put(("voice_error", str(exc)))
         finally:
