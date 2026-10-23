@@ -937,7 +937,7 @@ Write-Output 'NARRATION_OK'
             self.export_button, self.delete_button, self.assign_image_button, self.clear_image_button,
             self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
             self.detect_models_button, self.generate_image_button, self.detect_voice_button,
-            self.generate_voice_button
+            self.generate_voice_button, self.export_srt_button
         ):
             button.configure(state=state)
         self.cancel_button.configure(state="disabled")
@@ -1013,6 +1013,43 @@ Write-Output 'NARRATION_OK'
                     Path(output_path).unlink(missing_ok=True)
                 except OSError:
                     pass
+
+    def export_subtitles(self):
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        script = self.script_text.get("1.0", "end-1c")
+        scenes = parse_script_scenes(script)
+        if not scenes:
+            messagebox.showwarning("Sin guion", "Genera o escribe un guion antes de exportar subtítulos.")
+            return
+        try:
+            target_seconds = max(60, int(self.duration_var.get() or "10") * 60)
+        except ValueError:
+            target_seconds = 600
+        durations = allocate_scene_durations(scenes, target_seconds)
+        subtitles = build_srt_subtitles(scenes, durations)
+        if not subtitles:
+            messagebox.showwarning("Sin subtítulos", "No se encontró texto de escena para exportar.")
+            return
+        project_title = (self.title_var.get().strip() or "MARC-Subtitulos").replace("/", "-").replace("\\", "-")
+        path = filedialog.asksaveasfilename(
+            title="Guardar subtítulos SRT",
+            defaultextension=".srt",
+            filetypes=[("Subtítulos SubRip", "*.srt")],
+            initialfile=f"{project_title[:60]}.srt"
+        )
+        if not path:
+            return
+        try:
+            Path(path).write_text(subtitles, encoding="utf-8-sig")
+            self.status_var.set(f"Subtítulos SRT exportados: {path}")
+            messagebox.showinfo(
+                "Subtítulos exportados",
+                f"Se creó el archivo SRT:\n{path}\n\nLos tiempos se reparten por escena según la duración objetivo; revisa la sincronización con la voz antes de publicarlo."
+            )
+        except OSError as exc:
+            messagebox.showerror("No se pudieron guardar los subtítulos", str(exc))
 
     def select_audio_track(self):
         if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
@@ -1163,7 +1200,7 @@ Write-Output 'NARRATION_OK'
                        self.clear_image_button, self.refresh_scenes_button,
                        self.select_audio_button, self.clear_audio_button,
                        self.detect_models_button, self.generate_image_button,
-                       self.detect_voice_button, self.generate_voice_button):
+                       self.detect_voice_button, self.generate_voice_button, self.export_srt_button):
             button.configure(state=state)
         self.cancel_voice_button.configure(state="disabled")
         self.voice_combo.configure(state="disabled" if active else "readonly")
@@ -1455,7 +1492,7 @@ Write-Output 'NARRATION_OK'
         for button in (self.new_project_button, self.assign_image_button, self.clear_image_button,
                        self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
                        self.detect_models_button, self.generate_image_button, self.detect_voice_button,
-                       self.generate_voice_button):
+                       self.generate_voice_button, self.export_srt_button):
             button.configure(state=state)
         self.cancel_voice_button.configure(state="disabled")
         self.image_model_combo.configure(state="disabled" if active else "readonly")
@@ -1988,7 +2025,7 @@ Write-Output 'NARRATION_OK'
                        self.clear_image_button, self.refresh_scenes_button,
                        self.select_audio_button, self.clear_audio_button,
                        self.detect_models_button, self.generate_image_button,
-                       self.detect_voice_button, self.generate_voice_button):
+                       self.detect_voice_button, self.generate_voice_button, self.export_srt_button):
             button.configure(state=state)
         self.cancel_voice_button.configure(state="disabled")
         self.voice_combo.configure(state="disabled" if active else "readonly")
