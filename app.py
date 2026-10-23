@@ -3155,10 +3155,8 @@ Write-Output 'NARRATION_OK'
         if not has_scene_images:
             continue_text_only = messagebox.askyesno(
                 "Faltan imágenes para el vídeo",
-                "El guion está listo, pero ninguna escena tiene una imagen asignada.\n\n"
-                "Si continúas, el MP4 tendrá tarjetas de texto sobre fondos oscuros; "
-                "MARC NO generará ilustraciones automáticamente durante la exportación.\n\n"
-                "Pulsa «No» para volver a ESCENAS y asignar imágenes, o «Sí» para continuar con vídeo de texto."
+                "Ninguna escena tiene una imagen asignada. El MP4 utilizará tarjetas tipográficas sobre fondos oscuros. "
+                "¿Deseas continuar sin ilustraciones?"
             )
             if not continue_text_only:
                 return
@@ -3175,37 +3173,37 @@ Write-Output 'NARRATION_OK'
                 messagebox.showerror("Archivo incorrecto", "Selecciona el archivo ffmpeg.exe.")
                 return
             ffmpeg = selected
-        output = filedialog.asksaveasfilename(
-            title="Guardar vídeo MP4", defaultextension=".mp4",
-            filetypes=[("Vídeo MP4", "*.mp4")],
-            initialfile=f"{row['title'][:40]}.mp4"
-        )
-        if not output:
-            return
-        width, height = PLATFORMS.get(row["platform"], (1280, 720))
-        # Perfil ligero para CPU con pocos hilos o equipos con poca RAM: conserva la proporción.
+        resolution = row["resolution"] or "1080p (Full HD)"
+        fps = max(1, int(row["fps"] or 30))
+        width, height = export_dimensions(row["platform"], resolution)
         pc_info = getattr(self, "pc_info", {})
         try:
             logical_cores = int(pc_info.get("cores") or os.cpu_count() or 2)
             ram_gb = float(pc_info.get("ram_gb") or 8)
         except (TypeError, ValueError):
-            logical_cores, ram_gb = (os.cpu_count() or 2), 8.0
-        if logical_cores <= 4 or ram_gb < 8:
-            max_side = 854
-            scale = min(1.0, max_side / max(width, height))
-            width = max(2, int(width * scale) // 2 * 2)
-            height = max(2, int(height * scale) // 2 * 2)
-            self.status_var.set(
-                f"Perfil ligero activado ({logical_cores} hilos, {ram_gb:g} GB RAM): "
-                f"render a {width}×{height} para reducir la carga del equipo."
+            logical_cores, ram_gb = os.cpu_count() or 2, 8.0
+        if (resolution == "2K / 1440p" or fps >= 60) and (logical_cores <= 4 or ram_gb < 12):
+            warning = (
+                f"Has elegido {resolution}, {width}×{height} a {fps} FPS. "
+                "Este perfil puede tardar considerablemente en este equipo. MARC conservará la resolución seleccionada; "
+                "no la reducirá silenciosamente. ¿Continuar con esta calidad?"
             )
+            if not messagebox.askyesno("Render de alta calidad", warning):
+                return
+        self.status_var.set(f"Salida configurada: {width}×{height} · {fps} FPS · {resolution}.")
+        output = filedialog.asksaveasfilename(
+            title="Guardar vídeo MP4", defaultextension=".mp4",
+            filetypes=[("Vídeo MP4", "*.mp4")],
+            initialfile=f"{row['title'][:36]}-{resolution.split()[0]}.mp4"
+        )
+        if not output:
+            return
         target_seconds = max(60, int(row["duration_minutes"]) * 60)
         durations = allocate_scene_durations(scenes, target_seconds)
         durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
         audio_path = self.audio_track_path if self.audio_track_path and Path(self.audio_track_path).is_file() else ""
         music_path = self.music_track_path if self.music_track_path and Path(self.music_track_path).is_file() else ""
         loop_music = bool(self.loop_music_var.get()) if self.loop_music_var is not None else True
-        # En Windows, la narración se crea automáticamente si no se importó una pista de voz.
         has_any_audio = bool(audio_path or music_path or os.name == "nt")
         render_steps = len(scenes) + 1 + (1 if has_any_audio else 0)
         self.render_cancel_event.clear()
@@ -3213,17 +3211,18 @@ Write-Output 'NARRATION_OK'
         self._set_render_state(True)
         self.progressbar.configure(maximum=render_steps, value=0)
         self.progress_label_var.set(f"Preparando render · {len(scenes)} escenas")
-        self.progress_detail_var.set(f"0% · Duración objetivo: {self._format_eta(sum(durations))}")
-        self.status_var.set("Render iniciado en segundo plano. Puedes seguir viendo el progreso aquí.")
-        # Si no hay pista de voz importada, la narración se generará automáticamente durante la exportación.
-        narration_text = "\\n\\n".join(
+        self.progress_detail_var.set(
+            f"0% · {width}×{height} · {fps} FPS · duración objetivo {self._format_eta(sum(durations))}"
+        )
+        narration_text = "\n\n".join(
             str(scene.get("text", "")).strip() for scene in scenes if str(scene.get("text", "")).strip()
         ).strip() if not audio_path and os.name == "nt" else ""
         chosen_voice = self.voice_var.get().strip() if hasattr(self, "voice_var") else "(Automática)"
+        voice_assignments_json = row["voice_assignments"] or "{}"
         args = (
             ffmpeg, str(Path(output).resolve()), int(row["id"]), width, height,
             scenes, durations, asset_map, row["animation_style"] or "2D fluida",
-            audio_path, music_path, loop_music, narration_text, chosen_voice
+            audio_path, music_path, loop_music, narration_text, chosen_voice, fps, voice_assignments_json
         )
         threading.Thread(target=self._render_video_worker, args=args, daemon=True).start()
 
@@ -3259,7 +3258,8 @@ Write-Output 'NARRATION_OK'
     def _render_video_worker(self, ffmpeg, output, project_id, width, height,
                              scenes, durations, asset_map, animation_style,
                              audio_path="", music_path="", loop_music=True,
-                             narration_text="", chosen_voice="(Automática)"):
+                             narration_text="", chosen_voice="(Automática)", fps=30,
+                             voice_assignments_json="{}"):
         scene_dir = PROJECTS_DIR / str(project_id) / "render_work"
         scene_dir.mkdir(parents=True, exist_ok=True)
         output_path = Path(output)
@@ -3295,19 +3295,246 @@ Write-Output 'NARRATION_OK'
                 narration_text_path = scene_dir / "auto_narration.txt"
                 narration_script_path = scene_dir / "auto_narration.ps1"
                 generated_voice_path = scene_dir / "auto_narration.wav"
+                voice_map_path = scene_dir / "voice_assignments.json"
                 narration_text_path.write_text(narration_text, encoding="utf-8")
-                narration_script_path.write_text(r"""param([string]$TextFile,[string]$OutputFile,[string]$VoiceName)
+                try:
+                    voice_map = json.loads(voice_assignments_json or "{}")
+                except (TypeError, json.JSONDecodeError):
+                    voice_map = {}
+                voice_map_path.write_text(json.dumps(voice_map, ensure_ascii=False), encoding="utf-8")
+                narration_script_path.write_text(r"""param([string]$TextFile,[string]$OutputFile,[string]$VoiceName,[string]$VoiceMapFile)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Speech
 $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$voiceMap = @{}
+if (Test-Path -LiteralPath $VoiceMapFile) {
+  $parsed = Get-Content -LiteralPath $VoiceMapFile -Raw -Encoding UTF8 | ConvertFrom-Json
+  foreach ($property in $parsed.PSObject.Properties) {
+    $voiceMap[$property.Name.ToUpperInvariant()] = [string]$property.Value
+  }
+}
 try {
-  if ($VoiceName -and $VoiceName -ne '(Automática)') { $synth.SelectVoice($VoiceName) }
+  $defaultVoice = $VoiceName
+  if ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
   $synth.Rate = 0
   $synth.Volume = 100
   $text = [System.IO.File]::ReadAllText($TextFile, [System.Text.Encoding]::UTF8)
   if ([string]::IsNullOrWhiteSpace($text)) { throw 'El texto de narración está vacío.' }
   $synth.SetOutputToWaveFile($OutputFile)
-  $synth.Speak($text)
+  foreach ($rawLine in ($text -split '`r?`n')) {
+    $line = $rawLine.Trim()
+    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+    if ($line -match '^\[([^\]]+)\]\s*:\s*(.*)
+if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile).Length -lt 44) {
+  throw 'Windows no generó un archivo WAV válido.'
+}
+""", encoding="utf-8")
+                self.generation_queue.put(("render_progress", 0, len(scenes) + 3, "Generando narración automática con la voz local de Windows…"))
+                ps_args = [
+                    "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                    str(narration_script_path), str(narration_text_path), str(generated_voice_path),
+                    chosen_voice or "(Automática)", str(voice_map_path)
+                ]
+                creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+                try:
+                    result = subprocess.run(ps_args, capture_output=True, text=True, timeout=60 * 60,
+                                            creationflags=creationflags)
+                except subprocess.TimeoutExpired:
+                    raise RuntimeError("La generación automática de voz superó una hora y se detuvo.")
+                if result.returncode != 0 or not generated_voice_path.is_file() or generated_voice_path.stat().st_size < 44:
+                    raise RuntimeError("No se pudo generar la narración automática. Comprueba que Windows tenga una voz instalada. " +
+                                       (result.stderr or result.stdout or "").strip()[-1800:])
+                audio_path = str(generated_voice_path.resolve())
+            total = len(scenes)
+            has_voice = bool(audio_path and Path(audio_path).is_file())
+            has_music = bool(music_path and Path(music_path).is_file())
+            has_audio = has_voice or has_music
+            final_steps = total + 1 + (1 if has_audio else 0)
+            font_size = max(20, min(44, width // 28))
+            elapsed_before_scene = 0
+            chunk_seconds = 5 * 60
+            for index, scene in enumerate(scenes):
+                if self.render_cancel_event.is_set():
+                    raise RuntimeError("__MARC_RENDER_CANCELLED__")
+                seconds = int(durations[index])
+                source_text = " ".join(scene["text"].split()).strip()
+                asset = asset_map.get(str(index + 1), "")
+                asset_signature = None
+                if asset and Path(asset).is_file():
+                    asset_path = Path(asset)
+                    stat = asset_path.stat()
+                    asset_signature = {
+                        "path": str(asset_path.resolve()), "size": stat.st_size,
+                        "mtime_ns": stat.st_mtime_ns
+                    }
+                cache_payload = {
+                    "scene": scene, "duration": seconds, "asset": asset_signature,
+                    "animation": animation_style, "width": width, "height": height,
+                     "fps": int(fps), "preset": "ultrafast", "crf": 25, "version": 3
+                }
+                cache_fingerprint = hashlib.sha256(
+                    json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+                ).hexdigest()
+                scene_file = scene_dir / f"scene_{index + 1:03d}.mp4"
+                cache_file = scene_dir / f"scene_{index + 1:03d}.cache.json"
+                try:
+                    cached = json.loads(cache_file.read_text(encoding="utf-8")) if cache_file.is_file() else {}
+                except (OSError, json.JSONDecodeError):
+                    cached = {}
+                if (scene_file.is_file() and scene_file.stat().st_size > 0
+                        and cached.get("fingerprint") == cache_fingerprint):
+                    elapsed_before_scene += seconds
+                    chunk_number = max(1, math.ceil(elapsed_before_scene / chunk_seconds))
+                    chunk_total = max(1, math.ceil(sum(durations) / chunk_seconds))
+                    self.generation_queue.put((
+                        "render_progress", index + 1, final_steps,
+                        f"Bloque {chunk_number}/{chunk_total} · escena {index + 1}/{total}: reutilizada"
+                    ))
+                    continue
+                sentences = re.split(r"(?<=[.!?…])\s+", source_text)
+                caption = " ".join(sentences[:2]).strip()
+                if len(caption) > 190:
+                    caption = caption[:187].rsplit(" ", 1)[0] + "…"
+                title = scene.get("title", "")
+                if title and not title.lower().startswith("escena "):
+                    body = title + "\n\n" + caption
+                else:
+                    body = caption or title or f"Escena {index + 1}"
+                wrap_width = 27 if height > width else 48
+                wrapped = []
+                for paragraph in body.splitlines():
+                    wrapped.extend(textwrap.wrap(paragraph, width=wrap_width, break_long_words=False) or [""])
+                text_file = scene_dir / f"scene_text_{index + 1:03d}.txt"
+                text_file.write_text("\n".join(wrapped), encoding="utf-8")
+                draw_path = ffmpeg_filter_path(text_file)
+                draw_filter = (
+                    f"drawtext=textfile='{draw_path}':expansion=none:fontcolor=white:"
+                    f"fontsize={font_size}:line_spacing=12:x=(w-text_w)/2:y=(h-text_h)/2:"
+                    "box=1:boxcolor=0x06101d@0.80:boxborderw=28"
+                )
+                if asset and Path(asset).is_file():
+                    motion = scene_motion_filter(animation_style, width, height, seconds)
+                    video_filter = f"{motion},{draw_filter}"
+                    cmd = [
+                        ffmpeg, "-y", "-loop", "1", "-framerate", str(fps), "-i", str(Path(asset).resolve()),
+                        "-t", str(seconds), "-vf", video_filter, "-an", "-r", str(fps),
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
+                        "-crf", "25", "-movflags", "+faststart", str(scene_file)
+                    ]
+                else:
+                    video_filter = (
+                        "drawbox=x=0:y=0:w=iw:h=8:color=0x168bff@0.90:t=fill,"
+                        + draw_filter
+                    )
+                    cmd = [
+                        ffmpeg, "-y", "-f", "lavfi", "-i",
+                        f"color=c=0x0b1320:s={width}x{height}:r={fps}",
+                        "-t", str(seconds), "-vf", video_filter, "-an", "-r", str(fps),
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
+                        "-crf", "25", "-movflags", "+faststart", str(scene_file)
+                    ]
+                run_ffmpeg(cmd, f"scene_{index + 1:03d}.log")
+                cache_file.write_text(
+                    json.dumps({"fingerprint": cache_fingerprint}, ensure_ascii=False),
+                    encoding="utf-8"
+                )
+                elapsed_before_scene += seconds
+                chunk_number = max(1, math.ceil(elapsed_before_scene / chunk_seconds))
+                chunk_total = max(1, math.ceil(sum(durations) / chunk_seconds))
+                self.generation_queue.put((
+                    "render_progress", index + 1, final_steps,
+                    f"Bloque {chunk_number}/{chunk_total} · escena {index + 1}/{total}: {scene.get('title', 'Escena')}"
+                ))
+
+            concat_path = scene_dir / "concat.txt"
+            concat_path.write_text(
+                "".join(f"file 'scene_{i + 1:03d}.mp4'\n" for i in range(total)),
+                encoding="utf-8"
+            )
+            if self.render_cancel_event.is_set():
+                raise RuntimeError("__MARC_RENDER_CANCELLED__")
+            self.generation_queue.put(("render_progress", total + 1, final_steps, "Uniendo escenas y finalizando MP4…"))
+            concat_cmd = [
+                ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", "concat.txt",
+                "-c", "copy", "-movflags", "+faststart", str(temp_output_path)
+            ]
+            run_ffmpeg(concat_cmd, "concat.log", cwd=scene_dir)
+            if not temp_output_path.is_file() or temp_output_path.stat().st_size == 0:
+                raise RuntimeError("FFmpeg terminó, pero no se encontró un archivo MP4 válido.")
+            if has_audio:
+                if self.render_cancel_event.is_set():
+                    raise RuntimeError("__MARC_RENDER_CANCELLED__")
+                audio_video_path = scene_dir / "with_audio.mp4"
+                if audio_video_path.exists():
+                    audio_video_path.unlink()
+                self.generation_queue.put(("render_progress", total + 2, final_steps, "Mezclando narración y música de fondo…"))
+                mux_cmd = [ffmpeg, "-y"]
+                input_index = 0
+                voice_input_index = None
+                music_input_index = None
+                if has_voice:
+                    voice_input_index = input_index
+                    mux_cmd.extend(["-i", str(Path(audio_path).resolve())])
+                    input_index += 1
+                if has_music:
+                    if loop_music:
+                        mux_cmd.extend(["-stream_loop", "-1"])
+                    music_input_index = input_index
+                    mux_cmd.extend(["-i", str(Path(music_path).resolve())])
+                    input_index += 1
+                video_input_index = input_index
+                mux_cmd.extend(["-i", str(temp_output_path)])
+                filter_graph = build_audio_filter_graph(
+                    has_voice, has_music, voice_input_index, music_input_index
+                )
+                mux_cmd.extend([
+                    "-filter_complex", filter_graph,
+                    "-map", f"{video_input_index}:v:0", "-map", "[aout]",
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
+                    "-movflags", "+faststart", str(audio_video_path)
+                ])
+                run_ffmpeg(mux_cmd, "mux_audio.log", cwd=scene_dir)
+                if not audio_video_path.is_file() or audio_video_path.stat().st_size == 0:
+                    raise RuntimeError("FFmpeg no pudo combinar la narración/música con el vídeo.")
+                temp_output_path.unlink()
+                audio_video_path.replace(temp_output_path)
+            temp_output_path.replace(output_path)
+            project_dir = PROJECTS_DIR / str(project_id)
+            (project_dir / "last_export.txt").write_text(str(output_path), encoding="utf-8")
+            self.generation_queue.put(("render_done", str(output_path), total, sum(durations)))
+        except RuntimeError as exc:
+            if "__MARC_RENDER_CANCELLED__" in str(exc):
+                self.generation_queue.put(("render_cancelled",))
+            else:
+                self.generation_queue.put(("render_error", str(exc)))
+        except Exception as exc:
+            self.generation_queue.put(("render_error", str(exc)))
+        finally:
+            try:
+                if temp_output_path.exists():
+                    temp_output_path.unlink()
+            except OSError:
+                pass
+
+
+if __name__ == "__main__":
+    App().mainloop()
+) {
+      $speaker = $matches[1].Trim().ToUpperInvariant()
+      $spoken = $matches[2].Trim()
+      if ($voiceMap.ContainsKey($speaker)) {
+        $assigned = $voiceMap[$speaker]
+        if ($assigned -and $assigned -ne '(Voz principal)') { $synth.SelectVoice($assigned) }
+        elseif ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+      } elseif ($defaultVoice -and $defaultVoice -ne '(Automática)') {
+        $synth.SelectVoice($defaultVoice)
+      }
+    } else {
+      $spoken = $line
+      if ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+    }
+    if (![string]::IsNullOrWhiteSpace($spoken)) { $synth.Speak($spoken) }
+  }
   $synth.SetOutputToNull()
 } finally { $synth.Dispose() }
 if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile).Length -lt 44) {
