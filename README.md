@@ -27,7 +27,7 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 - Tabla de escenas con título, palabras, duración asignada y recurso visual.
 - Asignación de imágenes propias a las escenas.
 - Integración opcional con ComfyUI local en `http://127.0.0.1:8188` para generar una imagen fija por escena.
-- Render MP4 en segundo plano, con barra de progreso y cancelación. Las escenas terminadas se guardan como puntos de recuperación y se reutilizan si el contenido, la duración, la imagen o la resolución no han cambiado. El progreso informa de bloques aproximados de 5 minutos. En equipos con 4 hilos lógicos o menos de 8 GB de RAM, se activa un perfil de render de menor resolución para reducir la carga. Imágenes asignadas reciben movimiento sencillo de cámara; las escenas sin imágenes se renderizan como tarjetas de texto.
+- Render MP4 en segundo plano, con barra de progreso y cancelación. Las escenas terminadas se guardan como puntos de recuperación y se reutilizan si el contenido, la duración, la imagen o la resolución no han cambiado. El progreso informa de bloques aproximados de 5 minutos. Los perfiles exigentes pueden tardar considerablemente en equipos antiguos; MARC avisa antes de exportar y respeta la resolución elegida. Imágenes asignadas reciben movimiento sencillo de cámara; las escenas sin imágenes se renderizan como tarjetas de texto.
 - Pestaña de audio con pistas separadas de narración y música; generación de voz offline con Windows System.Speech, mezcla de ambas pistas con volumen de música reducido y repetición opcional de la música. Incluye la acción «Añadir audio al último vídeo» para aplicar narración y/o música a un MP4 ya exportado sin volver a renderizar las escenas.
 - Aprobación humana obligatoria antes de exportar; modificar el guion invalida la aprobación.
 - Búsqueda y selección manual de FFmpeg.
@@ -69,10 +69,10 @@ Ollama, sus modelos, ComfyUI/checkpoints y FFmpeg no se incluyen en el instalado
 7. Exporta MP4 y abre el resultado desde la pestaña **Vista previa**.
 
 ## Límites importantes
-- La integración de ComfyUI genera **imágenes fijas**, no vídeo neuronal completo. El render aplica movimiento de cámara sencillo a imágenes y tarjetas tipográficas donde no haya recursos.
+- La integración de ComfyUI genera **imágenes fijas**, no vídeo neuronal completo. Los prompts de ilustración incluyen referencias de la biblia narrativa para ayudar a mantener la apariencia y los escenarios; el modelo local no puede garantizar identidad visual perfecta. El render aplica movimiento de cámara sencillo a imágenes y tarjetas tipográficas donde no haya recursos.
 - La voz local usa las voces SAPI que tenga Windows instaladas; puede necesitar que instales una voz española desde la configuración de idioma/voz. No es una voz neuronal de alta calidad y el resultado varía según la voz disponible. Las voces por personaje requieren que el guion tenga etiquetas de hablante y que estén instaladas las voces elegidas. La música de fondo se mezcla a menor volumen que la narración; revisa el balance auditivo antes de publicar.
 - La biblia narrativa es memoria estructurada basada en el contenido generado y guardado; no garantiza continuidad perfecta. La IA puede cometer errores, así que revisa nombres, cronología y hechos antes de aprobar cada episodio.
 - El perfil 2K/1440p a 60 FPS puede ser lento en equipos antiguos. Seleccionar 2K no mejora las imágenes de origen, no genera ilustraciones por sí solo y no convierte imágenes fijas en vídeo neuronal.
 - La estimación de tiempo es orientativa; ComfyUI depende mucho del checkpoint y del hardware y puede tardar mucho o no funcionar en GPUs antiguas.
-- La vista previa abre el archivo MP4 en el reproductor predeterminado del sistema, no dentro de una superficie de reproducción integrada.
+- La reproducción integrada utiliza VLC Media Player instalado en el equipo junto con el envoltorio `python-vlc` incluido en el paquete. Si libVLC no está disponible, MARC ofrece abrir el MP4 en el reproductor externo del sistema. La vista de storyboard sigue siendo distinta del reproductor de vídeo.
 - La validación de CI no sustituye las pruebas del programa gráfico, generación local y exportación sobre el PC real.
