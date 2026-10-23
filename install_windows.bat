@@ -12,37 +12,55 @@ echo.
 set "PYEXE="
 set "PYARGS="
 
-rem Prefer supported Python runtimes installed through the Windows launcher.
+rem Test each runtime explicitly; do not rely on py --version error handling.
 where py >nul 2>nul
 if not errorlevel 1 (
-  py -3.13 --version >nul 2>nul
-  if not errorlevel 1 (set "PYEXE=py"& set "PYARGS=-3.13"& goto python_found)
-  py -3.12 --version >nul 2>nul
-  if not errorlevel 1 (set "PYEXE=py"& set "PYARGS=-3.12"& goto python_found)
-  py -3.11 --version >nul 2>nul
-  if not errorlevel 1 (set "PYEXE=py"& set "PYARGS=-3.11"& goto python_found)
+  py -3.13 -c "import sys" >nul 2>nul
+  if not errorlevel 1 goto use_py313
+  py -3.12 -c "import sys" >nul 2>nul
+  if not errorlevel 1 goto use_py312
+  py -3.11 -c "import sys" >nul 2>nul
+  if not errorlevel 1 goto use_py311
 )
 
-rem If Python was installed directly, use it rather than failing on a missing py runtime.
+rem Fallback to python.exe on PATH.
 where python >nul 2>nul
 if not errorlevel 1 (
-  python --version >nul 2>nul
-  if not errorlevel 1 (set "PYEXE=python"& set "PYARGS="& goto python_found)
+  python -c "import sys" >nul 2>nul
+  if not errorlevel 1 goto use_python
 )
 
-echo [ERROR] No se encontro una instalacion funcional de Python.
+echo [ERROR] No se encontro una instalacion funcional de Python 3.11, 3.12 o 3.13.
 echo.
 echo Instala Python 3.12 de 64 bits desde:
-echo https://www.python.org/downloads/windows/
+echo https://www.python.org/downloads/release/python-31210/
 echo Durante la instalacion marca "Add python.exe to PATH".
-echo Luego cierra esta ventana, abre una nueva y ejecuta este archivo otra vez.
+echo Luego cierra esta ventana y ejecuta este archivo de nuevo.
 echo.
 pause
 exit /b 1
 
+:use_py313
+set "PYEXE=py"
+set "PYARGS=-3.13"
+goto python_found
+:use_py312
+set "PYEXE=py"
+set "PYARGS=-3.12"
+goto python_found
+:use_py311
+set "PYEXE=py"
+set "PYARGS=-3.11"
+goto python_found
+:use_python
+set "PYEXE=python"
+set "PYARGS="
+goto python_found
+
 :python_found
 echo [OK] Python detectado:
 %PYEXE% %PYARGS% --version
+if errorlevel 1 goto no_runtime
 echo.
 echo [1/4] Preparando entorno virtual...
 if not exist ".venv\Scripts\python.exe" (
@@ -81,11 +99,16 @@ echo ============================================================
 pause
 exit /b 0
 
+:no_runtime
+echo [ERROR] El lanzador de Python no pudo abrir el runtime elegido.
+pause
+exit /b 1
+
 :venv_error
 echo.
 echo [ERROR] Python se detecto, pero no se pudo crear .venv.
-echo Comprueba que Python tenga el modulo venv y que tengas permisos de escritura.
-echo Si existe una carpeta .venv incompleta, renombrala a .venv_backup y vuelve a ejecutar.
+echo Comprueba que Python tenga el modulo venv y permisos de escritura.
+echo Si .venv esta incompleta, renombrala a .venv_backup y vuelve a ejecutar.
 pause
 exit /b 1
 
