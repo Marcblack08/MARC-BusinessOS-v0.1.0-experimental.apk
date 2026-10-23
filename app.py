@@ -151,14 +151,22 @@ class App(tk.Tk):
         ttk.Entry(parent, textvariable=variable).grid(row=row, column=1, sticky="ew", pady=4)
 
     def new_project(self):
+        if self.generation_running:
+            messagebox.showinfo("Generación en curso", "Espera o cancela la generación actual antes de crear otro proyecto.")
+            return
         self.current_id = None
         self.title_var.set("")
         self.topic_var.set("")
         self.platform_var.set(list(PLATFORMS)[0])
-        self.duration_var.set("3")
-        self.style_var.set("Educativo y directo")
+        self.duration_var.set("10")
+        self.style_var.set("Reencarnación y venganza")
+        self.protagonist_var.set("")
+        self.conflict_var.set("")
+        self.tone_var.set("Dramático e intenso")
+        self.narrator_var.set("Tercera persona")
+        self.ending_var.set("Justicia y superación")
         self.script_text.delete("1.0", "end")
-        self.status_var.set("Proyecto nuevo sin guardar. Completa el nombre y el tema.")
+        self.status_var.set("Proyecto nuevo. Define la premisa y los parámetros narrativos.")
 
     def get_form(self):
         title = self.title_var.get().strip()
@@ -168,87 +176,265 @@ class App(tk.Tk):
         except ValueError:
             duration = 0
         if not title or not topic:
-            messagebox.showwarning("Faltan datos", "Completa el nombre del proyecto y el tema.")
+            messagebox.showwarning("Faltan datos", "Completa el nombre del proyecto y la idea o premisa.")
             return None
         if duration < 1 or duration > 120:
             messagebox.showwarning("Duración no válida", "La duración debe estar entre 1 y 120 minutos.")
             return None
-        return title, topic, self.platform_var.get(), duration, self.style_var.get()
+        if len(topic) > 3000:
+            messagebox.showwarning("Premisa demasiado larga", "Resume la premisa en un máximo de 3000 caracteres.")
+            return None
+        return {
+            "title": title, "topic": topic, "platform": self.platform_var.get(),
+            "duration": duration, "genre": self.style_var.get(),
+            "protagonist": self.protagonist_var.get().strip(),
+            "conflict": self.conflict_var.get().strip(),
+            "tone": self.tone_var.get(), "narrator": self.narrator_var.get(),
+            "ending": self.ending_var.get()
+        }
+
+    def _ollama_request(self, prompt, max_tokens=700):
+        payload = json.dumps({
+            "model": "qwen2.5:3b",
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": 0.82,
+                "top_p": 0.92,
+                "repeat_penalty": 1.10,
+                "num_ctx": 8192,
+                "num_predict": max_tokens
+            }
+        }).encode("utf-8")
+        request = urllib.request.Request(
+            "http://127.0.0.1:11434/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(request, timeout=900) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        answer = result.get("response", "").strip()
+        if not answer:
+            raise RuntimeError("Ollama respondió sin texto. Comprueba que Qwen esté instalado.")
+        return answer
 
     def generate_script(self):
         data = self.get_form()
         if not data:
             return
-        title, topic, platform, minutes, style = data
-        prompt = (
-            "Eres un guionista experto de historias para YouTube. Responde en español natural. "
-            "Crea una historia original, no una lista de consejos ni un resumen. "
-            "Desarrolla personajes con nombres, motivaciones, defectos, relaciones y evolución. "
-            "Incluye escenas con diálogos, conflicto creciente, giros coherentes, consecuencias emocionales "
-            "y un desenlace satisfactorio. No repitas ideas para rellenar. "
-            f"Proyecto: {title}. Premisa/tema: {topic}. Formato: {platform}. "
-            f"Duración solicitada: {minutes} minutos. Estilo seleccionado: {style}. "
-            f"Escribe aproximadamente {minutes * 130} a {minutes * 150} palabras, "
-            "organizadas en escenas con indicaciones visuales breves y narración lista para locución. "
-            "Si la extensión supera tu capacidad de respuesta, entrega la primera parte y señala claramente "
-            "dónde continuar, sin fingir que completaste toda la duración."
-        )
-        payload = json.dumps({
-            "model": "qwen2.5:3b", "prompt": prompt, "stream": False,
-            "options": {"temperature": 0.85, "num_ctx": 8192}
-        }).encode("utf-8")
-        request = urllib.request.Request(
-            "http://127.0.0.1:11434/api/generate", data=payload,
-            headers={"Content-Type": "application/json"}, method="POST"
-        )
-        self.status_var.set("Consultando Qwen local… la generación puede tardar.")
-        self.update_idletasks()
-        try:
-            with urllib.request.urlopen(request, timeout=900) as response:
-                result = json.loads(response.read().decode("utf-8"))
-            answer = result.get("response", "").strip()
-            if not answer:
-                raise RuntimeError("Ollama devolvió una respuesta vacía.")
-        except Exception as exc:
-            messagebox.showerror(
-                "No se pudo generar con IA",
-                "No se pudo consultar Ollama en http://127.0.0.1:11434. "
-                "Comprueba que Ollama esté abierto y ejecuta «ollama list» en PowerShell.\n\n"
-                f"Detalle: {exc}"
-            )
-            self.status_var.set("Error de conexión o generación. No se ha aprobado el guion.")
+        if self.generation_running:
+            messagebox.showinfo("Generación en curso", "Ya hay una generación en proceso.")
             return
-        script = (
-            f"TÍTULO: {title}\nESTILO: {style}\nDURACIÓN OBJETIVO: {minutes} minuto(s)\n"
-            "GENERADO POR: Qwen 2.5 3B local\n\n" + answer +
-            "\n\nNOTA: Revisa la historia, continuidad, datos y derechos de uso antes de aprobar."
-        )
-        self.script_text.delete("1.0", "end")
-        self.script_text.insert("1.0", script)
-        self.status_var.set("Borrador generado por Qwen local. Revísalo y apruébalo manualmente.")
+        minutes = data["duration"]
+        chapter_count = max(1, math.ceil((minutes * 135) / 360))
+        if minutes >= 45:
+            confirm = messagebox.askyesno(
+                "Guion largo",
+                f"Un guion de {minutes} minutos puede necesitar {chapter_count} capítulos generados por separado "
+                "y tardar bastante con Qwen 2.5 3B en tu equipo.\n\n¿Deseas continuar?"
+            )
+            if not confirm:
+                return
         self.save_project(reset_approval=True, quiet=True)
+        self.cancel_event.clear()
+        self.generation_running = True
+        self.generate_button.configure(state="disabled")
+        self.cancel_button.configure(state="normal")
+        self.script_text.delete("1.0", "end")
+        self.script_text.insert("1.0",
+            f"TÍTULO: {data['title']}\nGÉNERO: {data['genre']}\nDURACIÓN OBJETIVO: {minutes} minuto(s)\n"
+            "MODELO: Qwen 2.5 3B · ejecución local\n\n")
+        self.status_var.set(f"Preparando estructura de historia y {chapter_count} capítulo(s)…")
+        worker = threading.Thread(target=self._generation_worker, args=(data, chapter_count), daemon=True)
+        worker.start()
+
+    def cancel_generation(self):
+        if self.generation_running:
+            self.cancel_event.set()
+            self.status_var.set("Cancelación solicitada. Se guardará el borrador parcial sin aprobar.")
+
+    def _generation_worker(self, data, chapter_count):
+        try:
+            if self.cancel_event.is_set():
+                self.generation_queue.put(("cancelled",))
+                return
+            self.generation_queue.put(("status", "Qwen está diseñando la biblia de personajes y la trama…"))
+            protagonist = data["protagonist"] or "crea un protagonista original con nombre memorable"
+            conflict = data["conflict"] or "crea un conflicto personal y externo con consecuencias claras"
+            plan_prompt = (
+                "Eres director de guion de una novela serializada para videos. Escribe en español. "
+                "Crea una biblia breve de continuidad y una escaleta por capítulos. Incluye: premisa, "
+                "protagonistas y antagonistas con nombres, objetivos, defectos, relaciones y secretos; "
+                "reglas del mundo; conflicto central; evolución emocional; giros y consecuencias; y "
+                "desenlace acorde a lo pedido. No escribas consejos genéricos: diseña una ficción concreta. "
+                f"Género: {data['genre']}. Premisa: {data['topic']}. Protagonista: {protagonist}. "
+                f"Conflicto: {conflict}. Tono: {data['tone']}. Narrador: {data['narrator']}. "
+                f"Desenlace: {data['ending']}. Audiencia general de YouTube. Duración: {data['duration']} min. "
+                f"Propón exactamente {chapter_count} capítulos y resume cada uno en 1-2 frases. "
+                "No afirmes que esta escaleta es el guion final."
+            )
+            plan = self._ollama_request(plan_prompt, max_tokens=min(1000, 350 + chapter_count * 24))
+            self.generation_queue.put(("status", "Estructura preparada. Escribiendo los capítulos en orden…"))
+            previous_excerpt = ""
+            completed = 0
+            words_per_chapter = max(150, round(data["duration"] * 135 / chapter_count))
+            for index in range(1, chapter_count + 1):
+                if self.cancel_event.is_set():
+                    self.generation_queue.put(("cancelled",))
+                    return
+                self.generation_queue.put(("status", f"Escribiendo capítulo {index} de {chapter_count}…"))
+                prompt = (
+                    "Eres novelista y guionista. Continúa la historia indicada y escribe SOLO el capítulo solicitado, "
+                    "en español natural, con escenas concretas, acción, diálogo y emociones mostradas mediante "
+                    "acciones. Evita resúmenes, consejos al público, frases repetidas y relleno. Conserva nombres, "
+                    "motivaciones, relaciones, heridas, secretos, cronología y reglas de la historia. No vuelvas a "
+                    "presentar personajes ya conocidos como si fueran nuevos. Termina este capítulo con un cambio "
+                    "o una pregunta dramática que impulse el siguiente, salvo que sea el desenlace final. "
+                    f"Género: {data['genre']}. Premisa: {data['topic']}. Tono: {data['tone']}. "
+                    f"Voz narrativa: {data['narrator']}. Protagonista: {protagonist}. Conflicto: {conflict}. "
+                    f"Desenlace planificado: {data['ending']}. Plataforma: {data['platform']}. "
+                    f"Duración objetivo total: {data['duration']} minutos. Capítulo {index} de {chapter_count}. "
+                    f"Objetivo: aproximadamente {words_per_chapter} palabras de narración y diálogos; desarrolla "
+                    "la escena completa, no la resumas.\n\nBIBLIA Y ESCALETA DE CONTINUIDAD:\n" + plan +
+                    (("\n\nFINAL DEL CAPÍTULO ANTERIOR (para continuidad):\n" + previous_excerpt)
+                     if previous_excerpt else "\n\nEste es el inicio de la historia; presenta el gancho y al protagonista.")
+                )
+                token_budget = max(420, min(1300, int(words_per_chapter * 1.8) + 120))
+                chapter = self._ollama_request(prompt, max_tokens=token_budget)
+                heading = f"\n\n[CAPÍTULO {index:02d} DE {chapter_count:02d}]\n"
+                self.generation_queue.put(("chapter", heading + chapter.strip() + "\n", index, chapter_count))
+                previous_excerpt = chapter[-2200:]
+                completed += 1
+            self.generation_queue.put(("done", completed))
+        except Exception as exc:
+            self.generation_queue.put(("error", str(exc)))
 
     def save_project(self, reset_approval=False, quiet=False):
         data = self.get_form()
         if not data:
             return
-        title, topic, platform, duration, style = data
         script = self.script_text.get("1.0", "end-1c")
-        approved = 0 if reset_approval else self._existing_approval()
         now = datetime.now().isoformat(timespec="seconds")
+        record = {
+            "title": data["title"], "topic": data["topic"], "platform": data["platform"],
+            "duration_minutes": data["duration"], "style": data["genre"], "script": script,
+            "protagonist": data["protagonist"], "conflict": data["conflict"], "tone": data["tone"],
+            "narrator": data["narrator"], "ending": data["ending"]
+        }
+        previous = None
+        if self.current_id is not None:
+            previous = self.conn.execute("SELECT * FROM projects WHERE id=?", (self.current_id,)).fetchone()
+        changed = previous is None or any(str(previous[key] or "") != str(value or "")
+                                          for key, value in record.items())
+        approved = 0 if reset_approval or changed else int(previous["approved"])
         if self.current_id is None:
             cur = self.conn.execute(
-                "INSERT INTO projects(title,topic,platform,duration_minutes,style,script,approved,created_at) VALUES(?,?,?,?,?,?,?,?)",
-                (title, topic, platform, duration, style, script, approved, now))
+                "INSERT INTO projects(title,topic,platform,duration_minutes,style,script,approved,created_at,"
+                "protagonist,conflict,tone,narrator,ending) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (record["title"], record["topic"], record["platform"], record["duration_minutes"],
+                 record["style"], record["script"], approved, now, record["protagonist"],
+                 record["conflict"], record["tone"], record["narrator"], record["ending"]))
             self.current_id = cur.lastrowid
         else:
             self.conn.execute(
-                "UPDATE projects SET title=?,topic=?,platform=?,duration_minutes=?,style=?,script=?,approved=?,created_at=? WHERE id=?",
-                (title, topic, platform, duration, style, script, approved, now, self.current_id))
+                "UPDATE projects SET title=?,topic=?,platform=?,duration_minutes=?,style=?,script=?,approved=?,created_at=?,"
+                "protagonist=?,conflict=?,tone=?,narrator=?,ending=? WHERE id=?",
+                (record["title"], record["topic"], record["platform"], record["duration_minutes"],
+                 record["style"], record["script"], approved, now, record["protagonist"],
+                 record["conflict"], record["tone"], record["narrator"], record["ending"], self.current_id))
         self.conn.commit()
         self.refresh_projects()
         if not quiet:
-            self.status_var.set("Proyecto guardado. " + ("Guion aprobado." if approved else "Guion pendiente de aprobación."))
+            self.status_var.set("Proyecto guardado. " + ("Guion aprobado." if approved else "Pendiente de revisión y aprobación."))
+
+    def _refresh_ai_status(self):
+        try:
+            request = urllib.request.Request("http://127.0.0.1:11434/api/tags", headers={"Accept": "application/json"})
+            with urllib.request.urlopen(request, timeout=2) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            model_names = [item.get("name", "") for item in result.get("models", [])]
+            self.ai_available = any(name.startswith("qwen2.5:3b") for name in model_names)
+            if self.ai_available:
+                self.ai_badge.configure(text="● IA LOCAL · QWEN 2.5 3B LISTA", fg=self.colors["success"])
+            elif model_names:
+                self.ai_badge.configure(text="● OLLAMA ACTIVO · QWEN NO ENCONTRADO", fg=self.colors["warning"])
+            else:
+                self.ai_badge.configure(text="● OLLAMA ACTIVO · SIN MODELOS", fg=self.colors["warning"])
+        except Exception:
+            self.ai_available = False
+            self.ai_badge.configure(text="● IA LOCAL DESCONECTADA", fg=self.colors["danger"])
+
+    def _find_ffmpeg(self):
+        found = shutil.which("ffmpeg") or os.environ.get("MARC_FFMPEG", "")
+        if found and Path(found).is_file():
+            return str(Path(found))
+        candidates = [
+            ROOT / "ffmpeg" / "bin" / "ffmpeg.exe",
+            ROOT / "tools" / "ffmpeg" / "bin" / "ffmpeg.exe",
+        ]
+        for drive in ("C:", "D:", "E:", "F:", "G:"):
+            for pattern in ("ffmpeg-*/bin/ffmpeg.exe", "ffmpeg*/bin/ffmpeg.exe"):
+                try:
+                    candidates.extend(Path(drive + "/").glob(pattern))
+                except OSError:
+                    pass
+        for candidate in candidates:
+            try:
+                if candidate.is_file():
+                    os.environ["PATH"] = str(candidate.parent) + os.pathsep + os.environ.get("PATH", "")
+                    return str(candidate)
+            except OSError:
+                continue
+        return ""
+
+    def check_tools(self):
+        self._refresh_ai_status()
+        ffmpeg = self._find_ffmpeg()
+        if ffmpeg:
+            self.ffmpeg_badge.configure(text="● FFMPEG · DISPONIBLE", fg=self.colors["success"])
+        else:
+            self.ffmpeg_badge.configure(text="● FFMPEG · NO ENCONTRADO", fg=self.colors["danger"])
+        self.status_var.set("Comprobación completada. " +
+                            ("Qwen y FFmpeg están disponibles." if self.ai_available and ffmpeg else
+                             "Revisa los indicadores de IA y FFmpeg en la parte superior."))
+
+    def _poll_generation_events(self):
+        try:
+            while True:
+                event = self.generation_queue.get_nowait()
+                kind = event[0]
+                if kind == "status":
+                    self.status_var.set(event[1])
+                elif kind == "chapter":
+                    self.script_text.insert("end", event[1])
+                    self.script_text.see("end")
+                    self.update_idletasks()
+                    self.status_var.set(f"Capítulo {event[2]} de {event[3]} terminado. Guardando borrador…")
+                    self.save_project(reset_approval=True, quiet=True)
+                elif kind == "done":
+                    self.script_text.insert("end", "\n\n[REVISIÓN HUMANA PENDIENTE]\nRevisa continuidad, nombres, ritmo y duración. El guion no está aprobado.")
+                    self.save_project(reset_approval=True, quiet=True)
+                    self.status_var.set(f"Generación terminada: {event[1]} capítulo(s). Revisa el borrador y apruébalo manualmente.")
+                    self.generation_running = False
+                    self.generate_button.configure(state="normal")
+                    self.cancel_button.configure(state="disabled")
+                elif kind == "cancelled":
+                    self.save_project(reset_approval=True, quiet=True)
+                    self.status_var.set("Generación cancelada. El borrador parcial se conservó sin aprobar.")
+                    self.generation_running = False
+                    self.generate_button.configure(state="normal")
+                    self.cancel_button.configure(state="disabled")
+                elif kind == "error":
+                    self.save_project(reset_approval=True, quiet=True)
+                    messagebox.showerror("Error de generación", "La IA local no pudo completar el guion.\n\n" + event[1])
+                    self.status_var.set("La generación se detuvo. El borrador parcial se conserva sin aprobar.")
+                    self.generation_running = False
+                    self.generate_button.configure(state="normal")
+                    self.cancel_button.configure(state="disabled")
+        except queue.Empty:
+            pass
+        self.after(180, self._poll_generation_events)
 
     def _existing_approval(self):
         if self.current_id is None:
@@ -274,7 +460,7 @@ class App(tk.Tk):
         self.project_list.delete(0, "end")
         for row in rows:
             mark = "✓" if row["approved"] else "•"
-            self.project_list.insert("end", f"{mark} {row['title']}  [#{row['id']}]")
+            self.project_list.insert("end", f"{mark}  {row['title']}  · #{row['id']}")
 
     def load_selected(self, _event=None):
         selection = self.project_list.curselection()
@@ -290,9 +476,14 @@ class App(tk.Tk):
         self.platform_var.set(project["platform"])
         self.duration_var.set(str(project["duration_minutes"]))
         self.style_var.set(project["style"])
+        self.protagonist_var.set(project["protagonist"] or "")
+        self.conflict_var.set(project["conflict"] or "")
+        self.tone_var.set(project["tone"] or "Dramático e intenso")
+        self.narrator_var.set(project["narrator"] or "Tercera persona")
+        self.ending_var.set(project["ending"] or "Justicia y superación")
         self.script_text.delete("1.0", "end")
         self.script_text.insert("1.0", project["script"])
-        self.status_var.set("Guion aprobado." if project["approved"] else "Guion pendiente de aprobación.")
+        self.status_var.set("Este proyecto está aprobado." if project["approved"] else "Proyecto cargado. Guion pendiente de aprobación.")
 
     def delete_project(self):
         if self.current_id is None:
