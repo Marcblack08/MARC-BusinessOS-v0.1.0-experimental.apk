@@ -65,32 +65,12 @@ def db_connect():
     conn.commit()
     return conn
 
-def draft_script(title: str, topic: str, minutes: int, style: str) -> str:
-    # Generador local determinista para el MVP. No usa red ni API.
-    sections = [
-        ("GANCHO", f"¿Sabías esto sobre {topic}? En este video vamos a descubrirlo de forma clara y práctica."),
-        ("INTRODUCCIÓN", f"Bienvenido. Hoy hablaremos de {topic}. La idea es explicar lo esencial y dejarte recomendaciones que puedas aplicar."),
-        ("PUNTO 1", f"Primero, entiende el contexto de {topic}. Antes de tomar decisiones, identifica el objetivo, los recursos disponibles y los errores más comunes."),
-        ("PUNTO 2", f"Segundo, ve paso a paso. Divide {topic} en acciones pequeñas, comprueba cada resultado y evita dar por hecho información que todavía no has verificado."),
-        ("PUNTO 3", f"Tercero, revisa la calidad. Compara alternativas, verifica los datos importantes y adapta las recomendaciones a tu situación."),
-        ("RESUMEN", f"En resumen: comprende el objetivo de {topic}, avanza por etapas y valida el resultado antes de darlo por terminado."),
-        ("CIERRE", "Si este contenido te resultó útil, comenta qué tema te gustaría ver después y comparte el video con quien pueda necesitarlo.")
-    ]
-    lines = [f"TÍTULO: {title}", f"ESTILO: {style}", f"DURACIÓN OBJETIVO: {minutes} minuto(s)", ""]
-    for heading, body in sections:
-        lines.extend([f"[{heading}]", body, ""])
-    lines.append("NOTA DE PRODUCCIÓN: Este guion es un borrador generado mediante plantillas locales. Revisa hechos, cifras, derechos de autor y adecuación al público antes de aprobarlo.")
-    return "\n".join(lines)
-
-def escape_drawtext(value: str) -> str:
-    return value.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("%", "\\%").replace(",", "\\,")
-
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_NAME)
-        self.geometry("1280x860")
-        self.minsize(1020, 700)
+        self.geometry("1180x720")
+        self.minsize(960, 630)
         self.conn = db_connect()
         self.current_id = None
         self.ai_available = False
@@ -567,7 +547,14 @@ class App(tk.Tk):
                     self.save_project(reset_approval=True, quiet=True)
                     self.generation_running = False
                     self._set_generation_state(False)
-                    self.status_var.set(f"Generación terminada: {event[1]} capítulo(s). Revisa el borrador y apruébalo manualmente.")
+                    words = len(self.script_text.get("1.0", "end-1c").split())
+                    approx_minutes = words / 135
+                    target_minutes = int(self.duration_var.get() or "1")
+                    self.status_var.set(
+                        f"Generación terminada: {event[1]} capítulo(s), {words} palabras "
+                        f"(aprox. {approx_minutes:.1f} min a 135 palabras/min; objetivo {target_minutes} min). "
+                        "Revisa el borrador antes de aprobarlo."
+                    )
                 elif kind == "cancelled":
                     self.script_text.configure(state="normal")
                     self.save_project(reset_approval=True, quiet=True)
