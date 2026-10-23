@@ -15,6 +15,12 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 - Edición básica de montaje: mover el clip seleccionado una posición a izquierda/derecha, editar la duración de cada escena (5–3600 segundos) y conservar duraciones e imágenes asignadas en los recursos del proyecto. Estos cambios invalidan la aprobación del guion y requieren volver a aprobar antes de exportar.
 - El monitor todavía no reproduce el montaje en tiempo real; el cabezal sirve para navegar y seleccionar escenas.
 - Género, premisa, protagonistas, conflicto, tono, narrador, desenlace, plataforma, duración, estilo de dibujo y animación.
+- Modos de producción **Corto (2 minutos)** y **Novela / Serie**. El modo corto fija un objetivo de 2 minutos y ajusta la cantidad de texto; la duración real depende de la voz, las pausas y el ritmo.
+- Perfil de salida por proyecto: **720p HD, 1080p Full HD o 2K/1440p**, formatos horizontal 16:9, vertical 9:16 y cuadrado 1:1, y 24/25/30/60 FPS. La aplicación muestra una advertencia para perfiles exigentes y no reduce silenciosamente la resolución elegida.
+- Biblia narrativa y continuidad por proyecto: personajes, relaciones, escenarios, canon, estado del episodio y tramas pendientes se guardan en SQLite. La acción **Continuar historia** crea un episodio vinculado que reutiliza la biblia y el estado más reciente.
+- Guiones con gancho dramático y etiquetas de hablante como `[NARRADOR]:` y `[JUAN]:`; el texto se organiza por escena para permitir voces distintas sin convertir cada línea hablada en un clip visual independiente.
+- Asignación de voces por personaje a las voces SAPI que estén instaladas en Windows. La generación automática/manual de narración puede cambiar la voz por etiqueta; las voces y su expresividad dependen del sistema instalado.
+- Revisión narrativa preventiva antes de aprobar: avisa de algunos posibles inicios genéricos o borradores cortos. Son heurísticas y no sustituyen una revisión humana ni prueban por sí solas la ausencia de contradicciones.
 - Generación de historias en capítulos de aproximadamente 5 minutos con Ollama/Qwen 2.5 3B local, en segundo plano y con cancelación entre solicitudes. Los proyectos admiten de 1 a 120 minutos; los guiones largos se dividen en partes para reducir solicitudes enormes.
 - Detección del equipo y estimación inicial de tiempos.
 - Persistencia local en SQLite con migraciones para bases existentes.
@@ -64,7 +70,9 @@ Ollama, sus modelos, ComfyUI/checkpoints y FFmpeg no se incluyen en el instalado
 
 ## Límites importantes
 - La integración de ComfyUI genera **imágenes fijas**, no vídeo neuronal completo. El render aplica movimiento de cámara sencillo a imágenes y tarjetas tipográficas donde no haya recursos.
-- La voz local usa las voces SAPI que tenga Windows instaladas; puede necesitar que instales una voz española desde la configuración de idioma/voz. No es una voz neuronal de alta calidad y el resultado varía según la voz disponible. La música de fondo se mezcla a menor volumen que la narración; revisa el balance auditivo antes de publicar.
+- La voz local usa las voces SAPI que tenga Windows instaladas; puede necesitar que instales una voz española desde la configuración de idioma/voz. No es una voz neuronal de alta calidad y el resultado varía según la voz disponible. Las voces por personaje requieren que el guion tenga etiquetas de hablante y que estén instaladas las voces elegidas. La música de fondo se mezcla a menor volumen que la narración; revisa el balance auditivo antes de publicar.
+- La biblia narrativa es memoria estructurada basada en el contenido generado y guardado; no garantiza continuidad perfecta. La IA puede cometer errores, así que revisa nombres, cronología y hechos antes de aprobar cada episodio.
+- El perfil 2K/1440p a 60 FPS puede ser lento en equipos antiguos. Seleccionar 2K no mejora las imágenes de origen, no genera ilustraciones por sí solo y no convierte imágenes fijas en vídeo neuronal.
 - La estimación de tiempo es orientativa; ComfyUI depende mucho del checkpoint y del hardware y puede tardar mucho o no funcionar en GPUs antiguas.
 - La vista previa abre el archivo MP4 en el reproductor predeterminado del sistema, no dentro de una superficie de reproducción integrada.
 - La validación de CI no sustituye las pruebas del programa gráfico, generación local y exportación sobre el PC real.
