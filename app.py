@@ -2377,47 +2377,59 @@ Write-Output 'NARRATION_OK'
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
             return
         minutes = data["duration"]
-        preflight = messagebox.askyesno(
-            "Antes de generar el guion",
-            "Esta etapa genera el GUION con Ollama; no crea imágenes ni exporta el MP4.\n\n"
-            "Después tendrás que ir a ESCENAS para asignar imágenes propias o generar ilustraciones con ComfyUI "
-            "(si está instalado y tienes un modelo compatible). Sin imágenes, el vídeo será de tarjetas de texto.\n\n"
-            f"Duración solicitada: {minutes} min. El proceso puede tardar bastante en este equipo.\n\n"
-            "¿Deseas iniciar la generación del guion ahora?"
+        is_short = data["video_mode"] == SHORT_VIDEO_MODE
+        preflight_text = (
+            "MARC generará un corto de aproximadamente 2 minutos, con gancho inmediato, conflicto compacto y cierre con impacto. "
+            "La duración final dependerá de la voz y las pausas. Después podrás revisar las escenas, asignar imágenes y exportar el MP4.\n\n"
+            if is_short else
+            "MARC generará una novela/serie por capítulos, conservando los personajes y los acontecimientos establecidos. "
+            "La generación del guion no crea imágenes ni exporta el MP4 automáticamente.\n\n"
         )
-        if not preflight:
+        if not messagebox.askyesno(
+            "Antes de generar el guion",
+            preflight_text + f"Duración objetivo: {minutes} minuto(s). Modo: {data['video_mode']}. "
+            "El proceso puede tardar con Qwen 2.5 3B local. ¿Comenzar?"
+        ):
             return
         self.estimate_var.set(self._estimate_time(minutes))
-        # Genera capítulos de aproximadamente 5 minutos para evitar una sola petición enorme.
         chapter_count = max(1, math.ceil(minutes / 5))
         self.planned_chapters = chapter_count
         self.completed_chapters = 0
-        self.planned_words = minutes * 135
+        self.planned_words = target_word_count(minutes, data["video_mode"])
         self.progressbar.configure(maximum=chapter_count, value=0)
-        self.progress_label_var.set(f"Plan: {chapter_count} capítulos · objetivo ~{self.planned_words:,} palabras")
-        self.progress_detail_var.set("0% · Preparando la estructura")
-        if minutes >= 45:
+        label = "corto de 2 minutos" if is_short else f"{chapter_count} capítulo(s)"
+        self.progress_label_var.set(f"Plan: {label} · objetivo ~{self.planned_words:,} palabras")
+        self.progress_detail_var.set("0% · Preparando la estructura narrativa")
+        if not is_short and minutes >= 45:
             confirm = messagebox.askyesno(
-                "Guion largo",
-                f"Un guion de {minutes} minutos puede necesitar {chapter_count} capítulos generados por separado "
-                "y tardar bastante con Qwen 2.5 3B en tu equipo.\n\n¿Deseas continuar?"
+                "Novela larga",
+                f"El proyecto tendrá {chapter_count} capítulos, generados uno por uno en tu equipo. ¿Deseas continuar?"
             )
             if not confirm:
                 return
-        # El foco pasa al editor; la configuración completa queda disponible con un botón.
-        self.set_configuration_visible(False)
         self.save_project(reset_approval=True, quiet=True)
+        data.update({
+            "series_key": self.series_key,
+            "episode_number": self.episode_number,
+            "story_bible": self.story_bible or "",
+            "continuity_state": self.continuity_state or "",
+            "voice_assignments": dict(self.voice_assignments or {}),
+        })
         self.cancel_event.clear()
         self.generation_running = True
         self._set_generation_state(True)
+        self.set_configuration_visible(False)
         self.script_text.configure(state="normal")
         self.script_text.delete("1.0", "end")
-        self.script_text.insert("1.0",
+        self.script_text.insert(
+            "1.0",
             f"TÍTULO: {data['title']}\nGÉNERO: {data['genre']}\nDURACIÓN OBJETIVO: {minutes} minuto(s)\n"
-            "MODELO: Qwen 2.5 3B · ejecución local\n\n")
+            f"MODELO: Qwen 2.5 3B · MODO: {data['video_mode']}\n"
+            f"SERIE: {data['series_key']} · EPISODIO: {data['episode_number']}\n\n"
+        )
         self.script_text.configure(state="disabled")
-        self.status_var.set(f"Preparando estructura de historia y {chapter_count} capítulo(s)…")
-        self.progress_detail_var.set("0% · Consultando modelo local")
+        self.status_var.set(f"Preparando la historia · episodio {data['episode_number']}…")
+        self.progress_detail_var.set("0% · Consultando el modelo local")
         worker = threading.Thread(target=self._generation_worker, args=(data, chapter_count), daemon=True)
         worker.start()
 
@@ -2457,56 +2469,89 @@ Write-Output 'NARRATION_OK'
             if self.cancel_event.is_set():
                 self.generation_queue.put(("cancelled",))
                 return
-            self.generation_queue.put(("status", "Qwen está diseñando la biblia de personajes y la trama…"))
-            protagonist = data["protagonist"] or "crea un protagonista original con nombre memorable"
-            conflict = data["conflict"] or "crea un conflicto personal y externo con consecuencias claras"
-            plan_prompt = (
-                "Eres director de guion de una novela serializada para videos. Escribe en español. "
-                "Crea una biblia breve de continuidad y una escaleta por capítulos. Incluye: premisa, "
-                "protagonistas y antagonistas con nombres, objetivos, defectos, relaciones y secretos; "
-                "reglas del mundo; conflicto central; evolución emocional; giros y consecuencias; y "
-                "desenlace acorde a lo pedido. No escribas consejos genéricos: diseña una ficción concreta. "
-                f"Género: {data['genre']}. Premisa: {data['topic']}. Protagonista: {protagonist}. "
-                f"Conflicto: {conflict}. Tono: {data['tone']}. Narrador: {data['narrator']}. "
-                f"Desenlace: {data['ending']}. Dirección visual: dibujo {data['drawing_style']}; animación {data['animation_style']}. "
-                f"Audiencia general de YouTube. Duración: {data['duration']} min. "
-                f"Propón exactamente {chapter_count} capítulos y resume cada uno en 1-2 frases. "
-                "No afirmes que esta escaleta es el guion final."
-            )
-            plan = self._ollama_request(plan_prompt, max_tokens=min(1000, 350 + chapter_count * 24))
-            self.generation_queue.put(("status", "Estructura preparada. Escribiendo los capítulos en orden…"))
-            previous_excerpt = ""
+            is_continuation = bool(data.get("story_bible"))
+            episode_number = max(1, int(data.get("episode_number", 1) or 1))
+            if is_continuation:
+                story_bible = data["story_bible"]
+                continuity_context = build_series_context(story_bible, data.get("continuity_state", ""))
+                self.generation_queue.put(("status", f"Diseñando el episodio {episode_number} respetando la biblia de la serie…"))
+                plan_prompt = (
+                    "Eres showrunner de una novela serializada en español. No reescribas la biblia ni reinicies la trama. "
+                    "Diseña la escaleta SOLO de este nuevo episodio usando el canon y el estado previo. Cada secuencia debe causar la siguiente; "
+                    "revela información gradualmente, da consecuencias a decisiones anteriores y no resuelvas misterios abiertos sin preparación. "
+                    "No cambies apariencia, parentesco, muertes, ubicación ni objetos canónicos. "
+                    f"Serie: {data['title']}. Episodio nuevo: {episode_number}. Modo: {data['video_mode']}. "
+                    f"Duración: {data['duration']} minutos. Escribe 3-6 beats concretos.\n\n" + continuity_context
+                )
+                plan = self._ollama_request(plan_prompt, max_tokens=550)
+            else:
+                protagonist = data["protagonist"] or "crea un protagonista original con nombre distintivo y deseo urgente"
+                conflict = data["conflict"] or "crea un conflicto personal y externo con consecuencias graves"
+                self.generation_queue.put(("status", "Diseñando la biblia canónica de personajes, escenarios y trama…"))
+                plan_prompt = (
+                    "Eres showrunner y novelista profesional de ficción seriada en español. Diseña una historia específica, no una plantilla genérica. "
+                    "Entrega una BIBLIA CANÓNICA que incluya: premisa distintiva; reglas del mundo; perfiles de protagonistas, antagonistas y secundarios "
+                    "(objetivos, contradicciones, secretos, relaciones, voz verbal, rasgos físicos estables); escenarios reutilizables con detalles visuales; "
+                    "cronología; hechos que no pueden cambiar; arcos de personajes; misterios abiertos y consecuencias. Después crea una escaleta de "
+                    f"{chapter_count} capítulo(s). No escribas todavía el guion final.\nGénero: {data['genre']}. Premisa: {data['topic']}. "
+                    f"Protagonista: {protagonist}. Conflicto: {conflict}. Tono: {data['tone']}. Narrador: {data['narrator']}. "
+                    f"Desenlace: {data['ending']}. Dirección visual: {data['drawing_style']}; animación: {data['animation_style']}. "
+                    f"Duración: {data['duration']} min. Modo: {data['video_mode']}. Evita aperturas cliché, coincidencias gratuitas y personajes expositivos."
+                )
+                plan = self._ollama_request(plan_prompt, max_tokens=min(1500, 550 + chapter_count * 28))
+                story_bible = plan
+            self.generation_queue.put(("status", "Estructura preparada. Escribiendo con gancho, escenas y diálogos…"))
+            previous_excerpt = data.get("continuity_state", "") if is_continuation else ""
             completed = 0
-            words_per_chapter = max(150, round(data["duration"] * 135 / chapter_count))
+            total_words = target_word_count(data["duration"], data["video_mode"])
+            words_per_chapter = max(150, round(total_words / chapter_count))
             for index in range(1, chapter_count + 1):
                 if self.cancel_event.is_set():
                     self.generation_queue.put(("cancelled",))
                     return
                 self.generation_queue.put(("status", f"Escribiendo capítulo {index} de {chapter_count}…"))
+                previous_label = "episodio de una serie existente" if is_continuation else "primera entrega de una serie nueva"
                 prompt = (
-                    "Eres novelista y guionista. Continúa la historia indicada y escribe SOLO el capítulo solicitado, "
-                    "en español natural, con escenas concretas, acción, diálogo y emociones mostradas mediante "
-                    "acciones. Evita resúmenes, consejos al público, frases repetidas y relleno. Conserva nombres, "
-                    "motivaciones, relaciones, heridas, secretos, cronología y reglas de la historia. No vuelvas a "
-                    "presentar personajes ya conocidos como si fueran nuevos. Termina este capítulo con un cambio "
-                    "o una pregunta dramática que impulse el siguiente, salvo que sea el desenlace final. "
-                    f"Género: {data['genre']}. Premisa: {data['topic']}. Tono: {data['tone']}. "
-                    f"Voz narrativa: {data['narrator']}. Protagonista: {protagonist}. Conflicto: {conflict}. "
-                    f"Desenlace planificado: {data['ending']}. Plataforma: {data['platform']}. "
-                    f"Dirección visual para futuras escenas: {data['drawing_style']}; animación: {data['animation_style']}. "
-                    f"Duración objetivo total: {data['duration']} minutos. Capítulo {index} de {chapter_count}. "
-                    f"Objetivo: aproximadamente {words_per_chapter} palabras de narración y diálogos; desarrolla "
-                    "la escena completa, no la resumas.\n\nBIBLIA Y ESCALETA DE CONTINUIDAD:\n" + plan +
-                    (("\n\nFINAL DEL CAPÍTULO ANTERIOR (para continuidad):\n" + previous_excerpt)
-                     if previous_excerpt else "\n\nEste es el inicio de la historia; presenta el gancho y al protagonista.")
+                    "Actúa como novelista y guionista profesional de una serie audiovisual en español. Escribe SOLO el capítulo solicitado. "
+                    "No describas el proceso ni agregues consejos.\n"
+                    "RETENCIÓN: abre en las primeras 1-2 frases con amenaza, decisión irreversible, contradicción inquietante o revelación concreta. "
+                    "Prohíbe 'Había una vez', 'En un mundo donde' y presentaciones biográficas lentas. Cada escena debe cambiar lo que se sabe, se desea o se arriesga. "
+                    "Usa detalles sensoriales selectivos, subtexto, silencios y diálogos con voz propia. Evita repeticiones, relleno y resolver conflictos sin coste. "
+                    "Termina con una consecuencia emocional o una pregunta dramática que impulse la continuación, salvo que se haya pedido un final definitivo.\n"
+                    "FORMATO DE VOZ: cada intervención hablada en un párrafo separado y usa etiquetas EXACTAS como [NARRADOR]: prosa narrativa, "
+                    "[JUAN]: diálogo del personaje. Usa el nombre canónico en mayúsculas y entre corchetes. No pongas dos hablantes en el mismo párrafo. "
+                    "Usa [NARRADOR] para acciones y descripción, y permite que los personajes hablen por sí mismos. No leas instrucciones técnicas como diálogo.\n"
+                    "CONTINUIDAD: no presentes de nuevo a personajes conocidos. Conserva nombres, voces, relaciones, heridas, objetos, escenarios, tiempo y secretos. "
+                    "En una continuación, empieza después del estado más reciente; no reinicies ni contradigas el canon.\n"
+                    f"Modo: {data['video_mode']}. Género: {data['genre']}. Premisa: {data['topic']}. Tono: {data['tone']}. "
+                    f"Narrador: {data['narrator']}. Protagonista: {data['protagonist'] or 'según la biblia'}. Conflicto: {data['conflict'] or 'según la biblia'}. "
+                    f"Desenlace: {data['ending']}. Dirección visual: {data['drawing_style']}; animación: {data['animation_style']}. Plataforma: {data['platform']}. "
+                    f"Duración: {data['duration']} minutos. Tipo: {previous_label}. Episodio {episode_number}; capítulo {index}/{chapter_count}. "
+                    f"Objetivo aproximado: {words_per_chapter} palabras; si el ritmo pide menos, prioriza calidad sobre relleno.\n\n"
+                    "BIBLIA / ESCALETA CANÓNICA:\n" + story_bible + "\n\nESCALETA DEL EPISODIO ACTUAL:\n" + plan +
+                    ("\n\nESTADO AL FINAL DEL EPISODIO ANTERIOR (continúa después de estos hechos):\n" + previous_excerpt
+                     if previous_excerpt else "\n\nINICIO: introduce al público directamente en el conflicto.")
                 )
-                token_budget = max(420, min(1300, int(words_per_chapter * 1.8) + 120))
+                token_budget = max(430, min(1500, int(words_per_chapter * 2.15) + 150))
                 chapter = self._ollama_request(prompt, max_tokens=token_budget)
                 heading = f"\n\n[CAPÍTULO {index:02d} DE {chapter_count:02d}]\n"
                 self.generation_queue.put(("chapter", heading + chapter.strip() + "\n", index, chapter_count))
-                previous_excerpt = chapter[-2200:]
+                previous_excerpt = chapter[-4200:]
                 completed += 1
-            self.generation_queue.put(("done", completed))
+            self.generation_queue.put(("status", "Actualizando la memoria canónica para el siguiente vídeo…"))
+            state_prompt = (
+                "Actualiza el ESTADO CANÓNICO para el siguiente episodio de una ficción serial en español. "
+                "Responde con hechos concretos y concisos (máximo 1800 caracteres): personajes presentes/ausentes, ubicación, cronología, "
+                "estado emocional, heridas, objetos importantes, relaciones modificadas, decisiones, secretos revelados y conflictos abiertos. "
+                "No inventes hechos. Indica exactamente desde qué situación debe continuar la próxima entrega.\n\nBIBLIA:\n" + story_bible +
+                "\n\nESTADO ANTERIOR:\n" + data.get("continuity_state", "") +
+                "\n\nFRAGMENTO FINAL DEL EPISODIO NUEVO:\n" + previous_excerpt
+            )
+            try:
+                new_state = self._ollama_request(state_prompt, max_tokens=500)
+            except Exception:
+                new_state = "Fragmento de cierre del episodio anterior; continúa sin contradecirlo:\n" + previous_excerpt[-2500:]
+            self.generation_queue.put(("done", completed, story_bible, new_state))
         except Exception as exc:
             self.generation_queue.put(("error", str(exc)))
 
@@ -2830,6 +2875,9 @@ Write-Output 'NARRATION_OK'
                     self.status_var.set(f"Capítulo {event[2]} de {event[3]} terminado. Guardando borrador…")
                     self.save_project(reset_approval=True, quiet=True)
                 elif kind == "done":
+                    if len(event) >= 4:
+                        self.story_bible = event[2] or self.story_bible
+                        self.continuity_state = event[3] or self.continuity_state
                     self.progressbar.configure(value=100)
                     self.progress_label_var.set(f"Guion completado · {event[1]} capítulos")
                     self.progress_detail_var.set("100% · Revisión y aprobación humana pendientes")
@@ -2839,6 +2887,7 @@ Write-Output 'NARRATION_OK'
                     self.save_project(reset_approval=True, quiet=True)
                     self.generation_running = False
                     self._set_generation_state(False)
+                    self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
                     words = len(self.script_text.get("1.0", "end-1c").split())
                     approx_minutes = words / 135
                     target_minutes = int(self.duration_var.get() or "1")
