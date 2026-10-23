@@ -337,7 +337,8 @@ class App(tk.Tk):
         self.vertical_panes = vertical
 
         controls_area = tk.Frame(vertical, bg=self.colors["bg"])
-        vertical.add(controls_area, minsize=280, height=390, stretch="never")
+        self.controls_area = controls_area
+        vertical.add(controls_area, minsize=235, height=325, stretch="never")
         card = tk.Frame(controls_area, bg=self.colors["panel"], padx=18, pady=15,
                         highlightthickness=1, highlightbackground=self.colors["border"])
         card.pack(fill="both", expand=True)
@@ -397,7 +398,8 @@ class App(tk.Tk):
                  justify="left", wraplength=320).grid(row=3, column=2, columnspan=2, sticky="w", padx=8, pady=5)
 
         lower = tk.Frame(vertical, bg=self.colors["bg"])
-        vertical.add(lower, minsize=250, stretch="always")
+        self.lower_panel = lower
+        vertical.add(lower, minsize=280, stretch="always")
         lower.grid_rowconfigure(2, weight=1)
         lower.grid_columnconfigure(0, weight=1)
 
@@ -417,6 +419,9 @@ class App(tk.Tk):
         self.cancel_render_button = ttk.Button(toolrow, text="Cancelar render",
                                                command=self.cancel_export, state="disabled")
         self.cancel_render_button.pack(side="left", padx=(6, 0))
+        self.config_toggle_button = ttk.Button(
+            toolrow, text="Ocultar configuración", command=self.toggle_configuration)
+        self.config_toggle_button.pack(side="right")
 
         statuscard = tk.Frame(lower, bg=self.colors["panel"], padx=15, pady=12,
                               highlightthickness=1, highlightbackground=self.colors["border"])
@@ -544,6 +549,41 @@ class App(tk.Tk):
         tk.Label(scenes_tab, text="La generación de ilustraciones se ejecuta en ComfyUI en tu PC. Requiere instalarlo y descargar al menos un checkpoint compatible. No usa claves API ni servicios en la nube.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1000, justify="left").grid(row=7, column=0, sticky="w", pady=(8, 0))
+
+        visual_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=18, pady=16)
+        studio_tabs.add(visual_tab, text="  ✧  DIRECCIÓN VISUAL  ")
+        visual_tab.grid_columnconfigure(0, weight=1)
+        tk.Label(visual_tab, text="DIRECCIÓN VISUAL DEL PROYECTO",
+                 bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 14, "bold")).grid(row=0, column=0, sticky="w")
+        tk.Label(visual_tab,
+                 text="Ajusta el lenguaje visual aquí sin tener que volver al formulario completo.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 10),
+                 wraplength=1050, justify="left").grid(row=1, column=0, sticky="w", pady=(5, 14))
+        visual_form = tk.Frame(visual_tab, bg=self.colors["panel"])
+        visual_form.grid(row=2, column=0, sticky="new")
+        visual_form.columnconfigure(0, weight=1, uniform="visual")
+        visual_form.columnconfigure(1, weight=1, uniform="visual")
+        self._field(visual_form, "Estilo de dibujo", self.drawing_style_var, 0, 0,
+                    values=["Anime cinematográfico", "Manga en blanco y negro", "Cartoon occidental",
+                            "Cómic realista", "Acuarela ilustrada", "Pixel art", "3D estilizado",
+                            "Realismo cinematográfico"])
+        self._field(visual_form, "Estilo de animación", self.animation_style_var, 0, 1,
+                    values=["2D fluida", "Anime con movimientos dinámicos", "Motion comic",
+                            "Cut-out / recortes", "3D cinematográfica", "Stop motion",
+                            "Pixel animation", "Presentación animada"])
+        self._field(visual_form, "Formato de salida", self.platform_var, 1, 0,
+                    values=list(PLATFORMS))
+        self._field(visual_form, "Género / dirección", self.style_var, 1, 1,
+                    values=["Novela dramática", "Reencarnación y venganza", "Superación personal", "Romance",
+                            "Fantasía", "Misterio y suspenso", "Terror", "Acción y aventura", "Ciencia ficción",
+                            "Drama familiar", "Educativo y directo", "Documental", "Promocional"])
+        self._field(visual_form, "Tono", self.tone_var, 2, 0,
+                    values=["Dramático e intenso", "Oscuro y misterioso", "Emotivo", "Inspirador",
+                            "Épico", "Ligero y humorístico", "Realista"])
+        tk.Label(visual_tab, text="Nota: elegir un estilo define las instrucciones visuales; no crea ilustraciones por sí solo. Para generar imágenes, abre ESCENAS y configura ComfyUI.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
+                 wraplength=1050, justify="left").grid(row=3, column=0, sticky="w", pady=(16, 0))
 
         timeline_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=12, pady=10)
         studio_tabs.add(timeline_tab, text="  ▰  MONTAJE  ")
@@ -1881,6 +1921,32 @@ Write-Output 'NARRATION_OK'
         except Exception as exc:
             self.generation_queue.put(("image_error", scene_number, str(exc)))
 
+    def set_configuration_visible(self, visible):
+        """Expand/collapse the story setup area to give the editor more workspace."""
+        if not hasattr(self, "vertical_panes") or not hasattr(self, "controls_area"):
+            return
+        panes = tuple(self.vertical_panes.panes())
+        pane_name = str(self.controls_area)
+        is_visible = pane_name in panes
+        if visible and not is_visible:
+            self.vertical_panes.add(
+                self.controls_area, before=self.lower_panel,
+                minsize=235, height=325, stretch="never"
+            )
+            self.configuration_visible = True
+        elif not visible and is_visible:
+            self.vertical_panes.forget(self.controls_area)
+            self.configuration_visible = False
+        else:
+            self.configuration_visible = is_visible
+        if hasattr(self, "config_toggle_button"):
+            self.config_toggle_button.configure(
+                text="Ocultar configuración" if self.configuration_visible else "Mostrar configuración"
+            )
+
+    def toggle_configuration(self):
+        self.set_configuration_visible(not getattr(self, "configuration_visible", True))
+
     def toggle_status_details(self):
         """Show/hide hardware diagnostics and long production estimates."""
         if not hasattr(self, "details_frame"):
@@ -1913,6 +1979,7 @@ Write-Output 'NARRATION_OK'
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual antes de crear otro proyecto.")
             return
         self.current_id = None
+        self.set_configuration_visible(True)
         self.title_var.set("")
         self.topic_var.set("")
         self.platform_var.set(list(PLATFORMS)[0])
@@ -2029,6 +2096,8 @@ Write-Output 'NARRATION_OK'
             )
             if not confirm:
                 return
+        # El foco pasa al editor; la configuración completa queda disponible con un botón.
+        self.set_configuration_visible(False)
         self.save_project(reset_approval=True, quiet=True)
         self.cancel_event.clear()
         self.generation_running = True
