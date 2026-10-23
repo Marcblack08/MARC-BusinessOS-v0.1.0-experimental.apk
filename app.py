@@ -833,13 +833,18 @@ class App(tk.Tk):
         self.status_var.set(f"Se quitó la imagen de la escena {scene_number}; se usará una tarjeta de texto.")
 
     def _refresh_audio_track_label(self):
-        if not hasattr(self, "audio_track_label_var"):
-            return
-        if self.audio_track_path and Path(self.audio_track_path).is_file():
-            path = Path(self.audio_track_path)
-            self.audio_track_label_var.set(f"{path.name}\n{path}")
-        else:
-            self.audio_track_label_var.set("Sin pista de audio. Puedes importar una o generar narración local.")
+        if hasattr(self, "audio_track_label_var"):
+            if self.audio_track_path and Path(self.audio_track_path).is_file():
+                voice_path = Path(self.audio_track_path)
+                self.audio_track_label_var.set(f"{voice_path.name}\n{voice_path}")
+            else:
+                self.audio_track_label_var.set("Sin pista de narración. Puedes importar voz o generarla localmente.")
+        if hasattr(self, "music_track_label_var"):
+            if self.music_track_path and Path(self.music_track_path).is_file():
+                music_path = Path(self.music_track_path)
+                self.music_track_label_var.set(f"{music_path.name}\n{music_path}")
+            else:
+                self.music_track_label_var.set("Sin música de fondo.")
 
     def detect_local_voices(self, quiet=False):
         if self.voice_generation_running:
@@ -2097,6 +2102,7 @@ Write-Output 'NARRATION_OK'
                        self.export_button, self.delete_button, self.assign_image_button,
                        self.clear_image_button, self.refresh_scenes_button,
                        self.select_audio_button, self.clear_audio_button,
+                       self.select_music_button, self.clear_music_button,
                        self.detect_models_button, self.generate_image_button,
                        self.detect_voice_button, self.generate_voice_button, self.export_srt_button):
             button.configure(state=state)
@@ -2239,19 +2245,21 @@ Write-Output 'NARRATION_OK'
                 input_index = 0
                 if has_voice:
                     mux_cmd.extend(["-i", str(Path(audio_path).resolve())])
-                    filter_parts.append(f"[{input_index}:a:0]volume=1.0,apad[voice]")
-                    track_labels.append("[voice]")
+                    label = "[voice]" if has_music else "[aout]"
+                    filter_parts.append(f"[{input_index}:a:0]volume=1.0,apad{label}")
+                    track_labels.append(label)
                     input_index += 1
                 if has_music:
                     if loop_music:
                         mux_cmd.extend(["-stream_loop", "-1"])
                     mux_cmd.extend(["-i", str(Path(music_path).resolve())])
-                    filter_parts.append(f"[{input_index}:a:0]volume=0.18,apad[music]")
-                    track_labels.append("[music]")
+                    label = "[music]" if has_voice else "[aout]"
+                    filter_parts.append(f"[{input_index}:a:0]volume=0.18,apad{label}")
+                    track_labels.append(label)
                     input_index += 1
                 video_input_index = input_index
                 mux_cmd.extend(["-i", str(temp_output_path)])
-                if len(track_labels) == 2:
+                if has_voice and has_music:
                     filter_parts.append("[voice][music]amix=inputs=2:duration=longest:dropout_transition=2[aout]")
                 mux_cmd.extend([
                     "-filter_complex", ";".join(filter_parts),
