@@ -3309,9 +3309,7 @@ $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
 $voiceMap = @{}
 if (Test-Path -LiteralPath $VoiceMapFile) {
   $parsed = Get-Content -LiteralPath $VoiceMapFile -Raw -Encoding UTF8 | ConvertFrom-Json
-  foreach ($property in $parsed.PSObject.Properties) {
-    $voiceMap[$property.Name.ToUpperInvariant()] = [string]$property.Value
-  }
+  foreach ($property in $parsed.PSObject.Properties) { $voiceMap[$property.Name.ToUpperInvariant()] = [string]$property.Value }
 }
 try {
   $defaultVoice = $VoiceName
@@ -3321,14 +3319,26 @@ try {
   $text = [System.IO.File]::ReadAllText($TextFile, [System.Text.Encoding]::UTF8)
   if ([string]::IsNullOrWhiteSpace($text)) { throw 'El texto de narración está vacío.' }
   $synth.SetOutputToWaveFile($OutputFile)
-  foreach ($rawLine in ($text -split '`r?`n')) {
+  foreach ($rawLine in ($text -split '\r?\n')) {
     $line = $rawLine.Trim()
     if ([string]::IsNullOrWhiteSpace($line)) { continue }
-    if ($line -match '^\[([^\]]+)\]\s*:\s*(.*)
+    if ($line -match '^\[([^\]]+)\]\s*:\s*(.*)$') {
+      $speaker = $matches[1].Trim().ToUpperInvariant()
+      $spoken = $matches[2].Trim()
+      if ($voiceMap.ContainsKey($speaker) -and $voiceMap[$speaker] -and $voiceMap[$speaker] -ne '(Voz principal)') {
+        $synth.SelectVoice($voiceMap[$speaker])
+      } elseif ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+    } else {
+      $spoken = $line
+      if ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+    }
+    if (![string]::IsNullOrWhiteSpace($spoken)) { $synth.Speak($spoken) }
+  }
+  $synth.SetOutputToNull()
+} finally { $synth.Dispose() }
 if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile).Length -lt 44) {
   throw 'Windows no generó un archivo WAV válido.'
-}
-""", encoding="utf-8")
+}""", encoding="utf-8")
                 self.generation_queue.put(("render_progress", 0, len(scenes) + 3, "Generando narración automática con la voz local de Windows…"))
                 ps_args = [
                     "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
