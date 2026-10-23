@@ -16,12 +16,13 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 - Asignación de imágenes propias a las escenas.
 - Integración opcional con ComfyUI local en `http://127.0.0.1:8188` para generar una imagen fija por escena.
 - Render MP4 en segundo plano, con barra de progreso y cancelación. Imágenes asignadas reciben movimiento sencillo de cámara; las escenas sin imágenes se renderizan como tarjetas de texto.
-- Pestaña de audio con importación de voz/música y generación de narración offline mediante las voces de Windows System.Speech instaladas en el equipo; opción para repetir una pista corta hasta el final del vídeo.
+- Pestaña de audio con pistas separadas de narración y música; generación de voz offline con Windows System.Speech, mezcla de ambas pistas con volumen de música reducido y repetición opcional de la música.
 - Aprobación humana obligatoria antes de exportar; modificar el guion invalida la aprobación.
 - Búsqueda y selección manual de FFmpeg.
 - Script local de instalación de dependencias y constructor de app/instalador.
 
 ## Requisitos
+- Vídeos de 1 a 10 minutos por proyecto.
 - Windows 10/11 de 64 bits.
 - Python 3.11+ para ejecución desde el código fuente.
 - Ollama y el modelo local `qwen2.5:3b` para generar guiones.
@@ -42,7 +43,7 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 2. Ejecuta `build_windows.bat` para ejecutar las validaciones, compilar la aplicación con PyInstaller y, si está instalado Inno Setup 6, producir `Setup.exe`.
 3. Prueba el programa y la instalación en un Windows limpio antes de distribuirlos.
 
-**Desde GitHub Actions:** entra en Actions → **Build Windows desktop installer** → **Run workflow**. Si la ejecución termina correctamente, descarga el artefacto `MARC-Video-Studio-Windows` desde esa ejecución. El artefacto incluye el instalador y la carpeta de aplicación portable. Este flujo se debe validar también antes de distribuirlo a usuarios finales.
+**Desde GitHub Actions:** entra en Actions → **Build Windows desktop installer** → **Run workflow**. Si la ejecución termina correctamente, descarga el artefacto `MARC-Video-Studio-Windows` desde esa ejecución. El artefacto incluye el instalador y la carpeta de aplicación portable. Las validaciones incluyen pruebas reales de FFmpeg para el montaje con voz y música, además de pruebas unitarias. Aun así, el programa completo debe probarse con Ollama/ComfyUI y con las voces disponibles en el PC objetivo antes de distribuirlo a usuarios finales.
 
 Ollama, sus modelos, ComfyUI/checkpoints y FFmpeg no se incluyen en el instalador; se instalan por separado. En la versión empaquetada, los proyectos y la base de datos se guardan en `%LOCALAPPDATA%\\MARC Video Studio AI Desktop`.
 
@@ -57,7 +58,7 @@ Ollama, sus modelos, ComfyUI/checkpoints y FFmpeg no se incluyen en el instalado
 
 ## Límites importantes
 - La integración de ComfyUI genera **imágenes fijas**, no vídeo neuronal completo. El render aplica movimiento de cámara sencillo a imágenes y tarjetas tipográficas donde no haya recursos.
-- La voz local usa las voces SAPI que tenga Windows instaladas; puede necesitar que instales una voz española desde la configuración de idioma/voz. No es una voz neuronal de alta calidad y el resultado varía según la voz disponible.
+- La voz local usa las voces SAPI que tenga Windows instaladas; puede necesitar que instales una voz española desde la configuración de idioma/voz. No es una voz neuronal de alta calidad y el resultado varía según la voz disponible. La música de fondo se mezcla a menor volumen que la narración; revisa el balance auditivo antes de publicar.
 - La estimación de tiempo es orientativa; ComfyUI depende mucho del checkpoint y del hardware y puede tardar mucho o no funcionar en GPUs antiguas.
 - La vista previa abre el archivo MP4 en el reproductor predeterminado del sistema, no dentro de una superficie de reproducción integrada.
 - La validación de CI no sustituye las pruebas del programa gráfico, generación local y exportación sobre el PC real.
