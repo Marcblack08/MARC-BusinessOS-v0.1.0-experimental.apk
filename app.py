@@ -2202,6 +2202,9 @@ Write-Output 'NARRATION_OK'
             return False
 
     def play_preview_video(self):
+        if self.render_running:
+            self.preview_playback_status_var.set("El montaje todavía se está renderizando; podrás reproducirlo al terminar.")
+            return
         if self.preview_player_active and self._vlc_player is not None:
             try:
                 state = self._vlc_player.get_state()
@@ -2222,22 +2225,16 @@ Write-Output 'NARRATION_OK'
             if self.preview_render_signature == self._current_preview_signature():
                 path = self.preview_render_path
             else:
-                self.preview_playback_status_var.set("La vista previa está desactualizada · genera una nueva antes de revisarla.")
-                messagebox.showinfo(
-                    "Vista previa desactualizada",
-                    "Has cambiado el guion, las imágenes, el audio o la configuración después del último render. "
-                    "Pulsa «Vista previa MP4» para revisar la versión actual."
-                )
+                self.preview_playback_status_var.set("El montaje cambió · generando una vista previa actualizada…")
+                self.preview_render_path = ""
+                self.preview_render_signature = ""
+                self._start_video_render(preview=True)
                 return
-        elif self.last_export_path and Path(self.last_export_path).is_file():
-            path = self.last_export_path
         if not path:
-            self.preview_playback_status_var.set("Todavía no hay un vídeo generado · pulsa «Vista previa MP4».")
-            messagebox.showinfo(
-                "No hay vídeo para reproducir",
-                "Primero pulsa «Vista previa MP4» para renderizar el proyecto dentro de MARC. "
-                "«Elegir MP4» queda disponible para revisar un archivo externo."
-            )
+            # The monitor's play button starts a draft render when there is no current preview.
+            # Old final exports and unrelated files remain available via the explicit file-selection controls.
+            self.preview_playback_status_var.set("Preparando el vídeo de revisión dentro de MARC…")
+            self._start_video_render(preview=True)
             return
         if not self._ensure_vlc_player():
             detail = getattr(self, "_vlc_error", "No se encontró el motor VLC.")
