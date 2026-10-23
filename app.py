@@ -574,7 +574,7 @@ class App(tk.Tk):
         self.timeline_canvas.bind("<Button-1>", self._timeline_click)
         self.timeline_canvas.bind("<B1-Motion>", self._timeline_drag)
         tk.Label(timeline_tab,
-                 text="Selecciona un clip de vídeo para vincularlo a su escena. Haz clic o arrastra en la regla para mover el cabezal. La edición modifica el proyecto local; el render final sigue usando el guion aprobado y sus recursos.",
+                 text="Selecciona un clip para sincronizarlo con la escena. Haz clic o arrastra en la regla para mover el cabezal; usa los botones para asignar imágenes y pistas. El cabezal es de navegación visual, no una reproducción de vídeo en tiempo real.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8),
                  wraplength=1100, justify="left").grid(row=3, column=0, sticky="ew", pady=(7, 0))
 
