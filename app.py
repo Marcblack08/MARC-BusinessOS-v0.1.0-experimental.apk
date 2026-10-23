@@ -1692,7 +1692,8 @@ Write-Output 'NARRATION_OK'
             self.export_button, self.delete_button, self.assign_image_button, self.clear_image_button,
             self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
             self.detect_models_button, self.generate_image_button, self.detect_voice_button,
-            self.generate_voice_button, self.assign_character_voices_button, self.export_srt_button,
+            self.generate_voice_button, self.assign_character_voices_button, self.inspector_assign_image_button,
+            self.inspector_generate_image_button, self.inspector_duration_button, self.export_srt_button,
             self.select_music_button, self.clear_music_button
         ):
             button.configure(state=state)
@@ -2184,7 +2185,9 @@ Write-Output 'NARRATION_OK'
                        self.clear_image_button, self.refresh_scenes_button,
                        self.select_audio_button, self.clear_audio_button,
                        self.detect_models_button, self.generate_image_button,
-                       self.detect_voice_button, self.generate_voice_button, self.export_srt_button, self.select_music_button, self.clear_music_button):
+                       self.detect_voice_button, self.generate_voice_button, self.inspector_assign_image_button,
+                       self.inspector_generate_image_button, self.inspector_duration_button,
+                       self.export_srt_button, self.select_music_button, self.clear_music_button):
             button.configure(state=state)
         self.cancel_voice_button.configure(state="disabled")
         self.voice_combo.configure(state="disabled" if active else "readonly")
@@ -2573,7 +2576,9 @@ Write-Output 'NARRATION_OK'
         for button in (self.new_project_button, self.assign_image_button, self.clear_image_button,
                        self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
                        self.detect_models_button, self.generate_image_button, self.detect_voice_button,
-                       self.generate_voice_button, self.export_srt_button, self.select_music_button, self.clear_music_button):
+                       self.generate_voice_button, self.inspector_assign_image_button,
+                       self.inspector_generate_image_button, self.inspector_duration_button,
+                       self.export_srt_button, self.select_music_button, self.clear_music_button):
             button.configure(state=state)
         self.cancel_voice_button.configure(state="disabled")
         self.image_model_combo.configure(state="disabled" if active else "readonly")
@@ -3319,7 +3324,9 @@ Write-Output 'NARRATION_OK'
                        self.select_audio_button, self.clear_audio_button,
                        self.select_music_button, self.clear_music_button,
                        self.detect_models_button, self.generate_image_button,
-                       self.detect_voice_button, self.generate_voice_button, self.assign_character_voices_button, self.export_srt_button):
+                       self.detect_voice_button, self.generate_voice_button, self.assign_character_voices_button,
+                       self.inspector_assign_image_button, self.inspector_generate_image_button,
+                       self.inspector_duration_button, self.export_srt_button):
             button.configure(state=state)
         self.cancel_voice_button.configure(state="disabled")
         self.voice_combo.configure(state="disabled" if active else "readonly")
