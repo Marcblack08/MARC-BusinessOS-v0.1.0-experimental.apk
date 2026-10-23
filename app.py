@@ -131,6 +131,13 @@ class App(tk.Tk):
         self.preview_player_active = False
         self._preview_poll_pending = False
         self._updating_preview_seek = False
+        self.preview_render_path = ""
+        self.preview_render_signature = ""
+        self.manual_preview_path = ""
+        self.preview_after_image_batch = False
+        self.batch_image_active = False
+        self.batch_image_queue = []
+        self.batch_image_total = 0
         self.ai_available = False
         self.generation_queue = queue.Queue()
         self.cancel_event = threading.Event()
@@ -472,6 +479,9 @@ class App(tk.Tk):
         self.approve_button.pack(side="left", padx=(6, 0))
         self.export_button = ttk.Button(toolrow, text="Exportar MP4", command=self.export_video)
         self.export_button.pack(side="left", padx=(6, 0))
+        self.preview_render_button = ttk.Button(
+            toolrow, text="Vista previa MP4", command=self.preview_video_render)
+        self.preview_render_button.pack(side="left", padx=(6, 0))
         self.cancel_render_button = ttk.Button(toolrow, text="Cancelar render",
                                                command=self.cancel_export, state="disabled")
         self.cancel_render_button.pack(side="left", padx=(6, 0))
@@ -623,6 +633,7 @@ class App(tk.Tk):
         self.script_text.configure(yscrollcommand=scrollbar.set)
 
         scenes_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=14, pady=12)
+        self.scenes_tab = scenes_tab
         studio_tabs.add(scenes_tab, text="  ▤  ESCENAS  ")
         scenes_tab.grid_columnconfigure(0, weight=1)
         scenes_tab.grid_rowconfigure(6, weight=1)
@@ -659,6 +670,9 @@ class App(tk.Tk):
         self.generate_image_button = ttk.Button(image_ai_bar, text="Generar ilustración IA",
                                                 style="Accent.TButton", command=self.generate_scene_image)
         self.generate_image_button.pack(side="left", padx=(6, 0))
+        self.generate_missing_images_button = ttk.Button(
+            image_ai_bar, text="Generar imágenes faltantes", command=self.generate_missing_scene_images)
+        self.generate_missing_images_button.pack(side="left", padx=(6, 0))
         self.image_ai_status_var = tk.StringVar(value="ComfyUI local opcional · comprobando modelos…")
         tk.Label(scenes_tab, textvariable=self.image_ai_status_var, bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 8), anchor="w",
@@ -781,6 +795,7 @@ class App(tk.Tk):
                  wraplength=1100, justify="left").grid(row=3, column=0, sticky="ew", pady=(7, 0))
 
         preview_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=18, pady=16)
+        self.preview_tab = preview_tab
         studio_tabs.add(preview_tab, text="  ▣  VISTA PREVIA  ")
         preview_tab.grid_columnconfigure(0, weight=1)
         preview_tab.grid_rowconfigure(1, weight=1)
@@ -865,7 +880,7 @@ class App(tk.Tk):
         voice_card.grid(row=3, column=0, sticky="ew", pady=(0, 10))
         tk.Label(voice_card, text="GENERAR NARRACIÓN LOCAL", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        tk.Label(voice_card, text="Usa Windows System.Speech y las voces instaladas en el equipo. No requiere token, API ni envío de texto a la nube.",
+        tk.Label(voice_card, text="Usa las voces instaladas de Windows sin nube. Con etiquetas [NARRADOR]: y [PERSONAJE]:, MARC puede cambiar de voz entre hablantes; se requieren varias voces de Windows para oír timbres distintos.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1050, justify="left").pack(anchor="w", pady=(3, 10))
         voice_controls = tk.Frame(voice_card, bg=self.colors["panel"])
@@ -1637,6 +1652,19 @@ class App(tk.Tk):
         if chosen_voice != "(Automática)" and chosen_voice not in self.available_voice_names:
             messagebox.showwarning("Voz no disponible", "Pulsa «Detectar voces» y selecciona una voz instalada.")
             return
+        speaker_names = extract_speaker_names(raw_script)
+        if len(speaker_names) > 1 and len(self.available_voice_names) > 1:
+            self._prepare_default_character_voice_assignments(raw_script, chosen_voice)
+        elif len(speaker_names) > 1:
+            self.voice_status_var.set(
+                "El guion tiene varios hablantes, pero Windows solo ofrece una voz local. "
+                "Instala voces adicionales para distinguir los personajes."
+            )
+        elif not speaker_names:
+            self.voice_status_var.set(
+                "No se detectaron etiquetas [PERSONAJE]: en el guion; la narración tendrá una sola voz. "
+                "Usa etiquetas por hablante para separar narrador y diálogos."
+            )
         if self.audio_track_path and Path(self.audio_track_path).is_file():
             if not messagebox.askyesno(
                 "Reemplazar pista de audio",
@@ -1737,9 +1765,9 @@ Write-Output 'NARRATION_OK'
         state = "disabled" if active else "normal"
         for button in (
             self.generate_button, self.new_project_button, self.save_button, self.approve_button,
-            self.export_button, self.delete_button, self.assign_image_button, self.clear_image_button,
+            self.export_button, self.preview_render_button, self.delete_button, self.assign_image_button, self.clear_image_button,
             self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
-            self.detect_models_button, self.generate_image_button, self.detect_voice_button,
+            self.detect_models_button, self.generate_image_button, self.generate_missing_images_button, self.detect_voice_button,
             self.generate_voice_button, self.assign_character_voices_button, self.inspector_assign_image_button,
             self.inspector_generate_image_button, self.inspector_duration_button, self.export_srt_button,
             self.select_music_button, self.clear_music_button
@@ -2183,11 +2211,30 @@ Write-Output 'NARRATION_OK'
                     return
             except Exception:
                 pass
-        path = self.last_export_path
-        if not path or not Path(path).is_file():
-            self.choose_preview_video()
+
+        path = ""
+        if self.manual_preview_path and Path(self.manual_preview_path).is_file():
+            path = self.manual_preview_path
+        elif self.preview_render_path and Path(self.preview_render_path).is_file():
+            if self.preview_render_signature == self._current_preview_signature():
+                path = self.preview_render_path
+            else:
+                self.preview_playback_status_var.set("La vista previa está desactualizada · genera una nueva antes de revisarla.")
+                messagebox.showinfo(
+                    "Vista previa desactualizada",
+                    "Has cambiado el guion, las imágenes, el audio o la configuración después del último render. "
+                    "Pulsa «Vista previa MP4» para revisar la versión actual."
+                )
+                return
+        elif self.last_export_path and Path(self.last_export_path).is_file():
             path = self.last_export_path
-        if not path or not Path(path).is_file():
+        if not path:
+            self.preview_playback_status_var.set("Todavía no hay un vídeo generado · pulsa «Vista previa MP4».")
+            messagebox.showinfo(
+                "No hay vídeo para reproducir",
+                "Primero pulsa «Vista previa MP4» para renderizar el proyecto dentro de MARC. "
+                "«Elegir MP4» queda disponible para revisar un archivo externo."
+            )
             return
         if not self._ensure_vlc_player():
             detail = getattr(self, "_vlc_error", "No se encontró el motor VLC.")
@@ -2313,8 +2360,9 @@ Write-Output 'NARRATION_OK'
             filetypes=[("Vídeos", "*.mp4 *.mov *.mkv *.webm"), ("Todos los archivos", "*.*")]
         )
         if path:
-            self.last_export_path = str(Path(path).resolve())
-            self.preview_status_var.set(f"Vídeo seleccionado: {self.last_export_path}")
+            self.manual_preview_path = str(Path(path).resolve())
+            self.last_export_path = self.manual_preview_path
+            self.preview_status_var.set(f"Vídeo seleccionado: {self.manual_preview_path}")
             self.preview_playback_status_var.set(f"Listo para reproducir · {Path(path).name}")
 
     def open_last_video(self):
@@ -2395,10 +2443,10 @@ Write-Output 'NARRATION_OK'
         self.cancel_button.configure(state="normal" if self.generation_running else "disabled")
         self.cancel_render_button.configure(state="normal" if self.render_running else "disabled")
         for button in (self.generate_button, self.new_project_button, self.save_button, self.approve_button,
-                       self.export_button, self.delete_button, self.assign_image_button,
+                       self.export_button, self.preview_render_button, self.delete_button, self.assign_image_button,
                        self.clear_image_button, self.refresh_scenes_button,
                        self.select_audio_button, self.clear_audio_button,
-                       self.detect_models_button, self.generate_image_button,
+                       self.detect_models_button, self.generate_image_button, self.generate_missing_images_button,
                        self.detect_voice_button, self.generate_voice_button, self.inspector_assign_image_button,
                        self.inspector_generate_image_button, self.inspector_duration_button,
                        self.export_srt_button, self.select_music_button, self.clear_music_button):
@@ -2549,6 +2597,80 @@ Write-Output 'NARRATION_OK'
             self.generation_queue.put(("image_done", project_id, scene_number, str(destination.resolve()), prompt))
         except Exception as exc:
             self.generation_queue.put(("image_error", scene_number, str(exc)))
+
+    def generate_missing_scene_images(self, preconfirmed=False, preview_after=False):
+        """Generate missing scene illustrations sequentially through the existing ComfyUI worker."""
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        if self.current_id is None:
+            self.save_project(quiet=True)
+        if self.current_id is None:
+            messagebox.showwarning("Guarda el proyecto", "Guarda el proyecto antes de generar imágenes.")
+            return
+        self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
+        missing = [
+            index + 1 for index in range(len(self.scene_data))
+            if not (self.scene_assets.get(str(index + 1)) and Path(self.scene_assets[str(index + 1)]).is_file())
+        ]
+        if not missing:
+            if preview_after:
+                self.after(150, lambda: self._start_video_render(preview=True))
+            elif not preconfirmed:
+                messagebox.showinfo("Todo ilustrado", "Todas las escenas ya tienen una imagen asignada.")
+            return
+        if not self.image_model_var.get().strip():
+            messagebox.showwarning(
+                "Falta un modelo de imagen",
+                "Abre ComfyUI, pulsa «Detectar ComfyUI» y selecciona un checkpoint compatible antes de generar las imágenes."
+            )
+            self.detect_image_models(quiet=False)
+            return
+        if not preconfirmed and not messagebox.askyesno(
+            "Generar ilustraciones faltantes",
+            f"Se generarán {len(missing)} imagen(es), una por escena sin recurso visual. "
+            "En una GPU antigua el proceso puede tardar bastante. ¿Continuar?"
+        ):
+            return
+        self.batch_image_queue = list(missing)
+        self.batch_image_total = len(missing)
+        self.batch_image_active = True
+        self.preview_after_image_batch = bool(preview_after)
+        self.studio_tabs.select(self.scenes_tab)
+        self.status_var.set(f"Preparando {len(missing)} ilustraciones locales con ComfyUI…")
+        self._start_next_missing_scene_image()
+
+    def _start_next_missing_scene_image(self):
+        if not self.batch_image_active:
+            return
+        if not self.batch_image_queue:
+            self.batch_image_active = False
+            total = self.batch_image_total
+            self.batch_image_total = 0
+            if self.preview_after_image_batch:
+                self.preview_after_image_batch = False
+                self.status_var.set(f"Ilustraciones listas ({total}). Iniciando vista previa del vídeo…")
+                self.after(250, lambda: self._start_video_render(preview=True))
+            else:
+                self.status_var.set(f"Generación por lotes completada: {total} ilustraciones.")
+                messagebox.showinfo("Ilustraciones listas", f"Se generaron {total} ilustraciones y se asignaron a sus escenas.")
+            return
+        scene_number = self.batch_image_queue.pop(0)
+        item = f"scene_{scene_number}"
+        if item not in self.scene_outline.get_children(""):
+            self.batch_image_active = False
+            self.batch_image_queue = []
+            self.preview_after_image_batch = False
+            messagebox.showerror("Escena no disponible", f"No se encontró la escena {scene_number}. Actualiza la lista e inténtalo otra vez.")
+            return
+        self.scene_outline.selection_set(item)
+        self.scene_outline.see(item)
+        self.timeline_selected_scene = scene_number
+        self._render_preview_frame()
+        self.status_var.set(
+            f"Generando ilustración {self.batch_image_total - len(self.batch_image_queue)}/{self.batch_image_total} · escena {scene_number}"
+        )
+        self.generate_scene_image()
 
     def set_configuration_visible(self, visible):
         """Expand/collapse the story setup area to give the editor more workspace."""
@@ -2791,7 +2913,7 @@ Write-Output 'NARRATION_OK'
         self.script_text.configure(state="disabled" if active else "normal")
         for button in (self.new_project_button, self.assign_image_button, self.clear_image_button,
                        self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
-                       self.detect_models_button, self.generate_image_button, self.detect_voice_button,
+                       self.detect_models_button, self.generate_image_button, self.generate_missing_images_button, self.detect_voice_button,
                        self.generate_voice_button, self.inspector_assign_image_button,
                        self.inspector_generate_image_button, self.inspector_duration_button,
                        self.export_srt_button, self.select_music_button, self.clear_music_button):
@@ -3300,10 +3422,24 @@ Write-Output 'NARRATION_OK'
                     self.progress_label_var.set(f"Ilustración generada · escena {scene_number}")
                     self.progress_detail_var.set("Imagen guardada localmente en los recursos del proyecto.")
                     self.status_var.set("Ilustración IA generada y asignada a la escena.")
-                    messagebox.showinfo("Ilustración lista", f"Se generó la imagen local para la escena {scene_number}.\n\nPuedes exportar el MP4 cuando el guion esté aprobado.")
+                    if self.batch_image_active:
+                        completed_count = self.batch_image_total - len(self.batch_image_queue)
+                        self.progress_label_var.set(f"Imágenes IA · {completed_count}/{self.batch_image_total}")
+                        self.progress_detail_var.set(f"Escena {scene_number} ilustrada · preparando la siguiente")
+                        self.after(250, self._start_next_missing_scene_image)
+                    else:
+                        messagebox.showinfo(
+                            "Ilustración lista",
+                            f"Se generó la imagen local para la escena {scene_number}. "
+                            "Puedes previsualizar el montaje antes de exportarlo."
+                        )
                 elif kind == "image_error":
                     scene_number, detail = event[1], event[2]
                     self.image_generation_running = False
+                    self.batch_image_active = False
+                    self.batch_image_queue = []
+                    self.batch_image_total = 0
+                    self.preview_after_image_batch = False
                     self._set_image_state(False)
                     self.progress_label_var.set(f"Ilustración fallida · escena {scene_number}")
                     self.progress_detail_var.set("Comprueba ComfyUI, el checkpoint y su consola.")
@@ -3376,14 +3512,37 @@ Write-Output 'NARRATION_OK'
                 elif kind == "render_done":
                     self.render_running = False
                     self._set_render_state(False)
-                    self.last_export_path = event[1]
-                    if hasattr(self, "preview_status_var"):
-                        self.preview_status_var.set(f"Último vídeo exportado: {self.last_export_path}")
+                    is_preview = bool(event[4]) if len(event) > 4 else False
                     self.progressbar.configure(maximum=100, value=100)
-                    self.progress_label_var.set("Vídeo exportado correctamente")
-                    self.progress_detail_var.set(f"100% · {event[2]} escenas · duración aproximada {self._format_eta(event[3])}")
-                    self.status_var.set(f"MP4 creado: {self.last_export_path}")
-                    messagebox.showinfo("Exportación terminada", f"Vídeo MP4 creado en:\n{self.last_export_path}\n\nPuedes abrirlo desde la pestaña VISTA PREVIA.")
+                    if is_preview:
+                        self.preview_render_path = event[1]
+                        self.preview_render_signature = self._current_preview_signature()
+                        self.manual_preview_path = ""
+                        self.progress_label_var.set("Vista previa lista")
+                        self.progress_detail_var.set(
+                            f"100% · borrador 720p · {event[2]} escenas · duración aproximada {self._format_eta(event[3])}"
+                        )
+                        self.preview_playback_status_var.set("Vista previa terminada · abriendo reproductor integrado…")
+                        self.preview_status_var.set(
+                            f"Vista previa de revisión creada: {self.preview_render_path} · exporta solo después de revisarla."
+                        )
+                        self.status_var.set("Vista previa lista. Reproduce el montaje y ajusta escenas, voz o duración antes de exportar.")
+                        self.studio_tabs.select(self.preview_tab)
+                        self.after(300, self.play_preview_video)
+                    else:
+                        self.last_export_path = event[1]
+                        self.manual_preview_path = ""
+                        if hasattr(self, "preview_status_var"):
+                            self.preview_status_var.set(f"Último vídeo exportado: {self.last_export_path}")
+                        self.progress_label_var.set("Vídeo exportado correctamente")
+                        self.progress_detail_var.set(
+                            f"100% · {event[2]} escenas · duración aproximada {self._format_eta(event[3])}"
+                        )
+                        self.status_var.set(f"MP4 creado: {self.last_export_path}")
+                        messagebox.showinfo(
+                            "Exportación terminada",
+                            f"Vídeo MP4 creado en:\n{self.last_export_path}\n\nPuedes abrirlo desde la pestaña VISTA PREVIA."
+                        )
                 elif kind == "audio_mux_done":
                     self.audio_mux_running = False
                     self.last_export_path = event[1]
@@ -3520,35 +3679,166 @@ Write-Output 'NARRATION_OK'
         self.refresh_projects()
         self.status_var.set("Proyecto eliminado.")
 
+    def preview_video_render(self):
+        """Render a 720p draft into the project and open it inside MARC for review."""
+        self._start_video_render(preview=True)
+
     def export_video(self):
+        """Render the approved project at its selected delivery settings."""
+        self._start_video_render(preview=False)
+
+    def _current_preview_signature(self):
+        """Fingerprint the editable timeline so stale previews are never mistaken for current work."""
+        def file_state(value):
+            if not value:
+                return {"path": "", "exists": False}
+            try:
+                path = Path(value)
+                if not path.is_file():
+                    return {"path": str(value), "exists": False}
+                stat = path.stat()
+                return {"path": str(path.resolve()), "exists": True,
+                        "size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+            except (OSError, TypeError, ValueError):
+                return {"path": str(value), "exists": False}
+
+        try:
+            script = self.script_text.get("1.0", "end-1c")
+        except (AttributeError, tk.TclError):
+            script = ""
+        payload = {
+            "project_id": self.current_id,
+            "script": script,
+            "title": self.title_var.get(),
+            "topic": self.topic_var.get(),
+            "platform": self.platform_var.get(),
+            "duration": self.duration_var.get(),
+            "animation": self.animation_style_var.get(),
+            "drawing": self.drawing_style_var.get(),
+            "resolution": self.resolution_var.get(),
+            "fps": self.fps_var.get(),
+            "durations": self.scene_duration_overrides,
+            "voice_assignments": self.voice_assignments,
+            "selected_voice": self.voice_var.get() if hasattr(self, "voice_var") else "(Automática)",
+            "scene_assets": {
+                str(number): file_state(path)
+                for number, path in sorted(self.scene_assets.items(), key=lambda item: str(item[0]))
+            },
+            "narration": file_state(self.audio_track_path),
+            "music": file_state(self.music_track_path),
+        }
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
+
+    def _prepare_default_character_voice_assignments(self, script, primary_voice="(Automática)"):
+        """Preserve manual voice choices and assign alternate installed voices to unlabeled characters."""
+        speakers = extract_speaker_names(script)
+        voices = list(dict.fromkeys(str(voice).strip() for voice in self.available_voice_names if str(voice).strip()))
+        if len(speakers) < 2 or len(voices) < 2:
+            return 0
+
+        old_mapping = dict(self.voice_assignments or {})
+        by_speaker = {str(name).strip().upper(): value for name, value in old_mapping.items()}
+        default_voice = primary_voice if primary_voice in voices else voices[0]
+        alternatives = [voice for voice in voices if voice.casefold() != default_voice.casefold()]
+        if not alternatives:
+            return 0
+
+        mapping = dict(old_mapping)
+        assigned = 0
+        for speaker in speakers:
+            key = str(speaker).strip().upper()
+            if any(token in key for token in ("NARRADOR", "NARRADORA", "NARRATOR", "VOZ EN OFF")):
+                continue
+            current = by_speaker.get(key)
+            if current in voices:
+                mapping[speaker] = current
+                continue
+            mapping[speaker] = alternatives[assigned % len(alternatives)]
+            assigned += 1
+
+        if mapping != old_mapping:
+            self.voice_assignments = mapping
+            if self.current_id is not None:
+                self.save_project(quiet=True)
+        return assigned
+
+    def _start_video_render(self, preview=False):
         if self.render_running or self.generation_running or self.image_generation_running or self.voice_generation_running:
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
             return
         if self.current_id is None:
-            messagebox.showwarning("Guarda primero", "Guarda el proyecto antes de exportar.")
+            self.save_project(quiet=True)
+        if self.current_id is None:
+            messagebox.showwarning("Guarda primero", "Completa el título y la premisa y guarda el proyecto antes de renderizar.")
             return
         self.save_project(quiet=True)
         row = self.conn.execute("SELECT * FROM projects WHERE id=?", (self.current_id,)).fetchone()
-        if not row or not row["approved"]:
+        if not row:
+            messagebox.showerror("Proyecto no encontrado", "Vuelve a abrir o guardar el proyecto e inténtalo otra vez.")
+            return
+        if not preview and not row["approved"]:
             messagebox.showerror("Aprobación obligatoria", "No se puede exportar: primero debes aprobar el guion.")
             return
         scenes = parse_script_scenes(row["script"] or "")
         if not scenes:
-            messagebox.showerror("Guion vacío", "El guion no contiene escenas exportables. Genera o escribe el guion primero.")
+            messagebox.showerror("Guion vacío", "El guion no contiene escenas renderizables. Genera o escribe el guion primero.")
             return
+
         asset_map = dict(self.scene_assets)
         for key, value in list(asset_map.items()):
             if not Path(value).is_file():
                 asset_map.pop(key, None)
-        has_scene_images = any(asset_map.get(str(i + 1)) for i in range(len(scenes)))
-        if not has_scene_images:
-            continue_text_only = messagebox.askyesno(
-                "Faltan imágenes para el vídeo",
-                "Ninguna escena tiene una imagen asignada. El MP4 utilizará tarjetas tipográficas sobre fondos oscuros. "
-                "¿Deseas continuar sin ilustraciones?"
-            )
-            if not continue_text_only:
+        missing_images = [
+            index + 1 for index in range(len(scenes))
+            if not asset_map.get(str(index + 1))
+        ]
+        if missing_images:
+            model_ready = bool(self.image_model_var.get().strip())
+            if preview and model_ready:
+                generate_images = messagebox.askyesno(
+                    "Preparar la vista previa",
+                    f"{len(missing_images)} escena(s) no tienen ilustración. Sin imágenes se verán tarjetas de texto, no escenas visuales. "
+                    "¿Generar ahora las ilustraciones faltantes con ComfyUI antes de previsualizar?"
+                )
+                if generate_images:
+                    self.generate_missing_scene_images(preconfirmed=True, preview_after=True)
+                    return
+                if not messagebox.askyesno(
+                    "Vista previa sin imágenes",
+                    "La vista previa tendrá tarjetas de texto en las escenas sin ilustración. No representará una animación visual completa. ¿Continuar?"
+                ):
+                    return
+            else:
+                if preview:
+                    warning = (
+                        f"{len(missing_images)} escena(s) no tienen imagen. La vista previa mostrará tarjetas de texto en esas escenas. "
+                        "Para un vídeo visual, configura ComfyUI y genera las imágenes faltantes. ¿Continuar de todos modos?"
+                    )
+                else:
+                    warning = (
+                        f"{len(missing_images)} escena(s) no tienen imagen. El MP4 usará tarjetas de texto para esas escenas. "
+                        "MARC anima las imágenes asignadas mediante movimiento de cámara, pero no genera movimiento neuronal de personajes. ¿Continuar?"
+                    )
+                if not messagebox.askyesno("Escenas sin ilustración", warning):
+                    return
+
+        signature = self._current_preview_signature()
+        if preview:
+            preview_dir = PROJECTS_DIR / str(row["id"]) / "previews"
+            preview_path = preview_dir / f"preview_{signature[:16]}.mp4"
+            if preview_path.is_file() and preview_path.stat().st_size > 0:
+                self.preview_render_path = str(preview_path.resolve())
+                self.preview_render_signature = signature
+                self.manual_preview_path = ""
+                self.preview_playback_status_var.set("Vista previa encontrada · abriendo en el monitor integrado…")
+                self.studio_tabs.select(self.preview_tab)
+                self.play_preview_video()
                 return
+        else:
+            preview_path = None
+
         ffmpeg = self._find_ffmpeg()
         if not ffmpeg:
             selected = filedialog.askopenfilename(
@@ -3556,14 +3846,21 @@ Write-Output 'NARRATION_OK'
                 filetypes=[("FFmpeg ejecutable", "ffmpeg.exe"), ("Ejecutables", "*.exe")]
             )
             if not selected:
-                messagebox.showerror("FFmpeg no encontrado", "Selecciona ffmpeg.exe de la carpeta bin para exportar.")
+                messagebox.showerror("FFmpeg no encontrado", "Selecciona ffmpeg.exe de la carpeta bin para renderizar.")
                 return
             if Path(selected).name.lower() != "ffmpeg.exe":
                 messagebox.showerror("Archivo incorrecto", "Selecciona el archivo ffmpeg.exe.")
                 return
             ffmpeg = selected
-        resolution = row["resolution"] or "1080p (Full HD)"
-        fps = max(1, int(row["fps"] or 30))
+
+        final_resolution = row["resolution"] or "1080p (Full HD)"
+        final_fps = max(1, int(row["fps"] or 30))
+        if preview:
+            resolution = "720p (HD)"
+            fps = min(final_fps, 24)
+        else:
+            resolution = final_resolution
+            fps = final_fps
         width, height = export_dimensions(row["platform"], resolution)
         pc_info = getattr(self, "pc_info", {})
         try:
@@ -3571,7 +3868,7 @@ Write-Output 'NARRATION_OK'
             ram_gb = float(pc_info.get("ram_gb") or 8)
         except (TypeError, ValueError):
             logical_cores, ram_gb = os.cpu_count() or 2, 8.0
-        if (resolution == "2K / 1440p" or fps >= 60) and (logical_cores <= 4 or ram_gb < 12):
+        if not preview and (resolution == "2K / 1440p" or fps >= 60) and (logical_cores <= 4 or ram_gb < 12):
             warning = (
                 f"Has elegido {resolution}, {width}×{height} a {fps} FPS. "
                 "Este perfil puede tardar considerablemente en este equipo. MARC conservará la resolución seleccionada; "
@@ -3579,39 +3876,61 @@ Write-Output 'NARRATION_OK'
             )
             if not messagebox.askyesno("Render de alta calidad", warning):
                 return
-        self.status_var.set(f"Salida configurada: {width}×{height} · {fps} FPS · {resolution}.")
-        output = filedialog.asksaveasfilename(
-            title="Guardar vídeo MP4", defaultextension=".mp4",
-            filetypes=[("Vídeo MP4", "*.mp4")],
-            initialfile=f"{row['title'][:36]}-{resolution.split()[0]}.mp4"
-        )
-        if not output:
-            return
+        if preview:
+            preview_path.parent.mkdir(parents=True, exist_ok=True)
+            output = str(preview_path.resolve())
+            self.manual_preview_path = ""
+            self.preview_playback_status_var.set("Preparando vista previa 720p dentro de MARC…")
+            self.preview_status_var.set("Render de revisión · 720p / 24 FPS máximo · no es la exportación final.")
+            self.studio_tabs.select(self.preview_tab)
+        else:
+            self.status_var.set(f"Salida configurada: {width}×{height} · {fps} FPS · {resolution}.")
+            output = filedialog.asksaveasfilename(
+                title="Guardar vídeo MP4", defaultextension=".mp4",
+                filetypes=[("Vídeo MP4", "*.mp4")],
+                initialfile=f"{row['title'][:36]}-{resolution.split()[0]}.mp4"
+            )
+            if not output:
+                return
         target_seconds = max(60, int(row["duration_minutes"]) * 60)
         durations = allocate_scene_durations(scenes, target_seconds)
         durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
         audio_path = self.audio_track_path if self.audio_track_path and Path(self.audio_track_path).is_file() else ""
         music_path = self.music_track_path if self.music_track_path and Path(self.music_track_path).is_file() else ""
         loop_music = bool(self.loop_music_var.get()) if self.loop_music_var is not None else True
-        has_any_audio = bool(audio_path or music_path or os.name == "nt")
+        has_any_audio = bool(audio_path or music_path or (os.name == "nt" and not audio_path))
         render_steps = len(scenes) + 1 + (1 if has_any_audio else 0)
         self.render_cancel_event.clear()
         self.render_running = True
         self._set_render_state(True)
+        if getattr(self, "preview_player_active", False):
+            self.stop_preview_video()
         self.progressbar.configure(maximum=render_steps, value=0)
-        self.progress_label_var.set(f"Preparando render · {len(scenes)} escenas")
-        self.progress_detail_var.set(
-            f"0% · {width}×{height} · {fps} FPS · duración objetivo {self._format_eta(sum(durations))}"
-        )
+        label = f"Preparando vista previa · {len(scenes)} escenas" if preview else f"Preparando render · {len(scenes)} escenas"
+        self.progress_label_var.set(label)
+        if preview:
+            self.progress_detail_var.set(f"0% · borrador 720p · {width}×{height} · {fps} FPS")
+        else:
+            self.progress_detail_var.set(
+                f"0% · {width}×{height} · {fps} FPS · duración objetivo {self._format_eta(sum(durations))}"
+            )
+        chosen_voice = self.voice_var.get().strip() if hasattr(self, "voice_var") else "(Automática)"
+        if not audio_path and os.name == "nt":
+            voice_count = len(self.available_voice_names)
+            speaker_count = len(extract_speaker_names(row["script"] or ""))
+            if speaker_count > 1 and voice_count > 1:
+                self._prepare_default_character_voice_assignments(row["script"] or "", chosen_voice)
+            elif speaker_count > 1 and voice_count <= 1:
+                self.voice_status_var.set("El guion contiene varios hablantes, pero Windows solo tiene una voz local detectada; instala más voces para distinguirlos.")
+        voice_assignments_json = json.dumps(self.voice_assignments or {}, ensure_ascii=False)
         narration_text = "\n\n".join(
             str(scene.get("text", "")).strip() for scene in scenes if str(scene.get("text", "")).strip()
         ).strip() if not audio_path and os.name == "nt" else ""
-        chosen_voice = self.voice_var.get().strip() if hasattr(self, "voice_var") else "(Automática)"
-        voice_assignments_json = row["voice_assignments"] or "{}"
         args = (
             ffmpeg, str(Path(output).resolve()), int(row["id"]), width, height,
             scenes, durations, asset_map, row["animation_style"] or "2D fluida",
-            audio_path, music_path, loop_music, narration_text, chosen_voice, fps, voice_assignments_json
+            audio_path, music_path, loop_music, narration_text, chosen_voice, fps,
+            voice_assignments_json, bool(preview)
         )
         threading.Thread(target=self._render_video_worker, args=args, daemon=True).start()
 
@@ -3621,11 +3940,11 @@ Write-Output 'NARRATION_OK'
         self.cancel_button.configure(state="disabled" if not active else "disabled")
         self.cancel_render_button.configure(state="normal" if active else "disabled")
         for button in (self.new_project_button, self.save_button, self.approve_button,
-                       self.export_button, self.delete_button, self.assign_image_button,
+                       self.export_button, self.preview_render_button, self.delete_button, self.assign_image_button,
                        self.clear_image_button, self.refresh_scenes_button,
                        self.select_audio_button, self.clear_audio_button,
                        self.select_music_button, self.clear_music_button,
-                       self.detect_models_button, self.generate_image_button,
+                       self.detect_models_button, self.generate_image_button, self.generate_missing_images_button,
                        self.detect_voice_button, self.generate_voice_button, self.assign_character_voices_button,
                        self.inspector_assign_image_button, self.inspector_generate_image_button,
                        self.inspector_duration_button, self.export_srt_button):
@@ -3650,7 +3969,7 @@ Write-Output 'NARRATION_OK'
                              scenes, durations, asset_map, animation_style,
                              audio_path="", music_path="", loop_music=True,
                              narration_text="", chosen_voice="(Automática)", fps=30,
-                             voice_assignments_json="{}"):
+                             voice_assignments_json="{}", is_preview=False):
         scene_dir = PROJECTS_DIR / str(project_id) / "render_work"
         scene_dir.mkdir(parents=True, exist_ok=True)
         output_path = Path(output)
@@ -3913,7 +4232,7 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
             temp_output_path.replace(output_path)
             project_dir = PROJECTS_DIR / str(project_id)
             (project_dir / "last_export.txt").write_text(str(output_path), encoding="utf-8")
-            self.generation_queue.put(("render_done", str(output_path), total, sum(durations)))
+            self.generation_queue.put(("render_done", str(output_path), total, sum(durations), bool(is_preview)))
         except RuntimeError as exc:
             if "__MARC_RENDER_CANCELLED__" in str(exc):
                 self.generation_queue.put(("render_cancelled",))
