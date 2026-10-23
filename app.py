@@ -1665,8 +1665,13 @@ if ($VoiceMapFile -and (Test-Path -LiteralPath $VoiceMapFile)) {
     }
 }
 try {
+    $systemDefaultVoice = $synth.Voice.Name
+    $availableVoices = @($synth.GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Name })
     $defaultVoice = $VoiceName
-    if ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+    if (!$defaultVoice -or $defaultVoice -eq '(Automática)' -or $availableVoices -notcontains $defaultVoice) {
+        $defaultVoice = $systemDefaultVoice
+    }
+    $synth.SelectVoice($defaultVoice)
     $synth.Rate = 0
     $synth.Volume = 100
     $text = [System.IO.File]::ReadAllText($TextFile, [System.Text.Encoding]::UTF8)
@@ -1680,15 +1685,16 @@ try {
             foreach ($segment in $segments) {
                 $speaker = $segment.Groups[1].Value.Trim().ToUpperInvariant()
                 $spoken = $segment.Groups[2].Value.Trim()
-                if ($voiceMap.ContainsKey($speaker) -and $voiceMap[$speaker] -and $voiceMap[$speaker] -ne '(Voz principal)') {
+                if ($voiceMap.ContainsKey($speaker) -and $voiceMap[$speaker] -and
+                    $voiceMap[$speaker] -ne '(Voz principal)' -and $availableVoices -contains $voiceMap[$speaker]) {
                     $synth.SelectVoice($voiceMap[$speaker])
-                } elseif ($defaultVoice -and $defaultVoice -ne '(Automática)') {
+                } else {
                     $synth.SelectVoice($defaultVoice)
                 }
                 if (![string]::IsNullOrWhiteSpace($spoken)) { $synth.Speak($spoken) }
             }
         } else {
-            if ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+            $synth.SelectVoice($defaultVoice)
             $synth.Speak($line)
         }
     }
@@ -3605,8 +3611,13 @@ if (Test-Path -LiteralPath $VoiceMapFile) {
   foreach ($property in $parsed.PSObject.Properties) { $voiceMap[$property.Name.ToUpperInvariant()] = [string]$property.Value }
 }
 try {
+  $systemDefaultVoice = $synth.Voice.Name
+  $availableVoices = @($synth.GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Name })
   $defaultVoice = $VoiceName
-  if ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+  if (!$defaultVoice -or $defaultVoice -eq '(Automática)' -or $availableVoices -notcontains $defaultVoice) {
+    $defaultVoice = $systemDefaultVoice
+  }
+  $synth.SelectVoice($defaultVoice)
   $synth.Rate = 0
   $synth.Volume = 100
   $text = [System.IO.File]::ReadAllText($TextFile, [System.Text.Encoding]::UTF8)
@@ -3620,9 +3631,12 @@ try {
       foreach ($segment in $segments) {
         $speaker = $segment.Groups[1].Value.Trim().ToUpperInvariant()
         $spoken = $segment.Groups[2].Value.Trim()
-        if ($voiceMap.ContainsKey($speaker) -and $voiceMap[$speaker] -and $voiceMap[$speaker] -ne '(Voz principal)') {
+        if ($voiceMap.ContainsKey($speaker) -and $voiceMap[$speaker] -and
+            $voiceMap[$speaker] -ne '(Voz principal)' -and $availableVoices -contains $voiceMap[$speaker]) {
           $synth.SelectVoice($voiceMap[$speaker])
-        } elseif ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+        } else {
+          $synth.SelectVoice($defaultVoice)
+        }
         if (![string]::IsNullOrWhiteSpace($spoken)) { $synth.Speak($spoken) }
       }
     } else {
