@@ -785,6 +785,210 @@ class App(tk.Tk):
         self.scene_outline.see(f"scene_{scene_number}")
         self.status_var.set(f"Se quitó la imagen de la escena {scene_number}; se usará una tarjeta de texto.")
 
+    def _refresh_audio_track_label(self):
+        if not hasattr(self, "audio_track_label_var"):
+            return
+        if self.audio_track_path and Path(self.audio_track_path).is_file():
+            path = Path(self.audio_track_path)
+            self.audio_track_label_var.set(f"{path.name}\n{path}")
+        else:
+            self.audio_track_label_var.set("Sin pista de audio. Puedes importar una o generar narración local.")
+
+    def detect_local_voices(self, quiet=False):
+        if self.voice_generation_running:
+            return
+        if os.name != "nt":
+            self.voice_status_var.set("La narración de Windows solo está disponible en Windows.")
+            return
+        self.voice_status_var.set("Buscando voces instaladas localmente…")
+        threading.Thread(target=self._detect_local_voices_worker, args=(quiet,), daemon=True).start()
+
+    def _detect_local_voices_worker(self, quiet=False):
+        try:
+            powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+            if not powershell:
+                raise RuntimeError("No se encontró Windows PowerShell.")
+            script = (
+                "$ErrorActionPreference='Stop'; "
+                "Add-Type -AssemblyName System.Speech; "
+                "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+                "$s.GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Name }; "
+                "$s.Dispose()"
+            )
+            result = subprocess.run(
+                [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+                capture_output=True, text=True, timeout=20,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            )
+            if result.returncode != 0:
+                raise RuntimeError((result.stderr or result.stdout or "Windows no pudo enumerar las voces SAPI.").strip()[-1800:])
+            voices = list(dict.fromkeys(line.strip() for line in result.stdout.splitlines() if line.strip()))
+            self.generation_queue.put(("voice_models", voices, quiet))
+        except Exception as exc:
+            self.generation_queue.put(("voice_models_error", str(exc), quiet))
+
+    def generate_local_voice(self):
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        if os.name != "nt":
+            messagebox.showinfo("Solo Windows", "La narración local integrada utiliza las voces instaladas de Windows.")
+            return
+        raw_script = self.script_text.get("1.0", "end-1c")
+        scenes = parse_script_scenes(raw_script)
+        narration = "\n\n".join(scene["text"] for scene in scenes if scene.get("text", "").strip()).strip()
+        if not narration:
+            messagebox.showwarning("Sin guion", "Genera o escribe un guion antes de crear la narración.")
+            return
+        if self.current_id is None:
+            self.save_project(quiet=True)
+        if self.current_id is None:
+            messagebox.showwarning("Guarda el proyecto", "Completa el título y la premisa antes de generar la narración.")
+            return
+        chosen_voice = self.voice_var.get().strip() or "(Automática)"
+        voices = tuple(self.voice_combo.cget("values"))
+        if chosen_voice != "(Automática)" and chosen_voice not in voices:
+            messagebox.showwarning("Voz no disponible", "Pulsa «Detectar voces» y selecciona una voz instalada.")
+            return
+        if self.audio_track_path and Path(self.audio_track_path).is_file():
+            if not messagebox.askyesno(
+                "Reemplazar pista de audio",
+                "Este proyecto ya tiene una pista de audio. La narración generada pasará a ser la pista actual. "
+                "La pista anterior permanecerá como archivo en la carpeta de recursos. ¿Continuar?"
+            ):
+                return
+        assets_dir = self._project_assets_dir()
+        if assets_dir is None:
+            return
+        try:
+            assets_dir.mkdir(parents=True, exist_ok=True)
+            text_path = assets_dir / "narration_text.txt"
+            script_path = assets_dir / "synthesize_windows_voice.ps1"
+            output_path = assets_dir / "narration.wav"
+            text_path.write_text(narration, encoding="utf-8")
+            script_path.write_text(
+                r"""param(
+    [Parameter(Mandatory=$true)][string]$TextFile,
+    [Parameter(Mandatory=$true)][string]$OutputFile,
+    [Parameter(Mandatory=$false)][string]$VoiceName
+)
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Speech
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+try {
+    if ($VoiceName -and $VoiceName -ne '(Automática)') { $synth.SelectVoice($VoiceName) }
+    $synth.Rate = 0
+    $synth.Volume = 100
+    $text = [System.IO.File]::ReadAllText($TextFile, [System.Text.Encoding]::UTF8)
+    if ([string]::IsNullOrWhiteSpace($text)) { throw 'El texto de narración está vacío.' }
+    $synth.SetOutputToWaveFile($OutputFile)
+    $synth.Speak($text)
+    $synth.SetOutputToNull()
+}
+finally {
+    $synth.Dispose()
+}
+if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile).Length -lt 44) {
+    throw 'Windows no generó un archivo WAV válido.'
+}
+Write-Output 'NARRATION_OK'
+""",
+                encoding="utf-8"
+            )
+        except OSError as exc:
+            messagebox.showerror("No se pudo preparar la narración", str(exc))
+            return
+        self.voice_generation_running = True
+        self.voice_cancel_event.clear()
+        self._set_voice_state(True)
+        self.progressbar.configure(mode="indeterminate")
+        self.progressbar.start(12)
+        self.progress_label_var.set("Narración local en proceso")
+        self.progress_detail_var.set("0% · Windows está sintetizando voz desde el guion")
+        self.voice_status_var.set("Generando WAV sin conexión. La duración depende de la longitud del guion y la voz instalada.")
+        self.status_var.set("La narración se genera localmente; puedes cancelar este proceso.")
+        args = (int(self.current_id), str(text_path), str(script_path), str(output_path), chosen_voice)
+        threading.Thread(target=self._local_voice_worker, args=args, daemon=True).start()
+
+    def _set_voice_state(self, active):
+        state = "disabled" if active else "normal"
+        for button in (
+            self.generate_button, self.save_button, self.approve_button, self.export_button,
+            self.delete_button, self.assign_image_button, self.clear_image_button,
+            self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
+            self.detect_models_button, self.generate_image_button, self.detect_voice_button,
+            self.generate_voice_button
+        ):
+            button.configure(state=state)
+        self.cancel_button.configure(state="disabled")
+        self.cancel_render_button.configure(state="disabled")
+        self.cancel_voice_button.configure(state="normal" if active else "disabled")
+        self.project_list.configure(state=state)
+        self._set_scene_list_state(active)
+        self.image_model_combo.configure(state="disabled" if active else "readonly")
+        self.voice_combo.configure(state="disabled" if active else "readonly")
+        for widget, idle_state in self.form_widgets:
+            widget.configure(state="disabled" if active else idle_state)
+        self.script_text.configure(state="disabled" if active else "normal")
+        if not active:
+            self.progressbar.stop()
+            self.progressbar.configure(mode="determinate")
+
+    def cancel_local_voice(self):
+        if self.voice_generation_running:
+            self.voice_cancel_event.set()
+            self.cancel_voice_button.configure(state="disabled")
+            self.voice_status_var.set("Cancelación solicitada; deteniendo la síntesis de voz…")
+
+    def _local_voice_worker(self, project_id, text_path, script_path, output_path, voice_name):
+        log_path = Path(text_path).with_name("synthesize_voice.log")
+        try:
+            powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+            if not powershell:
+                raise RuntimeError("No se encontró Windows PowerShell.")
+            if self.voice_cancel_event.is_set():
+                self.generation_queue.put(("voice_cancelled",))
+                return
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            with log_path.open("w", encoding="utf-8", errors="replace") as log:
+                process = subprocess.Popen(
+                    [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass",
+                     "-File", script_path, "-TextFile", text_path,
+                     "-OutputFile", output_path, "-VoiceName", voice_name],
+                    stdout=subprocess.DEVNULL, stderr=log, creationflags=creationflags
+                )
+                last_update = time.monotonic()
+                while process.poll() is None:
+                    if self.voice_cancel_event.is_set():
+                        process.terminate()
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait()
+                        self.generation_queue.put(("voice_cancelled",))
+                        return
+                    if time.monotonic() - last_update >= 5:
+                        self.generation_queue.put(("voice_progress", "Windows sigue sintetizando la narración local…"))
+                        last_update = time.monotonic()
+                    time.sleep(0.25)
+                if process.returncode != 0:
+                    detail = log_path.read_text(encoding="utf-8", errors="replace")[-2200:]
+                    raise RuntimeError(detail or f"PowerShell terminó con código {process.returncode}.")
+            output = Path(output_path)
+            if not output.is_file() or output.stat().st_size < 44:
+                detail = log_path.read_text(encoding="utf-8", errors="replace")[-2200:]
+                raise RuntimeError(detail or "Windows no creó un WAV válido.")
+            self.generation_queue.put(("voice_done", project_id, str(output.resolve()), voice_name))
+        except Exception as exc:
+            self.generation_queue.put(("voice_error", str(exc)))
+        finally:
+            if self.voice_cancel_event.is_set():
+                try:
+                    Path(output_path).unlink(missing_ok=True)
+                except OSError:
+                    pass
+
     def select_audio_track(self):
         if self.generation_running or self.render_running or self.image_generation_running:
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
