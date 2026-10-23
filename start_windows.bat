@@ -1,10 +1,14 @@
 @echo off
-setlocal
+setlocal EnableExtensions
 cd /d "%~dp0"
 title MARC Video Studio AI Desktop
+if exist "%~dp0MARC Video Studio AI Desktop.exe" (
+  start "" "%~dp0MARC Video Studio AI Desktop.exe"
+  exit /b 0
+)
 if not exist ".venv\Scripts\python.exe" (
   echo MARC aun no esta preparado.
-  echo Ejecuta primero install_windows.bat.
+  echo Ejecuta install_windows.bat para preparar el entorno de desarrollo.
   pause
   exit /b 1
 )

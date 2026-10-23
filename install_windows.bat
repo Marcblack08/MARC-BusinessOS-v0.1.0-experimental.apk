@@ -9,71 +9,56 @@ echo   Preparacion local - sin claves API
 echo ============================================================
 echo.
 
+rem First try the installed launcher, then fall back to the actual python.exe path.
 set "PYEXE="
 set "PYARGS="
-
-rem Test each runtime explicitly; do not rely on py --version error handling.
 where py >nul 2>nul
 if not errorlevel 1 (
-  py -3.15 -c "import sys" >nul 2>nul
-  if not errorlevel 1 goto use_py315
-  py -3.13 -c "import sys" >nul 2>nul
-  if not errorlevel 1 goto use_py313
-  py -3.12 -c "import sys" >nul 2>nul
-  if not errorlevel 1 goto use_py312
-  py -3.11 -c "import sys" >nul 2>nul
-  if not errorlevel 1 goto use_py311
+  for %%V in (3.15 3.13 3.12 3.11) do (
+    py -%%V -c "import sys" >nul 2>nul
+    if not errorlevel 1 if not defined PYARGS (
+      set "PYEXE=py"
+      set "PYARGS=-%%V"
+    )
+  )
 )
+if defined PYEXE goto python_found
 
-rem Fallback to python.exe on PATH.
 where python >nul 2>nul
 if not errorlevel 1 (
-  python -c "import sys" >nul 2>nul
-  if not errorlevel 1 goto use_python
+  for /f "delims=" %%P in ('python -c "import sys; print(sys.executable)" 2^>nul') do set "PYEXE=%%P"
+  if defined PYEXE (
+    "%PYEXE%" -c "import sys" >nul 2>nul
+    if not errorlevel 1 goto python_found
+  )
 )
 
-echo [ERROR] No se encontro una instalacion funcional de Python 3.11, 3.12, 3.13 o 3.15.
-echo.
-echo Instala Python 3.12 de 64 bits desde (recomendado):
-echo https://www.python.org/downloads/release/python-31210/
-echo Durante la instalacion marca "Add python.exe to PATH".
-echo Luego cierra esta ventana y ejecuta este archivo de nuevo.
-echo.
+echo [ERROR] No se encontro una instalacion de Python que pueda ejecutarse.
+echo Instala Python 3.12 de 64 bits desde https://www.python.org/downloads/release/python-31210/
+echo Marca "Add python.exe to PATH" y luego vuelve a ejecutar este archivo.
 pause
 exit /b 1
 
-:use_py315
-set "PYEXE=py"
-set "PYARGS=-3.15"
-goto python_found
-:use_py313
-set "PYEXE=py"
-set "PYARGS=-3.13"
-goto python_found
-:use_py312
-set "PYEXE=py"
-set "PYARGS=-3.12"
-goto python_found
-:use_py311
-set "PYEXE=py"
-set "PYARGS=-3.11"
-goto python_found
-:use_python
-set "PYEXE=python"
-set "PYARGS="
-goto python_found
-
 :python_found
-echo [OK] Python detectado:
-%PYEXE% %PYARGS% --version
-if errorlevel 1 goto no_runtime
+echo [OK] Interprete encontrado:
+if "%PYEXE%"=="py" (
+  %PYEXE% %PYARGS% --version
+) else (
+  "%PYEXE%" --version
+)
 echo.
 echo [1/4] Preparando entorno virtual...
 if not exist ".venv\Scripts\python.exe" (
-  %PYEXE% %PYARGS% -m venv .venv
+  if "%PYEXE%"=="py" (
+    py %PYARGS% -m venv ".venv"
+  ) else (
+    "%PYEXE%" -m venv ".venv"
+  )
   if errorlevel 1 goto venv_error
 )
 if not exist ".venv\Scripts\python.exe" goto venv_error
+".venv\Scripts\python.exe" -c "import sys; print(sys.version)"
+if errorlevel 1 goto venv_error
 
 echo [2/4] Actualizando herramientas de instalacion...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
@@ -105,22 +90,17 @@ echo ============================================================
 pause
 exit /b 0
 
-:no_runtime
-echo [ERROR] El lanzador de Python no pudo abrir el runtime elegido.
-pause
-exit /b 1
-
 :venv_error
 echo.
-echo [ERROR] Python se detecto, pero no se pudo crear .venv.
-echo Comprueba que Python tenga el modulo venv y permisos de escritura.
-echo Si .venv esta incompleta, renombrala a .venv_backup y vuelve a ejecutar.
+echo [ERROR] No se pudo crear el entorno virtual .venv.
+echo Si existe una carpeta .venv incompleta, renombrala a .venv_backup y vuelve a ejecutar.
+echo Comprueba que Python incluya el modulo venv y que tengas permisos de escritura.
 pause
 exit /b 1
 
 :error
 echo.
-echo [ERROR] No se pudo completar la instalacion de dependencias.
-echo Comprueba la conexion a Internet y el contenido de requirements.txt.
+echo [ERROR] No se pudieron instalar las dependencias.
+echo Comprueba la conexion a Internet y revisa el mensaje anterior.
 pause
 exit /b 1

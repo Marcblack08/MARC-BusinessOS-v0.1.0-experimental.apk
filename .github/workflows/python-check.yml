@@ -2,12 +2,12 @@ name: Python source validation
 
 on:
   push:
-    branches: [main]
+    branches: [main, "ui/**"]
   workflow_dispatch:
 
 jobs:
   syntax-check:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -17,3 +17,5 @@ jobs:
           python-version: "3.12"
       - name: Compile Python source files
         run: python -m py_compile app.py ollama_client.py
+      - name: Check desktop UI imports
+        run: python -c "import tkinter; print('Tkinter runtime available')"
