@@ -421,20 +421,29 @@ class App(tk.Tk):
         statuscard = tk.Frame(lower, bg=self.colors["panel"], padx=15, pady=12,
                               highlightthickness=1, highlightbackground=self.colors["border"])
         statuscard.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        self.pc_summary_var = tk.StringVar(value="Detectando equipo…")
-        tk.Label(statuscard, textvariable=self.pc_summary_var, bg=self.colors["panel"],
-                 fg=self.colors["muted"], font=("Segoe UI", 9), justify="left", wraplength=1250).pack(anchor="w")
-        self.estimate_var = tk.StringVar(value="Calculando estimación de producción…")
-        tk.Label(statuscard, textvariable=self.estimate_var, bg=self.colors["panel"],
-                 fg=self.colors["success"], font=("Segoe UI", 10, "bold"), justify="left", wraplength=1250).pack(anchor="w", pady=(4, 2))
+        status_head = tk.Frame(statuscard, bg=self.colors["panel"])
+        status_head.pack(fill="x")
         self.progress_label_var = tk.StringVar(value="Listo para crear el guion")
-        tk.Label(statuscard, textvariable=self.progress_label_var, bg=self.colors["panel"],
-                 fg=self.colors["text"], font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        tk.Label(status_head, textvariable=self.progress_label_var, bg=self.colors["panel"],
+                 fg=self.colors["text"], font=("Segoe UI", 10, "bold")).pack(side="left", anchor="w")
+        self.details_visible = False
+        self.details_button = ttk.Button(status_head, text="＋ Diagnóstico y estimaciones",
+                                         command=self.toggle_status_details)
+        self.details_button.pack(side="right")
         self.progressbar = ttk.Progressbar(statuscard, mode="determinate", maximum=100, value=0)
-        self.progressbar.pack(fill="x", pady=(4, 3))
+        self.progressbar.pack(fill="x", pady=(6, 3))
         self.progress_detail_var = tk.StringVar(value="0% · En espera")
         tk.Label(statuscard, textvariable=self.progress_detail_var, bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 8)).pack(anchor="w")
+        self.details_frame = tk.Frame(statuscard, bg=self.colors["panel"])
+        self.pc_summary_var = tk.StringVar(value="Detectando equipo…")
+        tk.Label(self.details_frame, textvariable=self.pc_summary_var, bg=self.colors["panel"],
+                 fg=self.colors["muted"], font=("Segoe UI", 9), justify="left",
+                 wraplength=1250).pack(anchor="w", pady=(8, 0))
+        self.estimate_var = tk.StringVar(value="Calculando estimación de producción…")
+        tk.Label(self.details_frame, textvariable=self.estimate_var, bg=self.colors["panel"],
+                 fg=self.colors["success"], font=("Segoe UI", 9, "bold"), justify="left",
+                 wraplength=1250).pack(anchor="w", pady=(4, 0))
 
         script_card = tk.Frame(lower, bg=self.colors["panel"], padx=10, pady=9,
                                highlightthickness=1, highlightbackground=self.colors["border"])
@@ -1871,6 +1880,19 @@ Write-Output 'NARRATION_OK'
             self.generation_queue.put(("image_done", project_id, scene_number, str(destination.resolve()), prompt))
         except Exception as exc:
             self.generation_queue.put(("image_error", scene_number, str(exc)))
+
+    def toggle_status_details(self):
+        """Show/hide hardware diagnostics and long production estimates."""
+        if not hasattr(self, "details_frame"):
+            return
+        if self.details_visible:
+            self.details_frame.pack_forget()
+            self.details_button.configure(text="＋ Diagnóstico y estimaciones")
+            self.details_visible = False
+        else:
+            self.details_frame.pack(fill="x", pady=(2, 0))
+            self.details_button.configure(text="− Ocultar detalles")
+            self.details_visible = True
 
     def _field(self, parent, label, variable, row, col, values=None, span=1):
         cell = tk.Frame(parent, bg=self.colors["panel"])
