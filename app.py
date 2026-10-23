@@ -9,6 +9,8 @@ import sqlite3
 import subprocess
 import textwrap
 import threading
+import platform
+import ctypes
 import urllib.request
 import urllib.error
 import tkinter as tk
@@ -84,8 +86,85 @@ class App(tk.Tk):
         self._style()
         self._build()
         self.refresh_projects()
+        self.after(700, self.detect_pc_async)
         self.check_tools()
         self.after(180, self._poll_generation_events)
+
+    def detect_pc_async(self):
+        self.pc_summary_var.set("Detectando procesador, memoria, gráficos y herramientas…")
+        self.estimate_var.set("Calculando un rango aproximado; la primera generación puede tardar más.")
+        threading.Thread(target=self._detect_pc_worker, daemon=True).start()
+
+    def _detect_pc_worker(self):
+        info = {"os": platform.platform(), "cpu": platform.processor() or "CPU no identificada",
+                "cores": os.cpu_count() or 2, "ram_gb": None, "gpu": "No identificada",
+                "ollama": shutil.which("ollama") is not None, "ffmpeg": self._find_ffmpeg() is not None}
+        if os.name == "nt":
+            try:
+                class MEMORYSTATUSEX(ctypes.Structure):
+                    _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                                ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                                ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                                ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                                ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+                mem = MEMORYSTATUSEX(); mem.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+                if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(mem)):
+                    info["ram_gb"] = round(mem.ullTotalPhys / (1024 ** 3), 1)
+            except Exception:
+                pass
+            ps = "$cpu=(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty Name); $gpu=(Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name) -join ', '; Write-Output ('CPU=' + $cpu); Write-Output ('GPU=' + $gpu)"
+            try:
+                out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True,
+                                     text=True, timeout=8, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                for line in out.stdout.splitlines():
+                    if line.startswith("CPU=") and line[4:].strip(): info["cpu"] = line[4:].strip()
+                    if line.startswith("GPU=") and line[4:].strip(): info["gpu"] = line[4:].strip()
+            except Exception:
+                pass
+        else:
+            try:
+                with open("/proc/meminfo", encoding="utf-8") as f:
+                    total = next((line for line in f if line.startswith("MemTotal:")), "")
+                    if total: info["ram_gb"] = round(int(total.split()[1]) / 1024 / 1024, 1)
+            except Exception:
+                pass
+        info["ram_gb"] = info["ram_gb"] or 8
+        info["summary"] = f"PC detectada: {info['cpu']} · {info['cores']} hilos lógicos · RAM {info['ram_gb']} GB · GPU: {info['gpu']} · Ollama: {'sí' if info['ollama'] else 'no detectado'} · FFmpeg: {'sí' if info['ffmpeg'] else 'no detectado'}"
+        self.generation_queue.put(("pc_info", info))
+
+    def _estimate_time(self, minutes, info=None):
+        info = info or getattr(self, "pc_info", {})
+        cores = max(2, int(info.get("cores") or os.cpu_count() or 2))
+        ram = float(info.get("ram_gb") or 8)
+        cpu = (info.get("cpu") or "").lower()
+        gpu = (info.get("gpu") or "").lower()
+        # Conservative heuristic, not a benchmark. Qwen latency varies with prompt/context and model offload.
+        speed_factor = 1.0
+        if cores <= 4: speed_factor *= 1.55
+        elif cores <= 6: speed_factor *= 1.2
+        elif cores >= 12: speed_factor *= 0.72
+        if ram < 8: speed_factor *= 1.6
+        elif ram < 16: speed_factor *= 1.2
+        if any(x in cpu for x in ("i5-4", "i5-3", "4th gen", "haswell")): speed_factor *= 1.2
+        if any(x in gpu for x in ("gtx 750", "gt 7", "intel(r) hd graphics")): speed_factor *= 1.15
+        if any(x in gpu for x in ("rtx", "radeon rx 7", "radeon rx 6")): speed_factor *= 0.75
+        script_low = max(1, minutes * 0.7 * speed_factor)
+        script_high = max(script_low + 1, minutes * 2.2 * speed_factor)
+        scenes = max(1, math.ceil(minutes * 60 / 5))
+        render_low = max(0.5, scenes * 0.025)
+        render_high = max(render_low + 0.5, scenes * 0.09)
+        # A first local model load can add substantial overhead.
+        first_run = " La primera ejecución puede tardar más mientras carga el modelo." if not getattr(self, "ai_available", False) else ""
+        return f"Estimado para {minutes} min de video: guion {self._format_eta(script_low*60)}–{self._format_eta(script_high*60)}; render de escenas de texto {self._format_eta(render_low*60)}–{self._format_eta(render_high*60)}. Total orientativo {self._format_eta(script_low*60+render_low*60)}–{self._format_eta(script_high*60+render_high*60)}.{first_run} No incluye generación de imágenes, animación real ni voz, todavía no implementadas."
+
+    @staticmethod
+    def _format_eta(seconds):
+        seconds = max(0, int(seconds))
+        if seconds < 60: return f"{seconds} s"
+        minutes, sec = divmod(seconds, 60)
+        if minutes < 60: return f"{minutes} min" if sec < 15 else f"{minutes} min {sec} s"
+        hours, minutes = divmod(minutes, 60)
+        return f"{hours} h {minutes} min"
 
     def _style(self):
         self.colors = {
@@ -133,7 +212,8 @@ class App(tk.Tk):
         self.ffmpeg_badge = tk.Label(header_actions, text="● FFmpeg · COMPROBANDO",
                                      bg=self.colors["bg"], fg=self.colors["muted"], font=("Segoe UI", 9, "bold"))
         self.ffmpeg_badge.pack(anchor="e", pady=(0, 7))
-        ttk.Button(header_actions, text="Comprobar herramientas", command=self.check_tools).pack(anchor="e")
+        ttk.Button(header_actions, text="Comprobar herramientas", command=self.check_tools).pack(anchor="e", pady=(0, 5))
+        ttk.Button(header_actions, text="Diagnóstico de PC", command=self.detect_pc_async).pack(anchor="e")
 
         body = ttk.Frame(outer)
         body.pack(fill="both", expand=True)
@@ -233,6 +313,12 @@ class App(tk.Tk):
         progress_card = tk.Frame(right, bg=self.colors["panel"], padx=11, pady=9,
                                   highlightthickness=1, highlightbackground=self.colors["border"])
         progress_card.pack(fill="x", pady=(0, 8))
+        self.pc_summary_var = tk.StringVar(value="Analizando el equipo para estimar tiempos…")
+        tk.Label(progress_card, textvariable=self.pc_summary_var, bg=self.colors["panel"],
+                 fg=self.colors["muted"], font=("Segoe UI", 8), justify="left", wraplength=850).pack(anchor="w", pady=(0, 5))
+        self.estimate_var = tk.StringVar(value="Estimación disponible tras detectar el equipo.")
+        tk.Label(progress_card, textvariable=self.estimate_var, bg=self.colors["panel"],
+                 fg=self.colors["success"], font=("Segoe UI", 9, "bold"), justify="left", wraplength=850).pack(anchor="w", pady=(0, 5))
         self.progress_label_var = tk.StringVar(value="Listo para planificar el guion.")
         tk.Label(progress_card, textvariable=self.progress_label_var, bg=self.colors["panel"],
                  fg=self.colors["text"], font=("Segoe UI", 9, "bold")).pack(anchor="w")
@@ -362,6 +448,7 @@ class App(tk.Tk):
             messagebox.showinfo("Generación en curso", "Ya hay una generación en proceso.")
             return
         minutes = data["duration"]
+        self.estimate_var.set(self._estimate_time(minutes))
         chapter_count = max(1, math.ceil((minutes * 135) / 360))
         self.planned_chapters = chapter_count
         self.completed_chapters = 0
@@ -569,7 +656,11 @@ class App(tk.Tk):
             while True:
                 event = self.generation_queue.get_nowait()
                 kind = event[0]
-                if kind == "status":
+                if kind == "pc_info":
+                    self.pc_info = event[1]
+                    self.pc_summary_var.set(event[1]["summary"])
+                    self.estimate_var.set(self._estimate_time(int(self.duration_var.get() or "10"), event[1]))
+                elif kind == "status":
                     self.status_var.set(event[1])
                 elif kind == "chapter":
                     self.completed_chapters = event[2]
