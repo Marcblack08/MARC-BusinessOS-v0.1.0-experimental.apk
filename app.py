@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import random
 import queue
 import shutil
 import sqlite3
@@ -18,6 +19,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlencode
 
 from scene_engine import allocate_scene_durations, ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
 
@@ -31,6 +33,8 @@ else:
 DATA_DIR = APP_DATA_ROOT / "data"
 PROJECTS_DIR = APP_DATA_ROOT / "projects"
 DB_PATH = DATA_DIR / "marc_video_studio.db"
+
+COMFYUI_URL = "http://127.0.0.1:8188"
 
 PLATFORMS = {
     "YouTube 16:9": (1280, 720),
@@ -97,12 +101,15 @@ class App(tk.Tk):
         self.scene_data = []
         self.scene_assets = {}
         self.last_export_path = ""
+        self.comfy_available = False
+        self.image_generation_running = False
         self._style()
         self._build()
         self.refresh_projects()
         self.after(700, self.detect_pc_async)
         self.check_tools()
         self.after(180, self._poll_generation_events)
+        self.after(1100, lambda: self.detect_image_models(quiet=True))
 
     def detect_pc_async(self):
         self.pc_summary_var.set("Detectando procesador, memoria, gráficos y herramientas…")
@@ -436,18 +443,19 @@ class App(tk.Tk):
         scenes_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=14, pady=12)
         studio_tabs.add(scenes_tab, text="  ▤  ESCENAS  ")
         scenes_tab.grid_columnconfigure(0, weight=1)
-        scenes_tab.grid_rowconfigure(3, weight=1)
+        scenes_tab.grid_rowconfigure(5, weight=1)
         tk.Label(scenes_tab, text="PLAN DE MONTAJE", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w")
-        tk.Label(scenes_tab, text="Organiza la estructura narrativa antes de producir recursos visuales. Esta lista se construye a partir del guion; no simula clips ya generados.",
+        tk.Label(scenes_tab, text="Organiza el guion como escenas, asigna ilustraciones propias o genera imágenes con un motor local opcional.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
-                 wraplength=900, justify="left").grid(row=1, column=0, sticky="w", pady=(4, 12))
+                 wraplength=1000, justify="left").grid(row=1, column=0, sticky="w", pady=(4, 6))
         self.scene_summary_var = tk.StringVar(value="0 escenas · 0 palabras")
         tk.Label(scenes_tab, textvariable=self.scene_summary_var, bg=self.colors["panel"],
-                 fg=self.colors["muted"], font=("Segoe UI", 9, "bold")).grid(row=1, column=0, sticky="w", pady=(4, 8))
+                 fg="#69b8ff", font=("Segoe UI", 9, "bold")).grid(row=2, column=0, sticky="w", pady=(0, 8))
+
         scene_actions = tk.Frame(scenes_tab, bg=self.colors["panel"])
-        scene_actions.grid(row=2, column=0, sticky="ew", pady=(0, 8))
-        self.assign_image_button = ttk.Button(scene_actions, text="Añadir imagen", style="Accent.TButton",
+        scene_actions.grid(row=3, column=0, sticky="ew", pady=(0, 7))
+        self.assign_image_button = ttk.Button(scene_actions, text="Añadir imagen propia", style="Accent.TButton",
                                               command=self.assign_scene_image)
         self.assign_image_button.pack(side="left")
         self.clear_image_button = ttk.Button(scene_actions, text="Quitar imagen", command=self.clear_scene_image)
@@ -455,8 +463,27 @@ class App(tk.Tk):
         self.refresh_scenes_button = ttk.Button(scene_actions, text="Actualizar escenas",
                                                 command=lambda: self._refresh_scene_outline(self.script_text.get("1.0", "end-1c")))
         self.refresh_scenes_button.pack(side="left", padx=(6, 0))
+
+        image_ai_bar = tk.Frame(scenes_tab, bg=self.colors["panel"])
+        image_ai_bar.grid(row=4, column=0, sticky="ew", pady=(0, 8))
+        tk.Label(image_ai_bar, text="MODELO LOCAL", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 8, "bold")).pack(side="left", padx=(0, 7))
+        self.image_model_var = tk.StringVar(value="")
+        self.image_model_combo = ttk.Combobox(image_ai_bar, textvariable=self.image_model_var,
+                                              values=[], state="readonly", width=27, font=("Segoe UI", 9))
+        self.image_model_combo.pack(side="left")
+        self.detect_models_button = ttk.Button(image_ai_bar, text="Detectar ComfyUI",
+                                                command=self.detect_image_models)
+        self.detect_models_button.pack(side="left", padx=(6, 0))
+        self.generate_image_button = ttk.Button(image_ai_bar, text="Generar ilustración IA",
+                                                style="Accent.TButton", command=self.generate_scene_image)
+        self.generate_image_button.pack(side="left", padx=(6, 0))
+        self.image_ai_status_var = tk.StringVar(value="ComfyUI local opcional · comprobando modelos…")
+        tk.Label(scenes_tab, textvariable=self.image_ai_status_var, bg=self.colors["panel"],
+                 fg=self.colors["muted"], font=("Segoe UI", 8), anchor="w").grid(row=4, column=1, sticky="e", padx=(8, 0))
+
         scene_body = tk.Frame(scenes_tab, bg=self.colors["input"], padx=12, pady=10)
-        scene_body.grid(row=3, column=0, sticky="nsew")
+        scene_body.grid(row=5, column=0, sticky="nsew")
         scene_body.grid_columnconfigure(0, weight=1)
         scene_body.grid_rowconfigure(1, weight=1)
         tk.Label(scene_body, text="SECUENCIA NARRATIVA", bg=self.colors["input"], fg="#69b8ff",
@@ -469,9 +496,9 @@ class App(tk.Tk):
         scene_scroll = ttk.Scrollbar(scene_body, orient="vertical", command=self.scene_outline.yview)
         scene_scroll.grid(row=1, column=1, sticky="ns")
         self.scene_outline.configure(yscrollcommand=scene_scroll.set)
-        tk.Label(scenes_tab, text="Selecciona una escena y añade una imagen local. MARC la copiará a los recursos del proyecto y aplicará el movimiento elegido al renderizar.",
+        tk.Label(scenes_tab, text="La generación de ilustraciones se ejecuta en ComfyUI en tu PC. Requiere instalarlo y descargar al menos un checkpoint compatible. No usa claves API ni servicios en la nube.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
-                 wraplength=1000, justify="left").grid(row=4, column=0, sticky="w", pady=(10, 0))
+                 wraplength=1000, justify="left").grid(row=6, column=0, sticky="w", pady=(8, 0))
 
         preview_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=14, pady=12)
         studio_tabs.add(preview_tab, text="  ▣  VISTA PREVIA  ")
