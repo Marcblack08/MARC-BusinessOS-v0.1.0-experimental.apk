@@ -19,7 +19,7 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 - Asignación de imágenes propias a las escenas.
 - Integración opcional con ComfyUI local en `http://127.0.0.1:8188` para generar una imagen fija por escena.
 - Render MP4 en segundo plano, con barra de progreso y cancelación. Las escenas terminadas se guardan como puntos de recuperación y se reutilizan si el contenido, la duración, la imagen o la resolución no han cambiado. El progreso informa de bloques aproximados de 5 minutos. En equipos con 4 hilos lógicos o menos de 8 GB de RAM, se activa un perfil de render de menor resolución para reducir la carga. Imágenes asignadas reciben movimiento sencillo de cámara; las escenas sin imágenes se renderizan como tarjetas de texto.
-- Pestaña de audio con pistas separadas de narración y música; generación de voz offline con Windows System.Speech, mezcla de ambas pistas con volumen de música reducido y repetición opcional de la música.
+- Pestaña de audio con pistas separadas de narración y música; generación de voz offline con Windows System.Speech, mezcla de ambas pistas con volumen de música reducido y repetición opcional de la música. Incluye la acción «Añadir audio al último vídeo» para aplicar narración y/o música a un MP4 ya exportado sin volver a renderizar las escenas.
 - Aprobación humana obligatoria antes de exportar; modificar el guion invalida la aprobación.
 - Búsqueda y selección manual de FFmpeg.
 - Script local de instalación de dependencias y constructor de app/instalador.
