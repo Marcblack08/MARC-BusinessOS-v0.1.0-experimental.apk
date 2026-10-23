@@ -388,6 +388,7 @@ class App(tk.Tk):
             "MODELO: Qwen 2.5 3B · ejecución local\n\n")
         self.script_text.configure(state="disabled")
         self.status_var.set(f"Preparando estructura de historia y {chapter_count} capítulo(s)…")
+        self.progress_detail_var.set("0% · Consultando modelo local")
         worker = threading.Thread(target=self._generation_worker, args=(data, chapter_count), daemon=True)
         worker.start()
 
@@ -430,7 +431,8 @@ class App(tk.Tk):
                 "desenlace acorde a lo pedido. No escribas consejos genéricos: diseña una ficción concreta. "
                 f"Género: {data['genre']}. Premisa: {data['topic']}. Protagonista: {protagonist}. "
                 f"Conflicto: {conflict}. Tono: {data['tone']}. Narrador: {data['narrator']}. "
-                f"Desenlace: {data['ending']}. Audiencia general de YouTube. Duración: {data['duration']} min. "
+                f"Desenlace: {data['ending']}. Dirección visual: dibujo {data['drawing_style']}; animación {data['animation_style']}. "
+                f"Audiencia general de YouTube. Duración: {data['duration']} min. "
                 f"Propón exactamente {chapter_count} capítulos y resume cada uno en 1-2 frases. "
                 "No afirmes que esta escaleta es el guion final."
             )
@@ -454,6 +456,7 @@ class App(tk.Tk):
                     f"Género: {data['genre']}. Premisa: {data['topic']}. Tono: {data['tone']}. "
                     f"Voz narrativa: {data['narrator']}. Protagonista: {protagonist}. Conflicto: {conflict}. "
                     f"Desenlace planificado: {data['ending']}. Plataforma: {data['platform']}. "
+                    f"Dirección visual para futuras escenas: {data['drawing_style']}; animación: {data['animation_style']}. "
                     f"Duración objetivo total: {data['duration']} minutos. Capítulo {index} de {chapter_count}. "
                     f"Objetivo: aproximadamente {words_per_chapter} palabras de narración y diálogos; desarrolla "
                     "la escena completa, no la resumas.\n\nBIBLIA Y ESCALETA DE CONTINUIDAD:\n" + plan +
@@ -480,7 +483,8 @@ class App(tk.Tk):
             "title": data["title"], "topic": data["topic"], "platform": data["platform"],
             "duration_minutes": data["duration"], "style": data["genre"], "script": script,
             "protagonist": data["protagonist"], "conflict": data["conflict"], "tone": data["tone"],
-            "narrator": data["narrator"], "ending": data["ending"]
+            "narrator": data["narrator"], "ending": data["ending"],
+            "drawing_style": data["drawing_style"], "animation_style": data["animation_style"]
         }
         previous = None
         if self.current_id is not None:
@@ -491,18 +495,20 @@ class App(tk.Tk):
         if self.current_id is None:
             cur = self.conn.execute(
                 "INSERT INTO projects(title,topic,platform,duration_minutes,style,script,approved,created_at,"
-                "protagonist,conflict,tone,narrator,ending) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "protagonist,conflict,tone,narrator,ending,drawing_style,animation_style) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (record["title"], record["topic"], record["platform"], record["duration_minutes"],
                  record["style"], record["script"], approved, now, record["protagonist"],
-                 record["conflict"], record["tone"], record["narrator"], record["ending"]))
+                 record["conflict"], record["tone"], record["narrator"], record["ending"],
+                 record["drawing_style"], record["animation_style"]))
             self.current_id = cur.lastrowid
         else:
             self.conn.execute(
                 "UPDATE projects SET title=?,topic=?,platform=?,duration_minutes=?,style=?,script=?,approved=?,created_at=?,"
-                "protagonist=?,conflict=?,tone=?,narrator=?,ending=? WHERE id=?",
+                "protagonist=?,conflict=?,tone=?,narrator=?,ending=?,drawing_style=?,animation_style=? WHERE id=?",
                 (record["title"], record["topic"], record["platform"], record["duration_minutes"],
                  record["style"], record["script"], approved, now, record["protagonist"],
-                 record["conflict"], record["tone"], record["narrator"], record["ending"], self.current_id))
+                 record["conflict"], record["tone"], record["narrator"], record["ending"],
+                 record["drawing_style"], record["animation_style"], self.current_id))
         self.conn.commit()
         self.refresh_projects()
         if not quiet:
@@ -567,6 +573,11 @@ class App(tk.Tk):
                 if kind == "status":
                     self.status_var.set(event[1])
                 elif kind == "chapter":
+                    self.completed_chapters = event[2]
+                    percent = round((self.completed_chapters / max(1, event[3])) * 100)
+                    self.progressbar.configure(value=percent)
+                    self.progress_label_var.set(f"Guion: {self.completed_chapters} de {event[3]} capítulos completados")
+                    self.progress_detail_var.set(f"{percent}% · {self.completed_chapters}/{event[3]} capítulos · borrador guardado")
                     self.script_text.configure(state="normal")
                     self.script_text.insert("end", event[1])
                     self.script_text.see("end")
@@ -575,6 +586,9 @@ class App(tk.Tk):
                     self.status_var.set(f"Capítulo {event[2]} de {event[3]} terminado. Guardando borrador…")
                     self.save_project(reset_approval=True, quiet=True)
                 elif kind == "done":
+                    self.progressbar.configure(value=100)
+                    self.progress_label_var.set(f"Guion completado · {event[1]} capítulos")
+                    self.progress_detail_var.set("100% · Revisión y aprobación humana pendientes")
                     self.script_text.configure(state="normal")
                     self.script_text.insert("end", "\n\n[REVISIÓN HUMANA PENDIENTE]\nRevisa continuidad, nombres, ritmo y duración. El guion no está aprobado.")
                     self.script_text.configure(state="disabled")
@@ -590,12 +604,20 @@ class App(tk.Tk):
                         "Revisa el borrador antes de aprobarlo."
                     )
                 elif kind == "cancelled":
+                    percent = round((getattr(self, "completed_chapters", 0) / max(1, getattr(self, "planned_chapters", 1))) * 100)
+                    self.progressbar.configure(value=percent)
+                    self.progress_label_var.set("Generación cancelada · borrador parcial conservado")
+                    self.progress_detail_var.set(f"{percent}% · Reanuda generando un nuevo borrador cuando quieras")
                     self.script_text.configure(state="normal")
                     self.save_project(reset_approval=True, quiet=True)
                     self.generation_running = False
                     self._set_generation_state(False)
                     self.status_var.set("Generación cancelada. El borrador parcial se conservó sin aprobar.")
                 elif kind == "error":
+                    percent = round((getattr(self, "completed_chapters", 0) / max(1, getattr(self, "planned_chapters", 1))) * 100)
+                    self.progressbar.configure(value=percent)
+                    self.progress_label_var.set("La generación se detuvo · borrador parcial conservado")
+                    self.progress_detail_var.set(f"{percent}% · Revisa el mensaje de error y la conexión de Ollama")
                     self.script_text.configure(state="normal")
                     self.save_project(reset_approval=True, quiet=True)
                     self.generation_running = False
@@ -657,6 +679,8 @@ class App(tk.Tk):
         self.tone_var.set(project["tone"] or "Dramático e intenso")
         self.narrator_var.set(project["narrator"] or "Tercera persona")
         self.ending_var.set(project["ending"] or "Justicia y superación")
+        self.drawing_style_var.set(project["drawing_style"] or "Anime cinematográfico")
+        self.animation_style_var.set(project["animation_style"] or "2D fluida")
         self.script_text.delete("1.0", "end")
         self.script_text.insert("1.0", project["script"])
         self.status_var.set("Este proyecto está aprobado." if project["approved"] else "Proyecto cargado. Guion pendiente de aprobación.")
