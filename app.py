@@ -834,8 +834,8 @@ class App(tk.Tk):
         if self.current_id is None:
             messagebox.showwarning("Guarda el proyecto", "Completa el título y la premisa antes de generar imágenes.")
             return
-        selection = self.scene_outline.curselection()
-        if not selection or not self.scene_data:
+        scene_number = self._scene_selection_number()
+        if scene_number is None or not self.scene_data or scene_number > len(self.scene_data):
             messagebox.showinfo("Selecciona una escena", "Genera o abre un guion y selecciona la escena que quieras ilustrar.")
             return
         model_name = self.image_model_var.get().strip()
@@ -846,7 +846,7 @@ class App(tk.Tk):
             )
             self.detect_image_models(quiet=False)
             return
-        idx = selection[0]
+        idx = scene_number - 1
         scene = dict(self.scene_data[idx])
         project = self.conn.execute("SELECT * FROM projects WHERE id=?", (self.current_id,)).fetchone()
         if not project:
