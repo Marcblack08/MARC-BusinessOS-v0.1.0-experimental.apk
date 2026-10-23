@@ -16,7 +16,7 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 - Asignación de imágenes propias a las escenas.
 - Integración opcional con ComfyUI local en `http://127.0.0.1:8188` para generar una imagen fija por escena.
 - Render MP4 en segundo plano, con barra de progreso y cancelación. Imágenes asignadas reciben movimiento sencillo de cámara; las escenas sin imágenes se renderizan como tarjetas de texto.
-- Importación de una pista de voz o música local, con opción para repetirla hasta el final del vídeo.
+- Pestaña de audio con importación de voz/música y generación de narración offline mediante las voces de Windows System.Speech instaladas en el equipo; opción para repetir una pista corta hasta el final del vídeo.
 - Aprobación humana obligatoria antes de exportar; modificar el guion invalida la aprobación.
 - Búsqueda y selección manual de FFmpeg.
 - Script local de instalación de dependencias y constructor de app/instalador.
@@ -56,7 +56,7 @@ Ollama, sus modelos, ComfyUI/checkpoints y FFmpeg no se incluyen en el instalado
 
 ## Límites importantes
 - La integración de ComfyUI genera **imágenes fijas**, no vídeo neuronal completo. El render aplica movimiento de cámara sencillo a imágenes y tarjetas tipográficas donde no haya recursos.
-- MARC no genera una voz sintética automáticamente. Puedes importar una pista de voz o música que ya tengas.
+- La voz local usa las voces SAPI que tenga Windows instaladas; puede necesitar que instales una voz española desde la configuración de idioma/voz. No es una voz neuronal de alta calidad y el resultado varía según la voz disponible.
 - La estimación de tiempo es orientativa; ComfyUI depende mucho del checkpoint y del hardware y puede tardar mucho o no funcionar en GPUs antiguas.
 - La vista previa abre el archivo MP4 en el reproductor predeterminado del sistema, no dentro de una superficie de reproducción integrada.
 - La validación de CI no sustituye las pruebas del programa gráfico, generación local y exportación sobre el PC real.
