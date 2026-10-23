@@ -757,6 +757,8 @@ class App(tk.Tk):
 
     def _set_image_state(self, active):
         state = "disabled" if active else "normal"
+        self.cancel_button.configure(state="normal" if self.generation_running else "disabled")
+        self.cancel_render_button.configure(state="normal" if self.render_running else "disabled")
         for button in (self.generate_button, self.cancel_button, self.save_button,
                        self.approve_button, self.export_button, self.delete_button,
                        self.assign_image_button, self.clear_image_button,
@@ -1498,6 +1500,7 @@ class App(tk.Tk):
     def _set_render_state(self, active):
         state = "disabled" if active else "normal"
         self.generate_button.configure(state=state)
+        self.cancel_button.configure(state="disabled" if not active else "disabled")
         self.cancel_render_button.configure(state="normal" if active else "disabled")
         for button in (self.cancel_button, self.save_button, self.approve_button,
                        self.export_button, self.delete_button, self.assign_image_button,
