@@ -126,6 +126,42 @@ def allocate_scene_durations(scenes: Iterable[dict], total_seconds: int) -> list
     return durations
 
 
+def build_audio_filter_graph(
+    has_voice: bool,
+    has_music: bool,
+    voice_input_index: int | None = None,
+    music_input_index: int | None = None,
+    voice_gain: float = 1.0,
+    music_gain: float = 0.18,
+) -> str:
+    """Build an FFmpeg filter graph for narration, background music, or both."""
+    if not has_voice and not has_music:
+        return ""
+    if has_voice and voice_input_index is None:
+        raise ValueError("voice_input_index is required when narration is enabled.")
+    if has_music and music_input_index is None:
+        raise ValueError("music_input_index is required when music is enabled.")
+    if not 0.0 <= voice_gain <= 4.0 or not 0.0 <= music_gain <= 4.0:
+        raise ValueError("Audio gain must be between 0 and 4.")
+
+    voice_filter = (
+        f"[{voice_input_index}:a:0]volume={voice_gain:.3f},apad[voice]"
+        if has_voice and has_music else
+        f"[{voice_input_index}:a:0]volume={voice_gain:.3f},apad[aout]"
+        if has_voice else ""
+    )
+    music_filter = (
+        f"[{music_input_index}:a:0]volume={music_gain:.3f},apad[music]"
+        if has_voice and has_music else
+        f"[{music_input_index}:a:0]volume={music_gain:.3f},apad[aout]"
+        if has_music else ""
+    )
+    parts = [part for part in (voice_filter, music_filter) if part]
+    if has_voice and has_music:
+        parts.append("[voice][music]amix=inputs=2:duration=longest:dropout_transition=2[aout]")
+    return ";".join(parts)
+
+
 def build_srt_subtitles(scenes: Iterable[dict], durations: Iterable[int], chars_per_line: int = 42) -> str:
     """Build SRT captions from scene text and approximate scene-level durations."""
     items = list(scenes)
