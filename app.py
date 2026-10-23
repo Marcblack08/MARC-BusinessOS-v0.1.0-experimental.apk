@@ -244,6 +244,12 @@ class App(tk.Tk):
                         troughcolor=self.colors["input"], arrowcolor=self.colors["muted"],
                         bordercolor=self.colors["input"], relief="flat")
         style.map("Vertical.TScrollbar", background=[("active", self.colors["accent"])])
+        style.configure("TNotebook", background=self.colors["bg"], borderwidth=0, tabmargins=(2, 5, 2, 0))
+        style.configure("TNotebook.Tab", background=self.colors["panel2"], foreground=self.colors["muted"],
+                        padding=(15, 9), font=("Segoe UI", 9, "bold"), borderwidth=0)
+        style.map("TNotebook.Tab",
+                  background=[("selected", self.colors["accent"]), ("active", "#1b3553")],
+                  foreground=[("selected", "#ffffff"), ("active", self.colors["text"])])
         style.configure("Treeview", background=self.colors["input"], fieldbackground=self.colors["input"],
                         foreground=self.colors["text"], rowheight=28, borderwidth=0,
                         font=("Segoe UI", 9))
