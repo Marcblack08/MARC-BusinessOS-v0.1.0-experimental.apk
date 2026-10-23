@@ -1072,6 +1072,7 @@ class App(tk.Tk):
                     break
                 elapsed += duration
         self._draw_timeline()
+        self._render_preview_frame()
 
     def _timeline_drag(self, event):
         self.timeline_playhead_seconds = self._timeline_seconds_from_event(event)
@@ -1296,6 +1297,7 @@ class App(tk.Tk):
             music_label = Path(self.music_track_path).name if self.music_track_path and Path(self.music_track_path).is_file() else "sin música"
             self.scene_summary_var.set(f"{len(self.scene_data)} escenas · {total_words} palabras · objetivo {self.duration_var.get()} min · {voice_label} · {music_label}")
         self._draw_timeline()
+        self._render_preview_frame()
 
     def assign_scene_image(self):
         if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
@@ -2758,6 +2760,7 @@ Write-Output 'NARRATION_OK'
             self.project_list.selection_set(selected_index)
 
     def load_selected(self, _event=None):
+        self.set_configuration_visible(True)
         selection = self.project_list.curselection()
         if not selection:
             return
