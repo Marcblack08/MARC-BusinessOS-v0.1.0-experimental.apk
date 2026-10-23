@@ -151,8 +151,8 @@ class App(tk.Tk):
         script_low = max(1, minutes * 0.7 * speed_factor)
         script_high = max(script_low + 1, minutes * 2.2 * speed_factor)
         scenes = max(1, math.ceil(minutes * 60 / 5))
-        render_low = max(0.5, scenes * 0.025)
-        render_high = max(render_low + 0.5, scenes * 0.09)
+        render_low = max(5, scenes * 0.35)
+        render_high = max(render_low + 30, scenes * 1.5)
         # A first local model load can add substantial overhead.
         first_run = " La primera ejecución puede tardar más mientras carga el modelo." if not getattr(self, "ai_available", False) else ""
         return f"Estimado para {minutes} min de video: guion {self._format_eta(script_low*60)}–{self._format_eta(script_high*60)}; render de escenas de texto {self._format_eta(render_low*60)}–{self._format_eta(render_high*60)}. Total orientativo {self._format_eta(script_low*60+render_low*60)}–{self._format_eta(script_high*60+render_high*60)}.{first_run} No incluye generación de imágenes, animación real ni voz, todavía no implementadas."
