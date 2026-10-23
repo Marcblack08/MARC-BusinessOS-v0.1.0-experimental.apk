@@ -1807,6 +1807,16 @@ Write-Output 'NARRATION_OK'
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
             return
         minutes = data["duration"]
+        preflight = messagebox.askyesno(
+            "Antes de generar el guion",
+            "Esta etapa genera el GUION con Ollama; no crea imágenes ni exporta el MP4.\\n\\n"
+            "Después tendrás que ir a ESCENAS para asignar imágenes propias o generar ilustraciones con ComfyUI "
+            "(si está instalado y tienes un modelo compatible). Sin imágenes, el vídeo será de tarjetas de texto.\\n\\n"
+            f"Duración solicitada: {minutes} min. El proceso puede tardar bastante en este equipo.\\n\\n"
+            "¿Deseas iniciar la generación del guion ahora?"
+        )
+        if not preflight:
+            return
         self.estimate_var.set(self._estimate_time(minutes))
         chapter_count = max(1, math.ceil((minutes * 135) / 360))
         self.planned_chapters = chapter_count
