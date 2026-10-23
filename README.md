@@ -6,7 +6,10 @@ Aplicación de escritorio local para desarrollar historias con Ollama/Qwen, orga
 El código fuente está en desarrollo. La validación automatizada comprueba la sintaxis de Python y pruebas unitarias de las funciones de escenas. La ejecución completa de la interfaz, la generación con Ollama/ComfyUI, el render y la instalación requieren una prueba real en Windows antes de considerar una versión estable. No se distribuye todavía un instalador binario probado dentro del repositorio.
 
 ## Funciones presentes en el código
-- Interfaz de edición oscura inspirada en Premiere, maximizada, con biblioteca y paneles redimensionables.
+- Interfaz NLE oscura y maximizada: biblioteca de proyectos a la izquierda, configuración compacta en una columna lateral plegable y espacio principal a la derecha.
+- Monitor/storyboard persistente visible aunque se cambie de pestaña; muestra la ilustración asignada o una tarjeta de escena con título y texto.
+- Resumen de timeline siempre visible al pie, con escenas, narración y música; se puede seleccionar una escena desde ese resumen. El montaje completo sigue disponible en la pestaña Montaje.
+- El área de trabajo se distribuye sin scroll global: el editor del guion y las escenas usa desplazamiento interno cuando el contenido lo necesita; la pestaña Guion queda seleccionada al iniciar.
 - Pestañas **Guion**, **Escenas**, **Montaje**, **Vista previa** y **Audio**.
 - Timeline multipista visual con clips por escena, pistas de narración/música, bloques de subtítulos aproximados, cabezal navegable, zoom y selección sincronizada con la lista de escenas.
 - Edición básica de montaje: mover el clip seleccionado una posición a izquierda/derecha, editar la duración de cada escena (5–3600 segundos) y conservar duraciones e imágenes asignadas en los recursos del proyecto. Estos cambios invalidan la aprobación del guion y requieren volver a aprobar antes de exportar.
