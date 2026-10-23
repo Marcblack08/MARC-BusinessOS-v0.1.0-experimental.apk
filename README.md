@@ -3,7 +3,7 @@
 Aplicación de escritorio local para crear guiones narrativos con Ollama/Qwen, revisarlos y exportar un MP4 de escenas tipográficas mediante FFmpeg.
 
 ## Estado real del proyecto
-El código fuente está en desarrollo. La sintaxis de Python se valida mediante GitHub Actions. La ejecución completa, el render en Windows y el empaquetado deben probarse en el PC objetivo antes de considerar una versión estable. El script de construcción produce una carpeta portable con PyInstaller, no un instalador MSI firmado.
+El código fuente está en desarrollo. La sintaxis de Python se valida mediante GitHub Actions. La ejecución completa, el render en Windows y el empaquetado deben probarse en el PC objetivo antes de considerar una versión estable. El empaquetado de Windows usa PyInstaller y puede generar un instalador con asistente mediante Inno Setup 6. No es un MSI firmado; el instalador debe probarse en Windows antes de distribuirlo.
 
 ## Mejoras actuales
 - Interfaz azul tecnológico con biblioteca de proyectos y paneles.
@@ -29,7 +29,13 @@ El código fuente está en desarrollo. La sintaxis de Python se valida mediante 
 4. Ejecuta `install_windows.bat`.
 5. Abre MARC con `start_windows.bat`.
 
-Para construir una carpeta portable, ejecuta `build_windows.bat`. La carpeta resultante en `dist` debe probarse en otra instalación de Windows antes de distribuirse. Ollama y FFmpeg no quedan integrados en el EXE.
+Para crear la aplicación de escritorio y, opcionalmente, el instalador con asistente:
+1. Instala Inno Setup 6 desde https://jrsoftware.org/isinfo.php.
+2. Ejecuta `build_windows.bat`.
+3. La carpeta de la aplicación se genera en `dist`; el instalador Setup.exe se genera en `dist-installer` si Inno Setup se encuentra instalado.
+4. Prueba la instalación y la desinstalación en Windows antes de distribuirla. Los proyectos y la base de datos de la aplicación empaquetada se guardan en `%LOCALAPPDATA%\\MARC Video Studio AI Desktop`.
+
+Ollama/Qwen y FFmpeg no quedan integrados en el instalador: deben instalarse por separado para las funciones de IA local y exportación.
 
 ## Flujo de producción
 1. Completa premisa y parámetros.
