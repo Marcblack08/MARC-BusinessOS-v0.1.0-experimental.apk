@@ -593,35 +593,58 @@ class App(tk.Tk):
         manifest = assets_dir.parent / "scene_assets.json"
         manifest.write_text(json.dumps(self.scene_assets, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    def _set_scene_list_state(self, disabled):
+        try:
+            self.scene_outline.state(["disabled"] if disabled else ["!disabled"])
+        except (AttributeError, tk.TclError):
+            pass
+
+    def _scene_selection_number(self):
+        selection = self.scene_outline.selection()
+        if not selection:
+            return None
+        item_id = selection[0]
+        if not item_id.startswith("scene_"):
+            return None
+        try:
+            return int(item_id.split("_", 1)[1])
+        except ValueError:
+            return None
+
     def _refresh_scene_outline(self, script):
         if not hasattr(self, "scene_outline"):
             return
-        old_selection = self.scene_outline.curselection()
-        selected_index = old_selection[0] if old_selection else None
-        self.scene_outline.delete(0, "end")
+        old_selection = self._scene_selection_number()
+        children = self.scene_outline.get_children("")
+        if children:
+            self.scene_outline.delete(*children)
         self.scene_data = parse_script_scenes(script)
         try:
             target_seconds = max(60, int(self.duration_var.get() or "10") * 60)
         except (ValueError, tk.TclError):
             target_seconds = 600
         durations = allocate_scene_durations(self.scene_data, target_seconds)
+        total_words = 0
         for idx, scene in enumerate(self.scene_data):
             asset = self.scene_assets.get(str(idx + 1), "")
             has_asset = bool(asset and Path(asset).is_file())
             visual_status = Path(asset).name if has_asset else "Tarjeta de texto"
+            total_words += scene["word_count"]
             self.scene_outline.insert(
-                "end",
-                f"{idx + 1:02d}  {scene['title'][:27]} · {scene['word_count']} palabras · "
-                f"{self._format_eta(durations[idx])} · {visual_status}"
+                "", "end", iid=f"scene_{idx + 1}",
+                values=(f"{idx + 1:02d}", scene["title"][:100], scene["word_count"],
+                        self._format_eta(durations[idx]), visual_status)
             )
         if not self.scene_data:
-            self.scene_outline.insert("end", "Genera o abre un guion para preparar las escenas.")
-        elif selected_index is not None:
-            self.scene_outline.selection_set(min(selected_index, len(self.scene_data) - 1))
-        if hasattr(self, "scene_summary_var"):
-            self.scene_summary_var.set(
-                f"{len(self.scene_data)} escenas · {sum(s['word_count'] for s in self.scene_data)} palabras"
+            self.scene_outline.insert(
+                "", "end", iid="scene_empty",
+                values=("", "Genera o abre un guion para ver las escenas", "", "", "")
             )
+        elif old_selection and 1 <= old_selection <= len(self.scene_data):
+            self.scene_outline.selection_set(f"scene_{old_selection}")
+            self.scene_outline.see(f"scene_{old_selection}")
+        if hasattr(self, "scene_summary_var"):
+            self.scene_summary_var.set(f"{len(self.scene_data)} escenas · {total_words} palabras · duración objetivo {self.duration_var.get()} min")
 
     def assign_scene_image(self):
         if self.generation_running or self.render_running:
