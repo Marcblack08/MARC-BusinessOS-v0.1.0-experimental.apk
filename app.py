@@ -723,6 +723,14 @@ class App(tk.Tk):
         tk.Label(visual_tab, text="Nota: elegir un estilo define las instrucciones visuales; no crea ilustraciones por sí solo. Para generar imágenes, abre ESCENAS y configura ComfyUI.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1050, justify="left").grid(row=3, column=0, sticky="w", pady=(16, 0))
+        canon_actions = tk.Frame(visual_tab, bg=self.colors["panel"])
+        canon_actions.grid(row=4, column=0, sticky="ew", pady=(18, 0))
+        ttk.Button(canon_actions, text="📖 Biblia de la historia y continuidad",
+                   style="Accent.TButton", command=self.edit_story_bible).pack(side="left")
+        tk.Label(canon_actions,
+                 text="Revisa y corrige personajes, relaciones, escenarios y el punto exacto desde donde debe continuar la serie.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
+                 wraplength=760, justify="left").pack(side="left", padx=(12, 0))
 
         timeline_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=12, pady=10)
         studio_tabs.add(timeline_tab, text="  ▰  MONTAJE  ")
@@ -3028,6 +3036,90 @@ Write-Output 'NARRATION_OK'
             f"Nueva continuación creada: episodio {self.episode_number}. "
             "El siguiente guion consultará la biblia y el estado de la historia anterior."
         )
+
+    def edit_story_bible(self):
+        """Open the saved canon and episode-end state so the user can review or correct continuity."""
+        if self.current_id is None:
+            messagebox.showinfo(
+                "Guarda el proyecto",
+                "Guarda el proyecto o genera su primer guion antes de editar la biblia narrativa."
+            )
+            return
+        dialog = tk.Toplevel(self)
+        dialog.title("Biblia narrativa y continuidad")
+        dialog.configure(bg=self.colors["bg"])
+        dialog.transient(self)
+        dialog.geometry("1120x760")
+        dialog.minsize(820, 560)
+        dialog.grid_rowconfigure(1, weight=1)
+        dialog.grid_columnconfigure(0, weight=1)
+        head = tk.Frame(dialog, bg=self.colors["panel"], padx=16, pady=12)
+        head.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 8))
+        tk.Label(head, text="BIBLIA CANÓNICA DE LA HISTORIA",
+                 bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 13, "bold")).pack(anchor="w")
+        tk.Label(
+            head,
+            text=f"Proyecto: {self.title_var.get().strip()} · Episodio {self.episode_number}. "
+                 "Lo que guardes aquí se usará como referencia en las siguientes continuaciones.",
+            bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
+            wraplength=1000, justify="left"
+        ).pack(anchor="w", pady=(4, 0))
+        editors = tk.Frame(dialog, bg=self.colors["bg"])
+        editors.grid(row=1, column=0, sticky="nsew", padx=12)
+        editors.grid_columnconfigure(0, weight=1, uniform="canon")
+        editors.grid_columnconfigure(1, weight=1, uniform="canon")
+        editors.grid_rowconfigure(1, weight=1)
+        tk.Label(editors, text="PERSONAJES, REGLAS Y ESCENARIOS",
+                 bg=self.colors["bg"], fg="#69b8ff",
+                 font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=(2, 6))
+        tk.Label(editors, text="ESTADO AL CIERRE DEL EPISODIO",
+                 bg=self.colors["bg"], fg="#69b8ff",
+                 font=("Segoe UI", 9, "bold")).grid(row=0, column=1, sticky="w", padx=(8, 0), pady=(2, 6))
+        bible_frame = tk.Frame(editors, bg=self.colors["input"])
+        bible_frame.grid(row=1, column=0, sticky="nsew", padx=(0, 6))
+        bible_frame.grid_rowconfigure(0, weight=1)
+        bible_frame.grid_columnconfigure(0, weight=1)
+        bible_text = tk.Text(bible_frame, wrap="word", undo=True, bg=self.colors["input"],
+                             fg=self.colors["text"], insertbackground="#ffffff",
+                             selectbackground=self.colors["accent"], font=("Segoe UI", 10),
+                             relief="flat", padx=12, pady=10, highlightthickness=0)
+        bible_text.grid(row=0, column=0, sticky="nsew")
+        bible_scroll = ttk.Scrollbar(bible_frame, orient="vertical", command=bible_text.yview)
+        bible_scroll.grid(row=0, column=1, sticky="ns")
+        bible_text.configure(yscrollcommand=bible_scroll.set)
+        state_frame = tk.Frame(editors, bg=self.colors["input"])
+        state_frame.grid(row=1, column=1, sticky="nsew", padx=(6, 0))
+        state_frame.grid_rowconfigure(0, weight=1)
+        state_frame.grid_columnconfigure(0, weight=1)
+        state_text = tk.Text(state_frame, wrap="word", undo=True, bg=self.colors["input"],
+                             fg=self.colors["text"], insertbackground="#ffffff",
+                             selectbackground=self.colors["accent"], font=("Segoe UI", 10),
+                             relief="flat", padx=12, pady=10, highlightthickness=0)
+        state_text.grid(row=0, column=0, sticky="nsew")
+        state_scroll = ttk.Scrollbar(state_frame, orient="vertical", command=state_text.yview)
+        state_scroll.grid(row=0, column=1, sticky="ns")
+        state_text.configure(yscrollcommand=state_scroll.set)
+        bible_text.insert("1.0", self.story_bible or "")
+        state_text.insert("1.0", self.continuity_state or "")
+        foot = tk.Frame(dialog, bg=self.colors["bg"], padx=12, pady=12)
+        foot.grid(row=2, column=0, sticky="ew")
+        tk.Label(foot,
+                 text="Consejo: conserva nombres, apariencia, reglas del mundo, ubicaciones y hechos ya establecidos. "
+                      "El estado debe explicar qué ocurrió al final, dónde está cada personaje y qué queda pendiente.",
+                 bg=self.colors["bg"], fg=self.colors["muted"], font=("Segoe UI", 8),
+                 wraplength=760, justify="left").pack(side="left")
+        def save_canon():
+            self.story_bible = bible_text.get("1.0", "end-1c").strip()
+            self.continuity_state = state_text.get("1.0", "end-1c").strip()
+            self.save_project(reset_approval=True, quiet=True)
+            self.status_var.set("Biblia narrativa y estado de continuidad guardados. Revisa el guion antes de aprobarlo.")
+            dialog.destroy()
+        actions = tk.Frame(foot, bg=self.colors["bg"])
+        actions.pack(side="right")
+        ttk.Button(actions, text="Cancelar", command=dialog.destroy).pack(side="left", padx=(0, 6))
+        ttk.Button(actions, text="Guardar canon", style="Accent.TButton",
+                   command=save_canon).pack(side="left")
 
     def _refresh_ai_status(self):
         try:
