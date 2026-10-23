@@ -1558,7 +1558,7 @@ Write-Output 'NARRATION_OK'
                 )
             if result.returncode != 0 or not Path(output).is_file() or Path(output).stat().st_size == 0:
                 detail = log_path.read_text(encoding="utf-8", errors="replace")[-2600:]
-                raise RuntimeError(f"FFmpeg no pudo mezclar el audio.\\n{detail}")
+                raise RuntimeError(f"FFmpeg no pudo mezclar el audio.\n{detail}")
             self.generation_queue.put(("audio_mux_done", output, project_id))
         except Exception as exc:
             self.generation_queue.put(("audio_mux_error", str(exc)))
@@ -1911,10 +1911,10 @@ Write-Output 'NARRATION_OK'
         minutes = data["duration"]
         preflight = messagebox.askyesno(
             "Antes de generar el guion",
-            "Esta etapa genera el GUION con Ollama; no crea imágenes ni exporta el MP4.\\n\\n"
+            "Esta etapa genera el GUION con Ollama; no crea imágenes ni exporta el MP4.\n\n"
             "Después tendrás que ir a ESCENAS para asignar imágenes propias o generar ilustraciones con ComfyUI "
-            "(si está instalado y tienes un modelo compatible). Sin imágenes, el vídeo será de tarjetas de texto.\\n\\n"
-            f"Duración solicitada: {minutes} min. El proceso puede tardar bastante en este equipo.\\n\\n"
+            "(si está instalado y tienes un modelo compatible). Sin imágenes, el vídeo será de tarjetas de texto.\n\n"
+            f"Duración solicitada: {minutes} min. El proceso puede tardar bastante en este equipo.\n\n"
             "¿Deseas iniciar la generación del guion ahora?"
         )
         if not preflight:
@@ -2352,7 +2352,7 @@ Write-Output 'NARRATION_OK'
                     self.progress_label_var.set("Vídeo con audio listo")
                     self.progress_detail_var.set("Las imágenes se copiaron sin volver a renderizarlas; se aplicaron las pistas seleccionadas.")
                     self.status_var.set(f"Vídeo con audio creado: {self.last_export_path}")
-                    messagebox.showinfo("Audio añadido", f"Se creó el vídeo con audio:\\n{self.last_export_path}")
+                    messagebox.showinfo("Audio añadido", f"Se creó el vídeo con audio:\n{self.last_export_path}")
                 elif kind == "audio_mux_error":
                     self.audio_mux_running = False
                     self.progress_label_var.set("No se pudo añadir el audio")
