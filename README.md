@@ -13,7 +13,7 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 - Pestañas **Guion**, **Escenas**, **Montaje**, **Vista previa** y **Audio**.
 - Timeline multipista visual con clips por escena, pistas de narración/música, bloques de subtítulos aproximados, cabezal navegable, zoom y selección sincronizada con la lista de escenas.
 - Edición básica de montaje: mover el clip seleccionado una posición a izquierda/derecha, editar la duración de cada escena (5–3600 segundos) y conservar duraciones e imágenes asignadas en los recursos del proyecto. Estos cambios invalidan la aprobación del guion y requieren volver a aprobar antes de exportar.
-- El monitor todavía no reproduce el montaje en tiempo real; el cabezal sirve para navegar y seleccionar escenas.
+- El monitor permite reproducir un MP4 dentro de MARC mediante el motor VLC cuando VLC Media Player está instalado. Incluye reproducción, pausa, detención y búsqueda; si el motor local no está disponible, ofrece abrir el MP4 en el reproductor externo. La miniatura/storyboard sigue visible en la pestaña Vista previa.
 - Género, premisa, protagonistas, conflicto, tono, narrador, desenlace, plataforma, duración, estilo de dibujo y animación.
 - Modos de producción **Corto (2 minutos)** y **Novela / Serie**. El modo corto fija un objetivo de 2 minutos y ajusta la cantidad de texto; la duración real depende de la voz, las pausas y el ritmo.
 - Perfil de salida por proyecto: **720p HD, 1080p Full HD o 2K/1440p**, formatos horizontal 16:9, vertical 9:16 y cuadrado 1:1, y 24/25/30/60 FPS. La aplicación muestra una advertencia para perfiles exigentes y no reduce silenciosamente la resolución elegida.
@@ -35,7 +35,7 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 
 ## Requisitos
 - Vídeos de 1 a 120 minutos por proyecto, generados por capítulos de aproximadamente 5 minutos. El tiempo total depende del hardware; la generación de imágenes locales puede ser especialmente lenta en GPU antiguas.
-- Windows 10/11 de 64 bits.
+- Windows 10/11 de 64 bits. Para la reproducción de MP4 integrada, instalar VLC Media Player de 64 bits; si no está instalado, MARC permite abrir el vídeo en el reproductor del sistema.
 - Python 3.11+ para ejecución desde el código fuente.
 - Ollama y el modelo local `qwen2.5:3b` para generar guiones.
 - FFmpeg para exportar MP4.
