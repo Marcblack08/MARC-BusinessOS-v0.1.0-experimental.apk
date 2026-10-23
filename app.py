@@ -572,6 +572,7 @@ class App(tk.Tk):
     def _load_scene_assets(self, project_id=None):
         self.scene_assets = {}
         self.last_export_path = ""
+        self.audio_track_path = ""
         if project_id is None:
             project_id = self.current_id
         if project_id is None:
@@ -593,6 +594,14 @@ class App(tk.Tk):
                     self.last_export_path = candidate
         except OSError:
             self.last_export_path = ""
+        audio_manifest = project_dir / "audio_track.txt"
+        try:
+            if audio_manifest.is_file():
+                candidate_audio = audio_manifest.read_text(encoding="utf-8").strip()
+                if candidate_audio and Path(candidate_audio).is_file():
+                    self.audio_track_path = candidate_audio
+        except OSError:
+            self.audio_track_path = ""
         if hasattr(self, "preview_status_var"):
             self.preview_status_var.set(
                 f"Último vídeo: {self.last_export_path}" if self.last_export_path
@@ -606,6 +615,11 @@ class App(tk.Tk):
         assets_dir.mkdir(parents=True, exist_ok=True)
         manifest = assets_dir.parent / "scene_assets.json"
         manifest.write_text(json.dumps(self.scene_assets, ensure_ascii=False, indent=2), encoding="utf-8")
+        audio_manifest = assets_dir.parent / "audio_track.txt"
+        if self.audio_track_path and Path(self.audio_track_path).is_file():
+            audio_manifest.write_text(self.audio_track_path, encoding="utf-8")
+        elif audio_manifest.exists():
+            audio_manifest.unlink()
 
     def _set_scene_list_state(self, disabled):
         try:
@@ -715,6 +729,51 @@ class App(tk.Tk):
         self.scene_outline.selection_set(f"scene_{scene_number}")
         self.scene_outline.see(f"scene_{scene_number}")
         self.status_var.set(f"Se quitó la imagen de la escena {scene_number}; se usará una tarjeta de texto.")
+
+    def select_audio_track(self):
+        if self.generation_running or self.render_running or self.image_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        if self.current_id is None:
+            self.save_project(quiet=True)
+        if self.current_id is None:
+            messagebox.showwarning("Guarda el proyecto", "Completa el título y la premisa antes de asignar audio.")
+            return
+        source = filedialog.askopenfilename(
+            title="Selecciona narración o música",
+            filetypes=[("Audio", "*.wav *.mp3 *.m4a *.aac *.flac *.ogg"), ("Todos los archivos", "*.*")]
+        )
+        if not source:
+            return
+        source_path = Path(source)
+        if source_path.suffix.lower() not in {".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"}:
+            messagebox.showerror("Formato no compatible", "Selecciona un archivo WAV, MP3, M4A, AAC, FLAC u OGG.")
+            return
+        assets_dir = self._project_assets_dir()
+        if assets_dir is None:
+            return
+        try:
+            assets_dir.mkdir(parents=True, exist_ok=True)
+            destination = assets_dir / ("audio_track" + source_path.suffix.lower())
+            shutil.copy2(source_path, destination)
+            self.audio_track_path = str(destination.resolve())
+            self._save_scene_assets()
+            self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
+            self.status_var.set(f"Pista de audio asignada: {destination.name}")
+        except OSError as exc:
+            messagebox.showerror("No se pudo copiar el audio", str(exc))
+
+    def clear_audio_track(self):
+        self.audio_track_path = ""
+        try:
+            if self.current_id is not None:
+                manifest = PROJECTS_DIR / str(self.current_id) / "audio_track.txt"
+                if manifest.exists():
+                    manifest.unlink()
+            self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
+            self.status_var.set("Se quitó la pista de audio del proyecto.")
+        except OSError as exc:
+            messagebox.showerror("No se pudo quitar el audio", str(exc))
 
     def choose_preview_video(self):
         path = filedialog.askopenfilename(
@@ -987,6 +1046,9 @@ class App(tk.Tk):
         self.script_text.delete("1.0", "end")
         self.scene_assets = {}
         self.last_export_path = ""
+        self.audio_track_path = ""
+        if self.loop_audio_var is not None:
+            self.loop_audio_var.set(False)
         if hasattr(self, "preview_status_var"):
             self.preview_status_var.set("Todavía no hay un MP4 exportado para este proyecto.")
         self._refresh_scene_outline("")
