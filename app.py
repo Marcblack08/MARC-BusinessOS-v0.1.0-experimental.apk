@@ -2266,6 +2266,11 @@ Write-Output 'NARRATION_OK'
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual antes de crear otro proyecto.")
             return
         self.current_id = None
+        self.series_key = ""
+        self.episode_number = 1
+        self.story_bible = ""
+        self.continuity_state = ""
+        self.voice_assignments = {}
         self.set_configuration_visible(True)
         self.title_var.set("")
         self.topic_var.set("")
@@ -2279,6 +2284,10 @@ Write-Output 'NARRATION_OK'
         self.ending_var.set("Justicia y superación")
         self.drawing_style_var.set("Anime cinematográfico")
         self.animation_style_var.set("2D fluida")
+        self.video_mode_var.set(SERIES_VIDEO_MODE)
+        self.resolution_var.set("1080p (Full HD)")
+        self.fps_var.set("30")
+        self._on_video_mode_changed()
         self.progressbar.configure(value=0)
         self.progress_label_var.set("Listo para planificar el guion.")
         self.progress_detail_var.set("0% · Esperando inicio")
@@ -2295,11 +2304,20 @@ Write-Output 'NARRATION_OK'
         self._refresh_scene_outline("")
         self.status_var.set("Proyecto nuevo. Define la premisa y los parámetros narrativos.")
 
+    def _on_video_mode_changed(self):
+        mode = self.video_mode_var.get() if hasattr(self, "video_mode_var") else SERIES_VIDEO_MODE
+        is_short = mode == SHORT_VIDEO_MODE
+        if is_short:
+            self.duration_var.set("2")
+        if hasattr(self, "duration_field"):
+            self.duration_field.configure(state="disabled" if is_short else "readonly")
+
     def get_form(self):
         title = self.title_var.get().strip()
         topic = self.topic_var.get().strip()
         try:
-            duration = int(self.duration_var.get())
+            mode = self.video_mode_var.get() if hasattr(self, "video_mode_var") else SERIES_VIDEO_MODE
+            duration = 2 if mode == SHORT_VIDEO_MODE else int(self.duration_var.get())
         except ValueError:
             duration = 0
         if not title or not topic:
@@ -2319,7 +2337,10 @@ Write-Output 'NARRATION_OK'
             "tone": self.tone_var.get(), "narrator": self.narrator_var.get(),
             "ending": self.ending_var.get(),
             "drawing_style": self.drawing_style_var.get(),
-            "animation_style": self.animation_style_var.get()
+            "animation_style": self.animation_style_var.get(),
+            "video_mode": mode,
+            "resolution": self.resolution_var.get() if hasattr(self, "resolution_var") else "1080p (Full HD)",
+            "fps": int(self.fps_var.get()) if hasattr(self, "fps_var") else 30,
         }
 
     def _ollama_request(self, prompt, max_tokens=700):
@@ -2495,12 +2516,19 @@ Write-Output 'NARRATION_OK'
             return
         script = self.script_text.get("1.0", "end-1c")
         now = datetime.now().isoformat(timespec="seconds")
+        if not self.series_key:
+            self.series_key = "series-" + uuid.uuid4().hex
+        self.episode_number = max(1, int(getattr(self, "episode_number", 1) or 1))
         record = {
             "title": data["title"], "topic": data["topic"], "platform": data["platform"],
             "duration_minutes": data["duration"], "style": data["genre"], "script": script,
             "protagonist": data["protagonist"], "conflict": data["conflict"], "tone": data["tone"],
             "narrator": data["narrator"], "ending": data["ending"],
-            "drawing_style": data["drawing_style"], "animation_style": data["animation_style"]
+            "drawing_style": data["drawing_style"], "animation_style": data["animation_style"],
+            "resolution": data["resolution"], "fps": data["fps"], "video_mode": data["video_mode"],
+            "series_key": self.series_key, "episode_number": self.episode_number,
+            "story_bible": self.story_bible or "", "continuity_state": self.continuity_state or "",
+            "voice_assignments": json.dumps(self.voice_assignments or {}, ensure_ascii=False),
         }
         previous = None
         if self.current_id is not None:
@@ -2508,27 +2536,101 @@ Write-Output 'NARRATION_OK'
         changed = previous is None or any(str(previous[key] or "") != str(value or "")
                                           for key, value in record.items())
         approved = 0 if reset_approval or changed else int(previous["approved"])
+        columns = (
+            "title,topic,platform,duration_minutes,style,script,approved,created_at,"
+            "protagonist,conflict,tone,narrator,ending,drawing_style,animation_style,"
+            "resolution,fps,video_mode,series_key,episode_number,story_bible,continuity_state,voice_assignments"
+        )
+        values = (
+            record["title"], record["topic"], record["platform"], record["duration_minutes"],
+            record["style"], record["script"], approved, now, record["protagonist"],
+            record["conflict"], record["tone"], record["narrator"], record["ending"],
+            record["drawing_style"], record["animation_style"], record["resolution"],
+            record["fps"], record["video_mode"], record["series_key"], record["episode_number"],
+            record["story_bible"], record["continuity_state"], record["voice_assignments"]
+        )
         if self.current_id is None:
-            cur = self.conn.execute(
-                "INSERT INTO projects(title,topic,platform,duration_minutes,style,script,approved,created_at,"
-                "protagonist,conflict,tone,narrator,ending,drawing_style,animation_style) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (record["title"], record["topic"], record["platform"], record["duration_minutes"],
-                 record["style"], record["script"], approved, now, record["protagonist"],
-                 record["conflict"], record["tone"], record["narrator"], record["ending"],
-                 record["drawing_style"], record["animation_style"]))
+            placeholders = ",".join("?" for _ in values)
+            cur = self.conn.execute(f"INSERT INTO projects({columns}) VALUES({placeholders})", values)
             self.current_id = cur.lastrowid
         else:
-            self.conn.execute(
-                "UPDATE projects SET title=?,topic=?,platform=?,duration_minutes=?,style=?,script=?,approved=?,created_at=?,"
-                "protagonist=?,conflict=?,tone=?,narrator=?,ending=?,drawing_style=?,animation_style=? WHERE id=?",
-                (record["title"], record["topic"], record["platform"], record["duration_minutes"],
-                 record["style"], record["script"], approved, now, record["protagonist"],
-                 record["conflict"], record["tone"], record["narrator"], record["ending"],
-                 record["drawing_style"], record["animation_style"], self.current_id))
+            assignments = ",".join(f"{column}=?" for column in columns.split(","))
+            self.conn.execute(f"UPDATE projects SET {assignments} WHERE id=?", values + (self.current_id,))
         self.conn.commit()
         self.refresh_projects()
         if not quiet:
             self.status_var.set("Proyecto guardado. " + ("Guion aprobado." if approved else "Pendiente de revisión y aprobación."))
+
+    def create_continuation(self):
+        """Create a new episode linked to the selected project's narrative canon."""
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        if self.current_id is None:
+            messagebox.showwarning("Selecciona una historia", "Abre el proyecto que quieres continuar y vuelve a intentarlo.")
+            return
+        self.save_project(quiet=True)
+        source = self.conn.execute("SELECT * FROM projects WHERE id=?", (self.current_id,)).fetchone()
+        if not source:
+            messagebox.showerror("Proyecto no encontrado", "No se pudo leer el proyecto que quieres continuar.")
+            return
+        series_key = source["series_key"] or ("series-" + uuid.uuid4().hex)
+        source_script = source["script"] or ""
+        bible = source["story_bible"] or (
+            f"TÍTULO CANÓNICO: {source['title']}\nGÉNERO: {source['style']}\n"
+            f"PREMISA: {source['topic']}\nPROTAGONISTA: {source['protagonist']}\n"
+            f"CONFLICTO CENTRAL: {source['conflict']}\nTONO: {source['tone']}\n"
+            "Mantén estos datos estables; no cambies nombres, motivaciones ni reglas sin una causa en la historia."
+        )
+        state = source["continuity_state"] or (
+            "Continuidad derivada del episodio anterior. Conserva sus hechos y continúa desde su final.\n\n"
+            + source_script[-3500:]
+        )
+        self.conn.execute(
+            "UPDATE projects SET series_key=?,story_bible=?,continuity_state=? WHERE id=?",
+            (series_key, bible, state, source["id"])
+        )
+        self.conn.commit()
+        base_title = re.sub(r"\s+[—-]\s+Episodio\s+\d+$", "", source["title"], flags=re.IGNORECASE)
+        self.current_id = None
+        self.series_key = series_key
+        self.episode_number = int(source["episode_number"] or 1) + 1
+        self.story_bible = bible
+        self.continuity_state = state
+        try:
+            self.voice_assignments = json.loads(source["voice_assignments"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            self.voice_assignments = {}
+        self.set_configuration_visible(True)
+        self.title_var.set(f"{base_title} — Episodio {self.episode_number}")
+        self.topic_var.set(source["topic"])
+        self.platform_var.set(source["platform"])
+        self.duration_var.set(str(source["duration_minutes"]))
+        self.style_var.set(source["style"])
+        self.protagonist_var.set(source["protagonist"] or "")
+        self.conflict_var.set(source["conflict"] or "")
+        self.tone_var.set(source["tone"] or "Dramático e intenso")
+        self.narrator_var.set(source["narrator"] or "Tercera persona")
+        self.ending_var.set(source["ending"] or "Abierto para continuación")
+        self.drawing_style_var.set(source["drawing_style"] or "Anime cinematográfico")
+        self.animation_style_var.set(source["animation_style"] or "2D fluida")
+        self.video_mode_var.set(source["video_mode"] or SERIES_VIDEO_MODE)
+        self.resolution_var.set(source["resolution"] or "1080p (Full HD)")
+        self.fps_var.set(str(source["fps"] or 30))
+        self._on_video_mode_changed()
+        self.script_text.configure(state="normal")
+        self.script_text.delete("1.0", "end")
+        self.scene_assets = {}
+        self.audio_track_path = ""
+        self.music_track_path = ""
+        self.last_export_path = ""
+        self._refresh_audio_track_label()
+        self._refresh_scene_outline("")
+        self.save_project(reset_approval=True, quiet=True)
+        self.status_var.set(
+            f"Nueva continuación creada: episodio {self.episode_number}. "
+            "El siguiente guion consultará la biblia y el estado de la historia anterior."
+        )
 
     def _refresh_ai_status(self):
         try:
@@ -2879,6 +2981,18 @@ Write-Output 'NARRATION_OK'
         self.ending_var.set(project["ending"] or "Justicia y superación")
         self.drawing_style_var.set(project["drawing_style"] or "Anime cinematográfico")
         self.animation_style_var.set(project["animation_style"] or "2D fluida")
+        self.video_mode_var.set(project["video_mode"] or SERIES_VIDEO_MODE)
+        self.resolution_var.set(project["resolution"] or "1080p (Full HD)")
+        self.fps_var.set(str(project["fps"] or 30))
+        self.series_key = project["series_key"] or ""
+        self.episode_number = int(project["episode_number"] or 1)
+        self.story_bible = project["story_bible"] or ""
+        self.continuity_state = project["continuity_state"] or ""
+        try:
+            self.voice_assignments = json.loads(project["voice_assignments"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            self.voice_assignments = {}
+        self._on_video_mode_changed()
         self._load_scene_assets(project["id"])
         self.script_text.delete("1.0", "end")
         self.script_text.insert("1.0", project["script"])
