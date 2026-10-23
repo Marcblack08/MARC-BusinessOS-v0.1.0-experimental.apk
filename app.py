@@ -662,6 +662,7 @@ class App(tk.Tk):
                 f"Último vídeo: {self.last_export_path}" if self.last_export_path
                 else "Todavía no hay un MP4 exportado para este proyecto."
             )
+        self._refresh_audio_track_label()
 
     def _save_scene_assets(self):
         assets_dir = self._project_assets_dir()
@@ -784,6 +785,15 @@ class App(tk.Tk):
         self.scene_outline.selection_set(f"scene_{scene_number}")
         self.scene_outline.see(f"scene_{scene_number}")
         self.status_var.set(f"Se quitó la imagen de la escena {scene_number}; se usará una tarjeta de texto.")
+
+    def _refresh_audio_track_label(self):
+        if not hasattr(self, "audio_track_label_var"):
+            return
+        if self.audio_track_path and Path(self.audio_track_path).is_file():
+            path = Path(self.audio_track_path)
+            self.audio_track_label_var.set(f"{path.name}\n{path}")
+        else:
+            self.audio_track_label_var.set("Sin pista de audio. Puedes importar una o generar narración local.")
 
     def _refresh_audio_track_label(self):
         if not hasattr(self, "audio_track_label_var"):
@@ -990,7 +1000,7 @@ Write-Output 'NARRATION_OK'
                     pass
 
     def select_audio_track(self):
-        if self.generation_running or self.render_running or self.image_generation_running:
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
             return
         if self.current_id is None:
@@ -1017,18 +1027,23 @@ Write-Output 'NARRATION_OK'
             shutil.copy2(source_path, destination)
             self.audio_track_path = str(destination.resolve())
             self._save_scene_assets()
+            self._refresh_audio_track_label()
             self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
             self.status_var.set(f"Pista de audio asignada: {destination.name}")
         except OSError as exc:
             messagebox.showerror("No se pudo copiar el audio", str(exc))
 
     def clear_audio_track(self):
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
         self.audio_track_path = ""
         try:
             if self.current_id is not None:
                 manifest = PROJECTS_DIR / str(self.current_id) / "audio_track.txt"
                 if manifest.exists():
                     manifest.unlink()
+            self._refresh_audio_track_label()
             self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
             self.status_var.set("Se quitó la pista de audio del proyecto.")
         except OSError as exc:
@@ -1595,6 +1610,70 @@ Write-Output 'NARRATION_OK'
                     self.estimate_var.set(self._estimate_time(int(self.duration_var.get() or "10"), event[1]))
                 elif kind == "status":
                     self.status_var.set(event[1])
+                elif kind == "voice_models":
+                    voices, quiet = event[1], event[2]
+                    options = ["(Automática)"] + voices
+                    self.voice_combo.configure(values=options)
+                    if self.voice_var.get() not in options:
+                        self.voice_var.set("(Automática)")
+                    if voices:
+                        self.voice_status_var.set(
+                            f"{len(voices)} voz/ces local(es) disponible(s). Selecciona una voz y genera narración."
+                        )
+                    else:
+                        self.voice_status_var.set(
+                            "Windows no devolvió voces instaladas. Instala una voz de idioma en Configuración → Hora e idioma → Voz."
+                        )
+                        if not quiet:
+                            messagebox.showwarning(
+                                "No hay voces instaladas",
+                                "Windows no devolvió voces SAPI. Instala una voz desde la configuración de idioma/voz de Windows y pulsa Detectar voces."
+                            )
+                elif kind == "voice_models_error":
+                    detail, quiet = event[1], event[2]
+                    self.voice_status_var.set("No se pudieron detectar las voces locales de Windows.")
+                    if not quiet:
+                        messagebox.showerror("Voces locales no disponibles", detail)
+                elif kind == "voice_progress":
+                    self.voice_status_var.set(event[1])
+                    self.progress_detail_var.set(event[1])
+                    self.status_var.set(event[1])
+                elif kind == "voice_done":
+                    project_id, audio_path, voice_name = event[1], event[2], event[3]
+                    self.voice_generation_running = False
+                    self._set_voice_state(False)
+                    if self.current_id == project_id:
+                        self.audio_track_path = audio_path
+                        self._save_scene_assets()
+                        self._refresh_audio_track_label()
+                        self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
+                    self.progressbar.configure(value=100)
+                    self.progress_label_var.set("Narración local generada")
+                    self.progress_detail_var.set("WAV guardado en los recursos del proyecto")
+                    self.voice_status_var.set(f"Narración lista con la voz: {voice_name}")
+                    self.status_var.set("Narración WAV creada localmente y asignada a la pista del proyecto.")
+                    messagebox.showinfo(
+                        "Narración generada",
+                        f"Se generó la narración local en:\n{audio_path}\n\nPuedes aprobar el guion y exportar el MP4 para combinar el audio."
+                    )
+                elif kind == "voice_cancelled":
+                    self.voice_generation_running = False
+                    self._set_voice_state(False)
+                    self.progress_label_var.set("Generación de voz cancelada")
+                    self.progress_detail_var.set("La narración no se cambió.")
+                    self.voice_status_var.set("Cancelado.")
+                    self.status_var.set("Se canceló la síntesis de voz local.")
+                elif kind == "voice_error":
+                    self.voice_generation_running = False
+                    self._set_voice_state(False)
+                    self.progress_label_var.set("Error al generar la voz")
+                    self.progress_detail_var.set("Comprueba que Windows tenga System.Speech y una voz instalada.")
+                    self.voice_status_var.set("Falló la generación de voz.")
+                    self.status_var.set("No se pudo completar la narración local.")
+                    messagebox.showerror(
+                        "Error de narración local",
+                        "Windows no pudo generar la narración. Revisa que haya una voz instalada y prueba otra vez.\n\n" + event[1]
+                    )
                 elif kind == "image_models":
                     models, quiet = event[1], event[2]
                     self.comfy_available = True
