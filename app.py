@@ -3054,10 +3054,19 @@ Write-Output 'NARRATION_OK'
         return int(row["approved"]) if row else 0
 
     def approve_script(self):
-        if not self.script_text.get("1.0", "end-1c").strip():
+        script = self.script_text.get("1.0", "end-1c").strip()
+        if not script:
             messagebox.showwarning("Sin guion", "Genera o escribe un guion antes de aprobarlo.")
             return
-        if not messagebox.askyesno("Confirmar aprobación", "¿Has revisado el guion y confirmas que está listo para renderizar?"):
+        warnings = continuity_review_check(script, self.continuity_state if self.episode_number > 1 else "")
+        review_text = "¿Has revisado el guion y confirmas que está listo para renderizar?"
+        if warnings:
+            review_text = (
+                "Antes de aprobar, revisa estos avisos automáticos (son indicios, no conclusiones):\n\n"
+                + "\n".join("• " + warning for warning in warnings)
+                + "\n\n¿Has revisado el guion y deseas aprobarlo de todas formas?"
+            )
+        if not messagebox.askyesno("Revisión narrativa", review_text):
             return
         self.save_project(quiet=True)
         if self.current_id is not None:
@@ -3367,7 +3376,7 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                 if self.render_cancel_event.is_set():
                     raise RuntimeError("__MARC_RENDER_CANCELLED__")
                 seconds = int(durations[index])
-                source_text = " ".join(scene["text"].split()).strip()
+                source_text = re.sub(r"\[([^\]]+)\]\s*:\s*", "", " ".join(scene["text"].split())).strip()
                 asset = asset_map.get(str(index + 1), "")
                 asset_signature = None
                 if asset and Path(asset).is_file():
