@@ -9,68 +9,89 @@ echo   Preparacion local - sin claves API
 echo ============================================================
 echo.
 
+set "PYEXE="
+set "PYARGS="
+
+rem Prefer supported Python runtimes installed through the Windows launcher.
 where py >nul 2>nul
 if not errorlevel 1 (
-  py -3.11 --version >nul 2>nul
-  if not errorlevel 1 (
-    set "PY=py -3.11"
-    goto python_found
-  )
+  py -3.13 --version >nul 2>nul
+  if not errorlevel 1 (set "PYEXE=py"& set "PYARGS=-3.13"& goto python_found)
   py -3.12 --version >nul 2>nul
-  if not errorlevel 1 (
-    set "PY=py -3.12"
-    goto python_found
-  )
+  if not errorlevel 1 (set "PYEXE=py"& set "PYARGS=-3.12"& goto python_found)
+  py -3.11 --version >nul 2>nul
+  if not errorlevel 1 (set "PYEXE=py"& set "PYARGS=-3.11"& goto python_found)
 )
+
+rem If Python was installed directly, use it rather than failing on a missing py runtime.
 where python >nul 2>nul
 if not errorlevel 1 (
-  python --version
-  set "PY=python"
-  goto python_found
+  python --version >nul 2>nul
+  if not errorlevel 1 (set "PYEXE=python"& set "PYARGS="& goto python_found)
 )
-echo [ERROR] No se encontro Python 3.11 o superior.
-echo Instala Python 3.11+ y activa la opcion "Add Python to PATH".
-echo Luego vuelve a ejecutar este archivo.
+
+echo [ERROR] No se encontro una instalacion funcional de Python.
+echo.
+echo Instala Python 3.12 de 64 bits desde:
+echo https://www.python.org/downloads/windows/
+echo Durante la instalacion marca "Add python.exe to PATH".
+echo Luego cierra esta ventana, abre una nueva y ejecuta este archivo otra vez.
+echo.
 pause
 exit /b 1
 
 :python_found
-echo [1/4] Preparando entorno de Python...
+echo [OK] Python detectado:
+%PYEXE% %PYARGS% --version
+echo.
+echo [1/4] Preparando entorno virtual...
 if not exist ".venv\Scripts\python.exe" (
-  %PY% -m venv .venv
-  if errorlevel 1 goto error
+  %PYEXE% %PYARGS% -m venv .venv
+  if errorlevel 1 goto venv_error
 )
+if not exist ".venv\Scripts\python.exe" goto venv_error
+
 echo [2/4] Actualizando herramientas de instalacion...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
 if errorlevel 1 goto error
+
 echo [3/4] Instalando dependencias del proyecto...
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 goto error
+
 echo [4/4] Revisando herramientas opcionales...
 where ollama >nul 2>nul
 if errorlevel 1 (
-  echo [AVISO] Ollama no aparece en PATH. La IA local requiere instalar Ollama.
+  echo [AVISO] Ollama no aparece en PATH. Instala Ollama para usar la IA local.
 ) else (
   echo [OK] Ollama encontrado.
 )
 where ffmpeg >nul 2>nul
 if errorlevel 1 (
-  echo [AVISO] FFmpeg no aparece en PATH. MARC permitira seleccionar ffmpeg.exe al exportar.
+  echo [AVISO] FFmpeg no aparece en PATH. Puedes seleccionar ffmpeg.exe desde MARC al exportar.
 ) else (
   echo [OK] FFmpeg encontrado.
 )
 echo.
 echo ============================================================
-echo Instalacion completada.
-echo Para abrir MARC, ejecuta start_windows.bat.
-echo Para crear una version portable, ejecuta build_windows.bat.
+echo Instalacion de dependencias completada.
+echo Abre MARC con start_windows.bat.
+echo Para empaquetar la aplicacion, usa build_windows.bat.
 echo ============================================================
 pause
 exit /b 0
 
+:venv_error
+echo.
+echo [ERROR] Python se detecto, pero no se pudo crear .venv.
+echo Comprueba que Python tenga el modulo venv y que tengas permisos de escritura.
+echo Si existe una carpeta .venv incompleta, renombrala a .venv_backup y vuelve a ejecutar.
+pause
+exit /b 1
+
 :error
 echo.
-echo [ERROR] No se pudo completar la instalacion.
-echo Revisa la conexion a Internet y vuelve a intentarlo.
+echo [ERROR] No se pudo completar la instalacion de dependencias.
+echo Comprueba la conexion a Internet y el contenido de requirements.txt.
 pause
 exit /b 1
