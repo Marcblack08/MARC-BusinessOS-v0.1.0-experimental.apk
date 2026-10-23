@@ -12,20 +12,20 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 - Edición básica de montaje: mover el clip seleccionado una posición a izquierda/derecha, editar la duración de cada escena (5–3600 segundos) y conservar duraciones e imágenes asignadas en los recursos del proyecto. Estos cambios invalidan la aprobación del guion y requieren volver a aprobar antes de exportar.
 - El monitor todavía no reproduce el montaje en tiempo real; el cabezal sirve para navegar y seleccionar escenas.
 - Género, premisa, protagonistas, conflicto, tono, narrador, desenlace, plataforma, duración, estilo de dibujo y animación.
-- Generación de historias por capítulos con Ollama/Qwen 2.5 3B local, en segundo plano y con cancelación entre solicitudes.
+- Generación de historias en capítulos de aproximadamente 5 minutos con Ollama/Qwen 2.5 3B local, en segundo plano y con cancelación entre solicitudes. Los proyectos admiten de 1 a 120 minutos; los guiones largos se dividen en partes para reducir solicitudes enormes.
 - Detección del equipo y estimación inicial de tiempos.
 - Persistencia local en SQLite con migraciones para bases existentes.
 - Tabla de escenas con título, palabras, duración asignada y recurso visual.
 - Asignación de imágenes propias a las escenas.
 - Integración opcional con ComfyUI local en `http://127.0.0.1:8188` para generar una imagen fija por escena.
-- Render MP4 en segundo plano, con barra de progreso y cancelación. Imágenes asignadas reciben movimiento sencillo de cámara; las escenas sin imágenes se renderizan como tarjetas de texto.
+- Render MP4 en segundo plano, con barra de progreso y cancelación. Las escenas terminadas se guardan como puntos de recuperación y se reutilizan si el contenido, la duración, la imagen o la resolución no han cambiado. El progreso informa de bloques aproximados de 5 minutos. En equipos con 4 hilos lógicos o menos de 8 GB de RAM, se activa un perfil de render de menor resolución para reducir la carga. Imágenes asignadas reciben movimiento sencillo de cámara; las escenas sin imágenes se renderizan como tarjetas de texto.
 - Pestaña de audio con pistas separadas de narración y música; generación de voz offline con Windows System.Speech, mezcla de ambas pistas con volumen de música reducido y repetición opcional de la música.
 - Aprobación humana obligatoria antes de exportar; modificar el guion invalida la aprobación.
 - Búsqueda y selección manual de FFmpeg.
 - Script local de instalación de dependencias y constructor de app/instalador.
 
 ## Requisitos
-- Vídeos de 1 a 10 minutos por proyecto.
+- Vídeos de 1 a 120 minutos por proyecto, generados por capítulos de aproximadamente 5 minutos. El tiempo total depende del hardware; la generación de imágenes locales puede ser especialmente lenta en GPU antiguas.
 - Windows 10/11 de 64 bits.
 - Python 3.11+ para ejecución desde el código fuente.
 - Ollama y el modelo local `qwen2.5:3b` para generar guiones.
