@@ -83,12 +83,13 @@ class App(tk.Tk):
             style.theme_use("clam")
         except tk.TclError:
             pass
-        style.configure("TFrame", background="#0b1220")
-        style.configure("TLabel", background="#0b1220", foreground="#e5edf8", font=("Segoe UI", 10))
-        style.configure("Title.TLabel", font=("Segoe UI", 19, "bold"), foreground="#60a5fa")
-        style.configure("TButton", padding=7)
-        style.configure("TEntry", padding=5)
-        style.configure("TCombobox", padding=5)
+        style.configure("TFrame", background="#08111f")
+        style.configure("TLabel", background="#08111f", foreground="#edf4ff", font=("Segoe UI", 10))
+        style.configure("Title.TLabel", font=("Segoe UI", 22, "bold"), foreground="#69b0ff", background="#08111f")
+        style.configure("TButton", padding=(12, 9), font=("Segoe UI", 9, "bold"), background="#142640", foreground="#edf4ff", borderwidth=0)
+        style.map("TButton", background=[("active", "#2585ff"), ("pressed", "#2585ff")])
+        style.configure("TEntry", padding=8, fieldbackground="#0d192a", foreground="#edf4ff")
+        style.configure("TCombobox", padding=8, fieldbackground="#0d192a", foreground="#edf4ff", background="#142640")
 
     def _build(self):
         outer = ttk.Frame(self, padding=16)
@@ -126,7 +127,7 @@ class App(tk.Tk):
         ttk.Label(form, text="Duración objetivo (minutos, máx. 10)").grid(row=3, column=0, sticky="w", pady=4)
         ttk.Combobox(form, textvariable=self.duration_var, values=[str(i) for i in (1, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120)], state="readonly").grid(row=3, column=1, sticky="ew", pady=4)
         ttk.Label(form, text="Estilo").grid(row=4, column=0, sticky="w", pady=4)
-        ttk.Combobox(form, textvariable=self.style_var, values=["Educativo y directo", "Narrativo", "Promocional", "Documental", "Motivacional"], state="readonly").grid(row=4, column=1, sticky="ew", pady=4)
+        ttk.Combobox(form, textvariable=self.style_var, values=["Educativo y directo", "Novela dramática", "Reencarnación y venganza", "Superación personal", "Romance", "Fantasía", "Misterio y suspenso", "Terror", "Acción y aventura", "Promocional", "Documental", "Motivacional"], state="readonly").grid(row=4, column=1, sticky="ew", pady=4)
         form.columnconfigure(1, weight=1)
 
         controls = ttk.Frame(right)
