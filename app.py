@@ -22,7 +22,10 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
-from scene_engine import allocate_scene_durations, build_srt_subtitles, ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
+from scene_engine import (
+    allocate_scene_durations, build_audio_filter_graph, build_srt_subtitles,
+    ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
+)
 
 APP_NAME = "MARC Video Studio AI Desktop"
 ROOT = Path(__file__).resolve().parent
@@ -1471,8 +1474,8 @@ Write-Output 'NARRATION_OK'
         if not title or not topic:
             messagebox.showwarning("Faltan datos", "Completa el nombre del proyecto y la idea o premisa.")
             return None
-        if duration < 1 or duration > 120:
-            messagebox.showwarning("Duración no válida", "La duración debe estar entre 1 y 120 minutos.")
+        if duration < 1 or duration > 10:
+            messagebox.showwarning("Duración no válida", "MARC permite vídeos de entre 1 y 10 minutos por proyecto.")
             return None
         if len(topic) > 3000:
             messagebox.showwarning("Premisa demasiado larga", "Resume la premisa en un máximo de 3000 caracteres.")
@@ -2239,30 +2242,26 @@ Write-Output 'NARRATION_OK'
                     audio_video_path.unlink()
                 self.generation_queue.put(("render_progress", total + 2, final_steps, "Mezclando narración y música de fondo…"))
                 mux_cmd = [ffmpeg, "-y"]
-                audio_inputs = []
-                filter_parts = []
-                track_labels = []
                 input_index = 0
+                voice_input_index = None
+                music_input_index = None
                 if has_voice:
+                    voice_input_index = input_index
                     mux_cmd.extend(["-i", str(Path(audio_path).resolve())])
-                    label = "[voice]" if has_music else "[aout]"
-                    filter_parts.append(f"[{input_index}:a:0]volume=1.0,apad{label}")
-                    track_labels.append(label)
                     input_index += 1
                 if has_music:
                     if loop_music:
                         mux_cmd.extend(["-stream_loop", "-1"])
+                    music_input_index = input_index
                     mux_cmd.extend(["-i", str(Path(music_path).resolve())])
-                    label = "[music]" if has_voice else "[aout]"
-                    filter_parts.append(f"[{input_index}:a:0]volume=0.18,apad{label}")
-                    track_labels.append(label)
                     input_index += 1
                 video_input_index = input_index
                 mux_cmd.extend(["-i", str(temp_output_path)])
-                if has_voice and has_music:
-                    filter_parts.append("[voice][music]amix=inputs=2:duration=longest:dropout_transition=2[aout]")
+                filter_graph = build_audio_filter_graph(
+                    has_voice, has_music, voice_input_index, music_input_index
+                )
                 mux_cmd.extend([
-                    "-filter_complex", ";".join(filter_parts),
+                    "-filter_complex", filter_graph,
                     "-map", f"{video_input_index}:v:0", "-map", "[aout]",
                     "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
                     "-movflags", "+faststart", str(audio_video_path)
