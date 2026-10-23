@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
+import math
+import os
+import queue
 import shutil
 import sqlite3
 import subprocess
 import textwrap
+import threading
 import urllib.request
 import urllib.error
 import tkinter as tk
@@ -38,9 +42,26 @@ def db_connect():
             style TEXT NOT NULL,
             script TEXT NOT NULL DEFAULT '',
             approved INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            protagonist TEXT NOT NULL DEFAULT '',
+            conflict TEXT NOT NULL DEFAULT '',
+            tone TEXT NOT NULL DEFAULT 'Dramático e intenso',
+            narrator TEXT NOT NULL DEFAULT 'Tercera persona',
+            ending TEXT NOT NULL DEFAULT 'Justicia y superación'
         )
     """)
+    # Migra bases de datos antiguas sin eliminar los proyectos ya guardados.
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(projects)").fetchall()}
+    migrations = {
+        "protagonist": "TEXT NOT NULL DEFAULT ''",
+        "conflict": "TEXT NOT NULL DEFAULT ''",
+        "tone": "TEXT NOT NULL DEFAULT 'Dramático e intenso'",
+        "narrator": "TEXT NOT NULL DEFAULT 'Tercera persona'",
+        "ending": "TEXT NOT NULL DEFAULT 'Justicia y superación'",
+    }
+    for column, declaration in migrations.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE projects ADD COLUMN {column} {declaration}")
     conn.commit()
     return conn
 
