@@ -51,8 +51,9 @@ Ollama, sus modelos, ComfyUI/checkpoints y FFmpeg no se incluyen en el instalado
 2. Genera el guion con la IA local.
 3. Revisa el guion y las escenas; importa imágenes o genera ilustraciones con ComfyUI si está instalado.
 4. Opcionalmente, añade una pista de narración/música local.
-5. Aprueba el guion.
-6. Exporta MP4 y abre el resultado desde la pestaña **Vista previa**.
+5. Exporta subtítulos SRT si los necesitas y revisa su sincronización.
+6. Aprueba el guion.
+7. Exporta MP4 y abre el resultado desde la pestaña **Vista previa**.
 
 ## Límites importantes
 - La integración de ComfyUI genera **imágenes fijas**, no vídeo neuronal completo. El render aplica movimiento de cámara sencillo a imágenes y tarjetas tipográficas donde no haya recursos.
