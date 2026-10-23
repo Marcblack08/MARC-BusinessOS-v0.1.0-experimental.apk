@@ -174,10 +174,11 @@ class App(tk.Tk):
 
     def _style(self):
         self.colors = {
-            "bg": "#08111f", "panel": "#101d31", "panel2": "#142640",
-            "input": "#0b1728", "accent": "#2585ff", "accent_hover": "#4a9bff",
-            "text": "#edf4ff", "muted": "#9bb0ca", "border": "#263b57",
-            "success": "#70e1b1", "warning": "#ffd166", "danger": "#ff8f8f"
+            "bg": "#070d18", "panel": "#0e192a", "panel2": "#15243a",
+            "input": "#091321", "accent": "#168bff", "accent_hover": "#45a5ff",
+            "text": "#f2f7ff", "muted": "#9aadc6", "border": "#203651",
+            "success": "#62e6b4", "warning": "#ffd166", "danger": "#ff7f91",
+            "glow": "#173f70", "surface": "#111f33"
         }
         self.configure(bg=self.colors["bg"])
         style = ttk.Style(self)
@@ -189,15 +190,38 @@ class App(tk.Tk):
         style.configure("Panel.TFrame", background=self.colors["panel"])
         style.configure("TLabel", background=self.colors["bg"], foreground=self.colors["text"], font=("Segoe UI", 10))
         style.configure("Muted.TLabel", background=self.colors["bg"], foreground=self.colors["muted"], font=("Segoe UI", 9))
-        style.configure("Title.TLabel", background=self.colors["bg"], foreground="#69b0ff", font=("Segoe UI", 22, "bold"))
+        style.configure("Title.TLabel", background=self.colors["bg"], foreground="#62b7ff", font=("Segoe UI", 23, "bold"))
         style.configure("Section.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 11, "bold"))
-        style.configure("TButton", padding=(11, 8), font=("Segoe UI", 9, "bold"), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=0)
-        style.map("TButton", background=[("active", self.colors["accent"]), ("pressed", self.colors["accent"])], foreground=[("disabled", "#60738b")])
-        style.configure("Accent.TButton", padding=(13, 10), font=("Segoe UI", 9, "bold"), background=self.colors["accent"], foreground="#ffffff", borderwidth=0)
-        style.map("Accent.TButton", background=[("active", self.colors["accent_hover"]), ("pressed", self.colors["accent_hover"])])
-        style.configure("TEntry", padding=7, fieldbackground=self.colors["input"], foreground=self.colors["text"], insertcolor=self.colors["text"])
-        style.configure("TCombobox", padding=7, fieldbackground=self.colors["input"], foreground=self.colors["text"], background=self.colors["panel2"], arrowcolor=self.colors["text"])
-        style.map("TCombobox", fieldbackground=[("readonly", self.colors["input"])], foreground=[("readonly", self.colors["text"])])
+        style.configure("TButton", padding=(12, 9), font=("Segoe UI Semibold", 9), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=1, relief="flat")
+        style.map("TButton",
+                  background=[("active", "#203b5d"), ("pressed", self.colors["accent"])],
+                  foreground=[("disabled", "#60738b")],
+                  bordercolor=[("active", self.colors["accent"])])
+        style.configure("Accent.TButton", padding=(15, 10), font=("Segoe UI", 9, "bold"),
+                        background=self.colors["accent"], foreground="#ffffff", borderwidth=0, relief="flat")
+        style.map("Accent.TButton", background=[("active", self.colors["accent_hover"]), ("pressed", "#0875df")])
+        style.configure("TEntry", padding=(10, 9), fieldbackground=self.colors["input"],
+                        foreground=self.colors["text"], insertcolor=self.colors["text"],
+                        bordercolor=self.colors["border"], lightcolor=self.colors["border"],
+                        darkcolor=self.colors["border"], relief="flat")
+        style.map("TEntry", bordercolor=[("focus", self.colors["accent"])],
+                  lightcolor=[("focus", self.colors["accent"])])
+        style.configure("TCombobox", padding=(9, 8), fieldbackground=self.colors["input"],
+                        foreground=self.colors["text"], background=self.colors["panel2"],
+                        arrowcolor=self.colors["accent"], bordercolor=self.colors["border"],
+                        lightcolor=self.colors["border"], darkcolor=self.colors["border"], relief="flat")
+        style.map("TCombobox",
+                  fieldbackground=[("readonly", self.colors["input"]), ("focus", "#0d1d31")],
+                  foreground=[("readonly", self.colors["text"])],
+                  bordercolor=[("focus", self.colors["accent"])],
+                  lightcolor=[("focus", self.colors["accent"])])
+        style.configure("Horizontal.TProgressbar", troughcolor=self.colors["input"],
+                        background=self.colors["accent"], bordercolor=self.colors["border"],
+                        lightcolor=self.colors["accent"], darkcolor=self.colors["accent"], thickness=8)
+        style.configure("Vertical.TScrollbar", background=self.colors["panel2"],
+                        troughcolor=self.colors["input"], arrowcolor=self.colors["muted"],
+                        bordercolor=self.colors["input"], relief="flat")
+        style.map("Vertical.TScrollbar", background=[("active", self.colors["accent"])])
 
     def _build(self):
         self.grid_rowconfigure(0, weight=1)
@@ -395,9 +419,9 @@ class App(tk.Tk):
 
     def _field(self, parent, label, variable, row, col, values=None, span=1):
         cell = tk.Frame(parent, bg=self.colors["panel"])
-        cell.grid(row=row, column=col, columnspan=span, sticky="ew", padx=5, pady=4)
-        tk.Label(cell, text=label, bg=self.colors["panel"], fg=self.colors["muted"],
-                 font=("Segoe UI", 9)).pack(anchor="w", pady=(0, 4))
+        cell.grid(row=row, column=col, columnspan=span, sticky="ew", padx=6, pady=5)
+        tk.Label(cell, text=label.upper(), bg=self.colors["panel"], fg="#8fa8c8",
+                 font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 5))
         if values is not None:
             widget = ttk.Combobox(cell, textvariable=variable, values=values,
                                   state="readonly", font=("Segoe UI", 9))
