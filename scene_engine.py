@@ -1,7 +1,6 @@
 """Pure helpers for turning an approved script into renderable scenes."""
 from __future__ import annotations
 
-import math
 import re
 from pathlib import Path
 from typing import Iterable
@@ -69,7 +68,11 @@ def parse_script_scenes(script: str, max_scenes: int = 120) -> list[dict]:
         if not line:
             flush()
             continue
-        if line.upper().startswith(_METADATA_PREFIXES):
+        upper_line = line.upper()
+        if upper_line.startswith(_METADATA_PREFIXES) or upper_line.startswith((
+            "REVISA CONTINUIDAD", "REVISA LOS DATOS", "VERIFICA LOS HECHOS",
+            "REVISA LOS HECHOS", "VERIFICA DATOS", "REVISIÓN HUMANA PENDIENTE",
+        )):
             continue
         m = _HEADING.match(line)
         if m:
