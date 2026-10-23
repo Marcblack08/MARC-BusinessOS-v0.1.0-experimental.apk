@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
-from scene_engine import allocate_scene_durations, ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
+from scene_engine import allocate_scene_durations, build_srt_subtitles, ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
 
 APP_NAME = "MARC Video Studio AI Desktop"
 ROOT = Path(__file__).resolve().parent
@@ -555,7 +555,7 @@ class App(tk.Tk):
         audio_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=16, pady=14)
         studio_tabs.add(audio_tab, text="  ♪  AUDIO  ")
         audio_tab.grid_columnconfigure(0, weight=1)
-        audio_tab.grid_rowconfigure(5, weight=1)
+        audio_tab.grid_rowconfigure(6, weight=1)
         tk.Label(audio_tab, text="NARRACIÓN Y SONIDO", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 13, "bold")).grid(row=0, column=0, sticky="w")
         tk.Label(audio_tab, text="Importa una pista de voz/música o genera narración sin conexión usando las voces de Windows que ya estén instaladas.",
@@ -612,9 +612,18 @@ class App(tk.Tk):
         self.voice_status_var = tk.StringVar(value="Detectando voces locales de Windows…")
         tk.Label(audio_tab, textvariable=self.voice_status_var, bg=self.colors["panel"], fg=self.colors["muted"],
                  font=("Segoe UI", 9), anchor="w", wraplength=1050, justify="left").grid(row=4, column=0, sticky="ew", pady=(0, 10))
+        subtitle_actions = tk.Frame(audio_tab, bg=self.colors["panel"])
+        subtitle_actions.grid(row=5, column=0, sticky="ew", pady=(4, 9))
+        self.export_srt_button = ttk.Button(
+            subtitle_actions, text="Exportar subtítulos SRT", style="Accent.TButton",
+            command=self.export_subtitles
+        )
+        self.export_srt_button.pack(side="left")
+        tk.Label(subtitle_actions, text="Crea un archivo de subtítulos con tiempos aproximados por escena.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).pack(side="left", padx=(10, 0))
         tk.Label(audio_tab, text="Para voces en español, instala un paquete de voz en Configuración de Windows → Hora e idioma → Voz. La voz disponible depende de Windows y del idioma instalado.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
-                 wraplength=1050, justify="left").grid(row=5, column=0, sticky="nw", pady=(2, 0))
+                 wraplength=1050, justify="left").grid(row=6, column=0, sticky="nw", pady=(2, 0))
 
         self.status_var = tk.StringVar(value="Listo. Define una historia o abre un proyecto de la biblioteca.")
         tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
