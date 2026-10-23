@@ -81,7 +81,8 @@ class App(tk.Tk):
         super().__init__()
         self.title(APP_NAME)
         self.geometry("1440x900")
-        self.minsize(1080, 680)
+        self.minsize(960, 620)
+        self.state("zoomed")
         self.conn = db_connect()
         self.current_id = None
         self.ai_available = False
