@@ -404,9 +404,8 @@ class App(tk.Tk):
         for widget, idle_state in self.form_widgets:
             widget.configure(state="disabled" if active else idle_state)
         self.script_text.configure(state="disabled" if active else "normal")
-        if active:
-            self.progressbar.start(12)
-        else:
+        # La barra es determinista: solo avanza cuando un capítulo termina realmente.
+        if not active:
             self.progressbar.stop()
 
     def cancel_generation(self):
@@ -743,6 +742,10 @@ class App(tk.Tk):
         scene_dir = PROJECTS_DIR / str(row["id"])
         scene_dir.mkdir(parents=True, exist_ok=True)
         try:
+            self.progressbar.configure(maximum=len(scene_texts) + 1, value=0)
+            self.progress_label_var.set(f"Renderizando video · {len(scene_texts)} escenas")
+            self.progress_detail_var.set("0% · Preparando escenas de texto")
+            self.update_idletasks()
             for i, line in enumerate(scene_texts):
                 # Texto seguro para filtro drawtext; cada escena es un fondo sencillo.
                 wrapped = "\\n".join(textwrap.wrap(line, width=32 if height > width else 48))
@@ -756,12 +759,24 @@ class App(tk.Tk):
                     str(scene_path)
                 ]
                 subprocess.run(cmd, check=True, capture_output=True, text=True)
+                done = i + 1
+                percent = round(done / (len(scene_texts) + 1) * 100)
+                self.progressbar.configure(value=done)
+                self.progress_label_var.set(f"Renderizando video · escena {done} de {len(scene_texts)}")
+                self.progress_detail_var.set(f"{percent}% · FFmpeg está procesando las escenas")
+                self.update_idletasks()
             concat = scene_dir / "concat.txt"
             concat.write_text("".join(f"file '{(scene_dir / f'scene_{i:03d}.mp4').as_posix()}'\n" for i in range(len(scene_texts))), encoding="utf-8")
             cmd = [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-c", "copy", output]
             subprocess.run(cmd, check=True, capture_output=True, text=True)
+            self.progressbar.configure(value=len(scene_texts) + 1)
+            self.progress_label_var.set("Video exportado correctamente")
+            self.progress_detail_var.set("100% · Render finalizado")
+            self.update_idletasks()
         except (subprocess.CalledProcessError, OSError) as exc:
             detail = (getattr(exc, "stderr", None) or str(exc))[-1800:]
+            self.progress_label_var.set("La exportación se detuvo")
+            self.progress_detail_var.set("Error · Revisa FFmpeg y el mensaje de diagnóstico")
             messagebox.showerror("Error de exportación", f"FFmpeg no pudo renderizar el video.\n\n{detail}")
             return
         self.status_var.set(f"Video exportado: {output}")
