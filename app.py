@@ -89,14 +89,19 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_NAME)
-        self.geometry("1050x760")
-        self.minsize(850, 620)
-        self.configure(bg="#0b1220")
+        self.geometry("1280x860")
+        self.minsize(1020, 700)
         self.conn = db_connect()
         self.current_id = None
+        self.ai_available = False
+        self.generation_queue = queue.Queue()
+        self.cancel_event = threading.Event()
+        self.generation_running = False
         self._style()
         self._build()
         self.refresh_projects()
+        self.check_tools()
+        self.after(180, self._poll_generation_events)
 
     def _style(self):
         self.colors = {
@@ -566,6 +571,7 @@ class App(tk.Tk):
         if self.current_id is not None:
             self.conn.execute("UPDATE projects SET approved=1 WHERE id=?", (self.current_id,))
             self.conn.commit()
+            self.refresh_projects()
         self.status_var.set("Guion aprobado por el usuario. Ya puedes exportar el MP4.")
 
     def refresh_projects(self):
@@ -620,17 +626,31 @@ class App(tk.Tk):
         if not row or not row["approved"]:
             messagebox.showerror("Aprobación obligatoria", "No se puede exportar: primero debes aprobar el guion.")
             return
-        ffmpeg = shutil.which("ffmpeg")
+        ffmpeg = self._find_ffmpeg()
         if not ffmpeg:
-            messagebox.showerror("FFmpeg no encontrado", "Instala FFmpeg y añádelo al PATH. Después reinicia la aplicación.")
-            return
+            selected = filedialog.askopenfilename(
+                title="Selecciona ffmpeg.exe",
+                filetypes=[("FFmpeg ejecutable", "ffmpeg.exe"), ("Ejecutables", "*.exe")]
+            )
+            if not selected:
+                messagebox.showerror("FFmpeg no encontrado", "No se encontró FFmpeg automáticamente. Selecciona ffmpeg.exe de la carpeta bin.")
+                return
+            if Path(selected).name.lower() != "ffmpeg.exe":
+                messagebox.showerror("Archivo incorrecto", "Selecciona el archivo ffmpeg.exe.")
+                return
+            ffmpeg = selected
         output = filedialog.asksaveasfilename(title="Guardar video MP4", defaultextension=".mp4",
                                                filetypes=[("Video MP4", "*.mp4")],
                                                initialfile=f"{row['title'][:40]}.mp4")
         if not output:
             return
         width, height = PLATFORMS.get(row["platform"], (1280, 720))
-        lines = [x.strip() for x in row["script"].splitlines() if x.strip() and not x.startswith("[") and not x.startswith("TÍTULO:") and not x.startswith("ESTILO:") and not x.startswith("DURACIÓN") and not x.startswith("NOTA DE PRODUCCIÓN")]
+        lines = [
+            x.strip() for x in row["script"].splitlines()
+            if x.strip()
+            and not x.strip().startswith("[")
+            and not x.strip().startswith(("TÍTULO:", "ESTILO:", "GÉNERO:", "DURACIÓN", "MODELO:", "GENERADO POR:", "NOTA:", "NOTA DE"))
+        ]
         if not lines:
             messagebox.showerror("Guion vacío", "El guion no contiene escenas exportables.")
             return
@@ -655,8 +675,8 @@ class App(tk.Tk):
             concat.write_text("".join(f"file '{(scene_dir / f'scene_{i:03d}.mp4').as_posix()}'\n" for i in range(len(lines))), encoding="utf-8")
             cmd = [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-c", "copy", output]
             subprocess.run(cmd, check=True, capture_output=True, text=True)
-        except subprocess.CalledProcessError as exc:
-            detail = (exc.stderr or str(exc))[-1800:]
+        except (subprocess.CalledProcessError, OSError) as exc:
+            detail = (getattr(exc, "stderr", None) or str(exc))[-1800:]
             messagebox.showerror("Error de exportación", f"FFmpeg no pudo renderizar el video.\n\n{detail}")
             return
         self.status_var.set(f"Video exportado: {output}")
