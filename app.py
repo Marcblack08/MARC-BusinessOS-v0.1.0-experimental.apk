@@ -237,6 +237,13 @@ class App(tk.Tk):
                         troughcolor=self.colors["input"], arrowcolor=self.colors["muted"],
                         bordercolor=self.colors["input"], relief="flat")
         style.map("Vertical.TScrollbar", background=[("active", self.colors["accent"])])
+        style.configure("Treeview", background=self.colors["input"], fieldbackground=self.colors["input"],
+                        foreground=self.colors["text"], rowheight=28, borderwidth=0,
+                        font=("Segoe UI", 9))
+        style.configure("Treeview.Heading", background=self.colors["panel2"],
+                        foreground="#69b8ff", font=("Segoe UI", 8, "bold"), relief="flat")
+        style.map("Treeview", background=[("selected", self.colors["accent"])],
+                  foreground=[("selected", "#ffffff")])
 
     def _build(self):
         self.grid_rowconfigure(0, weight=1)
@@ -482,20 +489,26 @@ class App(tk.Tk):
         tk.Label(scenes_tab, textvariable=self.image_ai_status_var, bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 8), anchor="w").grid(row=4, column=1, sticky="e", padx=(8, 0))
 
-        scene_body = tk.Frame(scenes_tab, bg=self.colors["input"], padx=12, pady=10)
+        scene_body = tk.Frame(scenes_tab, bg=self.colors["input"], padx=8, pady=8)
         scene_body.grid(row=5, column=0, sticky="nsew")
         scene_body.grid_columnconfigure(0, weight=1)
-        scene_body.grid_rowconfigure(1, weight=1)
-        tk.Label(scene_body, text="SECUENCIA NARRATIVA", bg=self.colors["input"], fg="#69b8ff",
-                 font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 8))
-        self.scene_outline = tk.Listbox(scene_body, bg=self.colors["input"], fg=self.colors["text"],
-                                        selectbackground=self.colors["accent"], selectforeground="#ffffff",
-                                        borderwidth=0, highlightthickness=0, activestyle="none",
-                                        font=("Segoe UI", 10), height=8)
-        self.scene_outline.grid(row=1, column=0, sticky="nsew")
+        scene_body.grid_rowconfigure(0, weight=1)
+        columns = ("number", "title", "words", "duration", "visual")
+        self.scene_outline = ttk.Treeview(scene_body, columns=columns, show="headings",
+                                          selectmode="browse", height=8)
+        for key, heading in (("number", "#"), ("title", "ESCENA"), ("words", "PALABRAS"),
+                             ("duration", "DURACIÓN"), ("visual", "RECURSO VISUAL")):
+            self.scene_outline.heading(key, text=heading)
+        self.scene_outline.column("number", width=42, minwidth=38, anchor="center", stretch=False)
+        self.scene_outline.column("title", width=260, minwidth=130, anchor="w", stretch=True)
+        self.scene_outline.column("words", width=82, minwidth=70, anchor="e", stretch=False)
+        self.scene_outline.column("duration", width=84, minwidth=70, anchor="center", stretch=False)
+        self.scene_outline.column("visual", width=190, minwidth=120, anchor="w", stretch=True)
+        self.scene_outline.grid(row=0, column=0, sticky="nsew")
         scene_scroll = ttk.Scrollbar(scene_body, orient="vertical", command=self.scene_outline.yview)
-        scene_scroll.grid(row=1, column=1, sticky="ns")
+        scene_scroll.grid(row=0, column=1, sticky="ns")
         self.scene_outline.configure(yscrollcommand=scene_scroll.set)
+        self.scene_outline.bind("<Double-1>", lambda _event: self.assign_scene_image())
         tk.Label(scenes_tab, text="La generación de ilustraciones se ejecuta en ComfyUI en tu PC. Requiere instalarlo y descargar al menos un checkpoint compatible. No usa claves API ni servicios en la nube.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1000, justify="left").grid(row=6, column=0, sticky="w", pady=(8, 0))
