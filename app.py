@@ -2734,6 +2734,9 @@ Write-Output 'NARRATION_OK'
             return
         if getattr(self, "preview_player_active", False):
             self.stop_preview_video()
+        self.preview_render_path = ""
+        self.preview_render_signature = ""
+        self.manual_preview_path = ""
         self.current_id = None
         self.series_key = ""
         self.episode_number = 1
@@ -2911,6 +2914,7 @@ Write-Output 'NARRATION_OK'
         self.save_button.configure(state=state)
         self.approve_button.configure(state=state)
         self.export_button.configure(state=state)
+        self.preview_render_button.configure(state=state)
         for widget, idle_state in self.form_widgets:
             widget.configure(state="disabled" if active else idle_state)
         self.script_text.configure(state="disabled" if active else "normal")
@@ -3635,6 +3639,9 @@ Write-Output 'NARRATION_OK'
             return
         if getattr(self, "preview_player_active", False):
             self.stop_preview_video()
+        self.preview_render_path = ""
+        self.preview_render_signature = ""
+        self.manual_preview_path = ""
         row = self.project_rows[selection[0]]
         project = self.conn.execute("SELECT * FROM projects WHERE id=?", (row["id"],)).fetchone()
         if not project:
