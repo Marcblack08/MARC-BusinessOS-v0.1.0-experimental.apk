@@ -15,6 +15,7 @@ import threading
 import platform
 import ctypes
 import time
+import uuid
 import urllib.request
 import urllib.error
 import tkinter as tk
@@ -26,6 +27,11 @@ from urllib.parse import urlencode
 from scene_engine import (
     allocate_scene_durations, build_audio_filter_graph, build_srt_subtitles,
     ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
+)
+from story_engine import (
+    FPS_OPTIONS, RESOLUTION_PROFILES, SERIES_VIDEO_MODE, SHORT_VIDEO_MODE,
+    build_series_context, continuity_review_check, export_dimensions,
+    extract_speaker_names, target_word_count
 )
 
 APP_NAME = "MARC Video Studio AI Desktop"
@@ -68,7 +74,15 @@ def db_connect():
             narrator TEXT NOT NULL DEFAULT 'Tercera persona',
             ending TEXT NOT NULL DEFAULT 'Justicia y superación',
             drawing_style TEXT NOT NULL DEFAULT 'Anime cinematográfico',
-            animation_style TEXT NOT NULL DEFAULT '2D fluida'
+            animation_style TEXT NOT NULL DEFAULT '2D fluida',
+            resolution TEXT NOT NULL DEFAULT '1080p (Full HD)',
+            fps INTEGER NOT NULL DEFAULT 30,
+            video_mode TEXT NOT NULL DEFAULT 'Novela / Serie',
+            series_key TEXT NOT NULL DEFAULT '',
+            episode_number INTEGER NOT NULL DEFAULT 1,
+            story_bible TEXT NOT NULL DEFAULT '',
+            continuity_state TEXT NOT NULL DEFAULT '',
+            voice_assignments TEXT NOT NULL DEFAULT '{}'
         )
     """)
     # Migra bases de datos antiguas sin eliminar los proyectos ya guardados.
@@ -81,6 +95,14 @@ def db_connect():
         "ending": "TEXT NOT NULL DEFAULT 'Justicia y superación'",
         "drawing_style": "TEXT NOT NULL DEFAULT 'Anime cinematográfico'",
         "animation_style": "TEXT NOT NULL DEFAULT '2D fluida'",
+        "resolution": "TEXT NOT NULL DEFAULT '1080p (Full HD)'",
+        "fps": "INTEGER NOT NULL DEFAULT 30",
+        "video_mode": "TEXT NOT NULL DEFAULT 'Novela / Serie'",
+        "series_key": "TEXT NOT NULL DEFAULT ''",
+        "episode_number": "INTEGER NOT NULL DEFAULT 1",
+        "story_bible": "TEXT NOT NULL DEFAULT ''",
+        "continuity_state": "TEXT NOT NULL DEFAULT ''",
+        "voice_assignments": "TEXT NOT NULL DEFAULT '{}'",
     }
     for column, declaration in migrations.items():
         if column not in existing:
@@ -97,6 +119,11 @@ class App(tk.Tk):
         self.state("zoomed")
         self.conn = db_connect()
         self.current_id = None
+        self.series_key = ""
+        self.episode_number = 1
+        self.story_bible = ""
+        self.continuity_state = ""
+        self.voice_assignments = {}
         self.ai_available = False
         self.generation_queue = queue.Queue()
         self.cancel_event = threading.Event()
