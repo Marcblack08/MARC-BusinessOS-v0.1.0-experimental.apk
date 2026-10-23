@@ -2530,10 +2530,15 @@ Write-Output 'NARRATION_OK'
         self.progress_label_var.set(f"Preparando render · {len(scenes)} escenas")
         self.progress_detail_var.set(f"0% · Duración objetivo: {self._format_eta(sum(durations))}")
         self.status_var.set("Render iniciado en segundo plano. Puedes seguir viendo el progreso aquí.")
+        # Si no hay pista de voz importada, la narración se generará automáticamente durante la exportación.
+        narration_text = "\\n\\n".join(
+            str(scene.get("text", "")).strip() for scene in scenes if str(scene.get("text", "")).strip()
+        ).strip() if not audio_path and os.name == "nt" else ""
+        chosen_voice = self.voice_var.get().strip() if hasattr(self, "voice_var") else "(Automática)"
         args = (
             ffmpeg, str(Path(output).resolve()), int(row["id"]), width, height,
             scenes, durations, asset_map, row["animation_style"] or "2D fluida",
-            audio_path, music_path, loop_music
+            audio_path, music_path, loop_music, narration_text, chosen_voice
         )
         threading.Thread(target=self._render_video_worker, args=args, daemon=True).start()
 
@@ -2568,7 +2573,8 @@ Write-Output 'NARRATION_OK'
 
     def _render_video_worker(self, ffmpeg, output, project_id, width, height,
                              scenes, durations, asset_map, animation_style,
-                             audio_path="", music_path="", loop_music=True):
+                             audio_path="", music_path="", loop_music=True,
+                             narration_text="", chosen_voice="(Automática)"):
         scene_dir = PROJECTS_DIR / str(project_id) / "render_work"
         scene_dir.mkdir(parents=True, exist_ok=True)
         output_path = Path(output)
@@ -2599,6 +2605,46 @@ Write-Output 'NARRATION_OK'
 
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
+            # Crea voz local de Windows automáticamente si el usuario no importó una narración.
+            if narration_text and not (audio_path and Path(audio_path).is_file()):
+                narration_text_path = scene_dir / "auto_narration.txt"
+                narration_script_path = scene_dir / "auto_narration.ps1"
+                generated_voice_path = scene_dir / "auto_narration.wav"
+                narration_text_path.write_text(narration_text, encoding="utf-8")
+                narration_script_path.write_text(r"""param([string]$TextFile,[string]$OutputFile,[string]$VoiceName)
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Speech
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+try {
+  if ($VoiceName -and $VoiceName -ne '(Automática)') { $synth.SelectVoice($VoiceName) }
+  $synth.Rate = 0
+  $synth.Volume = 100
+  $text = [System.IO.File]::ReadAllText($TextFile, [System.Text.Encoding]::UTF8)
+  if ([string]::IsNullOrWhiteSpace($text)) { throw 'El texto de narración está vacío.' }
+  $synth.SetOutputToWaveFile($OutputFile)
+  $synth.Speak($text)
+  $synth.SetOutputToNull()
+} finally { $synth.Dispose() }
+if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile).Length -lt 44) {
+  throw 'Windows no generó un archivo WAV válido.'
+}
+""", encoding="utf-8")
+                self.generation_queue.put(("render_progress", 0, len(scenes) + 3, "Generando narración automática con la voz local de Windows…"))
+                ps_args = [
+                    "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                    str(narration_script_path), str(narration_text_path), str(generated_voice_path),
+                    chosen_voice or "(Automática)"
+                ]
+                creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+                try:
+                    result = subprocess.run(ps_args, capture_output=True, text=True, timeout=60 * 60,
+                                            creationflags=creationflags)
+                except subprocess.TimeoutExpired:
+                    raise RuntimeError("La generación automática de voz superó una hora y se detuvo.")
+                if result.returncode != 0 or not generated_voice_path.is_file() or generated_voice_path.stat().st_size < 44:
+                    raise RuntimeError("No se pudo generar la narración automática. Comprueba que Windows tenga una voz instalada. " +
+                                       (result.stderr or result.stdout or "").strip()[-1800:])
+                audio_path = str(generated_voice_path.resolve())
             total = len(scenes)
             has_voice = bool(audio_path and Path(audio_path).is_file())
             has_music = bool(music_path and Path(music_path).is_file())
