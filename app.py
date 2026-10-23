@@ -78,77 +78,170 @@ class App(tk.Tk):
         self.refresh_projects()
 
     def _style(self):
+        self.colors = {
+            "bg": "#08111f", "panel": "#101d31", "panel2": "#142640",
+            "input": "#0b1728", "accent": "#2585ff", "accent_hover": "#4a9bff",
+            "text": "#edf4ff", "muted": "#9bb0ca", "border": "#263b57",
+            "success": "#70e1b1", "warning": "#ffd166", "danger": "#ff8f8f"
+        }
+        self.configure(bg=self.colors["bg"])
         style = ttk.Style(self)
         try:
             style.theme_use("clam")
         except tk.TclError:
             pass
-        style.configure("TFrame", background="#08111f")
-        style.configure("TLabel", background="#08111f", foreground="#edf4ff", font=("Segoe UI", 10))
-        style.configure("Title.TLabel", font=("Segoe UI", 22, "bold"), foreground="#69b0ff", background="#08111f")
-        style.configure("TButton", padding=(12, 9), font=("Segoe UI", 9, "bold"), background="#142640", foreground="#edf4ff", borderwidth=0)
-        style.map("TButton", background=[("active", "#2585ff"), ("pressed", "#2585ff")])
-        style.configure("TEntry", padding=8, fieldbackground="#0d192a", foreground="#edf4ff")
-        style.configure("TCombobox", padding=8, fieldbackground="#0d192a", foreground="#edf4ff", background="#142640")
+        style.configure("TFrame", background=self.colors["bg"])
+        style.configure("Panel.TFrame", background=self.colors["panel"])
+        style.configure("TLabel", background=self.colors["bg"], foreground=self.colors["text"], font=("Segoe UI", 10))
+        style.configure("Muted.TLabel", background=self.colors["bg"], foreground=self.colors["muted"], font=("Segoe UI", 9))
+        style.configure("Title.TLabel", background=self.colors["bg"], foreground="#69b0ff", font=("Segoe UI", 22, "bold"))
+        style.configure("Section.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 11, "bold"))
+        style.configure("TButton", padding=(11, 8), font=("Segoe UI", 9, "bold"), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=0)
+        style.map("TButton", background=[("active", self.colors["accent"]), ("pressed", self.colors["accent"])], foreground=[("disabled", "#60738b")])
+        style.configure("Accent.TButton", padding=(13, 10), font=("Segoe UI", 9, "bold"), background=self.colors["accent"], foreground="#ffffff", borderwidth=0)
+        style.map("Accent.TButton", background=[("active", self.colors["accent_hover"]), ("pressed", self.colors["accent_hover"])])
+        style.configure("TEntry", padding=7, fieldbackground=self.colors["input"], foreground=self.colors["text"], insertcolor=self.colors["text"])
+        style.configure("TCombobox", padding=7, fieldbackground=self.colors["input"], foreground=self.colors["text"], background=self.colors["panel2"], arrowcolor=self.colors["text"])
+        style.map("TCombobox", fieldbackground=[("readonly", self.colors["input"])], foreground=[("readonly", self.colors["text"])])
 
     def _build(self):
-        outer = ttk.Frame(self, padding=16)
+        outer = ttk.Frame(self, padding=18)
         outer.pack(fill="both", expand=True)
-        ttk.Label(outer, text=APP_NAME, style="Title.TLabel").pack(anchor="w")
-        ttk.Label(outer, text="Producción local · Sin claves API · Aprobación humana obligatoria").pack(anchor="w", pady=(2, 12))
+        header = tk.Frame(outer, bg=self.colors["bg"])
+        header.pack(fill="x", pady=(0, 16))
+        title_col = tk.Frame(header, bg=self.colors["bg"])
+        title_col.pack(side="left", fill="x", expand=True)
+        tk.Label(title_col, text="MARC  /  STUDIO", bg=self.colors["bg"], fg="#69b0ff",
+                 font=("Segoe UI", 23, "bold")).pack(anchor="w")
+        tk.Label(title_col, text="Tu estudio creativo con inteligencia artificial local",
+                 bg=self.colors["bg"], fg=self.colors["muted"], font=("Segoe UI", 10)).pack(anchor="w", pady=(2, 0))
+        header_actions = tk.Frame(header, bg=self.colors["bg"])
+        header_actions.pack(side="right", anchor="e")
+        self.ai_badge = tk.Label(header_actions, text="● IA LOCAL · COMPROBANDO",
+                                 bg=self.colors["bg"], fg=self.colors["warning"], font=("Segoe UI", 9, "bold"))
+        self.ai_badge.pack(anchor="e", pady=(0, 5))
+        self.ffmpeg_badge = tk.Label(header_actions, text="● FFmpeg · COMPROBANDO",
+                                     bg=self.colors["bg"], fg=self.colors["muted"], font=("Segoe UI", 9, "bold"))
+        self.ffmpeg_badge.pack(anchor="e", pady=(0, 7))
+        ttk.Button(header_actions, text="Comprobar herramientas", command=self.check_tools).pack(anchor="e")
 
         body = ttk.Frame(outer)
         body.pack(fill="both", expand=True)
-        left = ttk.Frame(body, padding=(0, 0, 14, 0))
-        left.pack(side="left", fill="y")
+        sidebar = tk.Frame(body, bg=self.colors["panel"], width=238, padx=13, pady=14,
+                           highlightthickness=1, highlightbackground=self.colors["border"])
+        sidebar.pack(side="left", fill="y", padx=(0, 15))
+        sidebar.pack_propagate(False)
+        tk.Label(sidebar, text="BIBLIOTECA", bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        tk.Label(sidebar, text="Tus proyectos y guiones", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 9)).pack(anchor="w", pady=(3, 10))
+        self.project_list = tk.Listbox(
+            sidebar, width=25, height=20, bg=self.colors["input"], fg=self.colors["text"],
+            selectbackground=self.colors["accent"], selectforeground="#ffffff",
+            borderwidth=0, highlightthickness=1, highlightbackground=self.colors["border"],
+            font=("Segoe UI", 9), activestyle="none"
+        )
+        self.project_list.pack(fill="both", expand=True, pady=(0, 10))
+        self.project_list.bind("<<ListboxSelect>>", self.load_selected)
+        ttk.Button(sidebar, text="+ Nuevo proyecto", style="Accent.TButton", command=self.new_project).pack(fill="x")
+        ttk.Button(sidebar, text="Eliminar proyecto", command=self.delete_project).pack(fill="x", pady=(7, 0))
+        tk.Label(sidebar, text="LOCAL · PRIVADO · SIN API", bg=self.colors["panel"],
+                 fg=self.colors["muted"], font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(16, 0))
+
         right = ttk.Frame(body)
         right.pack(side="left", fill="both", expand=True)
+        form_card = tk.Frame(right, bg=self.colors["panel"], padx=15, pady=13,
+                             highlightthickness=1, highlightbackground=self.colors["border"])
+        form_card.pack(fill="x")
+        tk.Label(form_card, text="CONFIGURA TU HISTORIA", bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        tk.Label(form_card, text="Define la idea, el género y los personajes. La IA desarrollará el guion por capítulos.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).pack(anchor="w", pady=(3, 10))
 
-        ttk.Label(left, text="PROYECTOS").pack(anchor="w")
-        self.project_list = tk.Listbox(left, width=30, height=25, bg="#111c2f", fg="#e5edf8",
-                                       selectbackground="#2563eb", borderwidth=0, highlightthickness=0)
-        self.project_list.pack(fill="y", expand=True, pady=(6, 8))
-        self.project_list.bind("<<ListboxSelect>>", self.load_selected)
-        ttk.Button(left, text="Nuevo proyecto", command=self.new_project).pack(fill="x")
-        ttk.Button(left, text="Eliminar proyecto", command=self.delete_project).pack(fill="x", pady=(5, 0))
-
-        form = ttk.Frame(right)
-        form.pack(fill="x")
         self.title_var = tk.StringVar()
         self.topic_var = tk.StringVar()
         self.platform_var = tk.StringVar(value=list(PLATFORMS)[0])
-        self.duration_var = tk.StringVar(value="3")
-        self.style_var = tk.StringVar(value="Educativo y directo")
+        self.duration_var = tk.StringVar(value="10")
+        self.style_var = tk.StringVar(value="Reencarnación y venganza")
+        self.protagonist_var = tk.StringVar()
+        self.conflict_var = tk.StringVar()
+        self.tone_var = tk.StringVar(value="Dramático e intenso")
+        self.narrator_var = tk.StringVar(value="Tercera persona")
+        self.ending_var = tk.StringVar(value="Justicia y superación")
 
-        self._field(form, "Nombre del proyecto", self.title_var, 0)
-        self._field(form, "Tema del video", self.topic_var, 1)
-        ttk.Label(form, text="Plataforma / formato").grid(row=2, column=0, sticky="w", pady=4)
-        ttk.Combobox(form, textvariable=self.platform_var, values=list(PLATFORMS), state="readonly").grid(row=2, column=1, sticky="ew", pady=4)
-        ttk.Label(form, text="Duración objetivo (minutos, máx. 10)").grid(row=3, column=0, sticky="w", pady=4)
-        ttk.Combobox(form, textvariable=self.duration_var, values=[str(i) for i in (1, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120)], state="readonly").grid(row=3, column=1, sticky="ew", pady=4)
-        ttk.Label(form, text="Estilo").grid(row=4, column=0, sticky="w", pady=4)
-        ttk.Combobox(form, textvariable=self.style_var, values=["Educativo y directo", "Novela dramática", "Reencarnación y venganza", "Superación personal", "Romance", "Fantasía", "Misterio y suspenso", "Terror", "Acción y aventura", "Promocional", "Documental", "Motivacional"], state="readonly").grid(row=4, column=1, sticky="ew", pady=4)
-        form.columnconfigure(1, weight=1)
+        grid = tk.Frame(form_card, bg=self.colors["panel"])
+        grid.pack(fill="x")
+        for c in range(3):
+            grid.columnconfigure(c, weight=1, uniform="story_cols")
+        self._field(grid, "Nombre del proyecto", self.title_var, 0, 0)
+        self._field(grid, "Género / tipo de contenido", self.style_var, 0, 1,
+                    values=["Novela dramática", "Reencarnación y venganza", "Superación personal",
+                            "Romance", "Fantasía", "Misterio y suspenso", "Terror", "Acción y aventura",
+                            "Ciencia ficción", "Drama familiar", "Educativo y directo", "Documental", "Promocional"])
+        self._field(grid, "Plataforma", self.platform_var, 0, 2, values=list(PLATFORMS))
+        self._field(grid, "Idea o premisa de la historia", self.topic_var, 1, 0, span=2)
+        self._field(grid, "Duración objetivo (minutos)", self.duration_var, 1, 2,
+                    values=[str(i) for i in (1, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120)])
+        self._field(grid, "Protagonista (opcional)", self.protagonist_var, 2, 0)
+        self._field(grid, "Conflicto central (opcional)", self.conflict_var, 2, 1)
+        self._field(grid, "Tono narrativo", self.tone_var, 2, 2,
+                    values=["Dramático e intenso", "Oscuro y misterioso", "Emotivo", "Inspirador",
+                            "Épico", "Ligero y humorístico", "Realista"])
+        self._field(grid, "Tipo de narrador", self.narrator_var, 3, 0,
+                    values=["Tercera persona", "Primera persona protagonista", "Primera persona retrospectiva",
+                            "Narrador omnisciente"])
+        self._field(grid, "Tipo de desenlace", self.ending_var, 3, 1,
+                    values=["Justicia y superación", "Final feliz", "Final trágico", "Giro inesperado",
+                            "Abierto para continuación", "Agridulce"])
+        tk.Label(grid, text="Los guiones largos se generan por capítulos y pueden tardar.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8)).grid(
+                     row=3, column=2, sticky="w", padx=8, pady=(17, 4))
 
-        controls = ttk.Frame(right)
-        controls.pack(fill="x", pady=8)
-        ttk.Button(controls, text="Generar borrador", command=self.generate_script).pack(side="left")
-        ttk.Button(controls, text="Guardar cambios", command=self.save_project).pack(side="left", padx=6)
-        ttk.Button(controls, text="Aprobar guion", command=self.approve_script).pack(side="left")
-        ttk.Button(controls, text="Exportar MP4", command=self.export_video).pack(side="left", padx=6)
+        actions = tk.Frame(right, bg=self.colors["bg"])
+        actions.pack(fill="x", pady=10)
+        self.generate_button = ttk.Button(actions, text="✦ Generar guion con IA", style="Accent.TButton",
+                                          command=self.generate_script)
+        self.generate_button.pack(side="left")
+        self.cancel_button = ttk.Button(actions, text="Cancelar generación", command=self.cancel_generation, state="disabled")
+        self.cancel_button.pack(side="left", padx=(8, 0))
+        ttk.Button(actions, text="Guardar", command=self.save_project).pack(side="left", padx=(8, 0))
+        ttk.Button(actions, text="Aprobar guion", command=self.approve_script).pack(side="left", padx=(8, 0))
+        ttk.Button(actions, text="Exportar MP4", command=self.export_video).pack(side="left", padx=(8, 0))
 
-        ttk.Label(right, text="EDITOR DEL GUION").pack(anchor="w", pady=(4, 4))
-        self.script_text = tk.Text(right, wrap="word", undo=True, bg="#111c2f", fg="#e5edf8",
-                                   insertbackground="white", selectbackground="#1d4ed8",
-                                   font=("Consolas", 10), relief="flat", padx=10, pady=10)
+        editor_card = tk.Frame(right, bg=self.colors["panel"], padx=13, pady=11,
+                               highlightthickness=1, highlightbackground=self.colors["border"])
+        editor_card.pack(fill="both", expand=True)
+        editor_header = tk.Frame(editor_card, bg=self.colors["panel"])
+        editor_header.pack(fill="x", pady=(0, 7))
+        tk.Label(editor_header, text="EDITOR DE GUION", bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 11, "bold")).pack(side="left")
+        tk.Label(editor_header, text="Edita el texto antes de aprobar", bg=self.colors["panel"],
+                 fg=self.colors["muted"], font=("Segoe UI", 9)).pack(side="right")
+        self.script_text = tk.Text(
+            editor_card, wrap="word", undo=True, bg=self.colors["input"], fg=self.colors["text"],
+            insertbackground="#ffffff", selectbackground=self.colors["accent"],
+            font=("Segoe UI", 10), relief="flat", padx=13, pady=12,
+            highlightthickness=1, highlightbackground=self.colors["border"]
+        )
         self.script_text.pack(fill="both", expand=True)
-        self.status_var = tk.StringVar(value="Crea un proyecto para comenzar.")
-        ttk.Label(right, textvariable=self.status_var).pack(anchor="w", pady=(8, 0))
-        ttk.Label(right, text="La exportación está bloqueada hasta que apruebes el guion. No se publica automáticamente.").pack(anchor="w", pady=(3, 0))
+        self.status_var = tk.StringVar(value="Listo. Completa la premisa y pulsa «Generar guion con IA».")
+        tk.Label(right, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
+                 font=("Segoe UI", 9), anchor="w").pack(fill="x", pady=(8, 2))
+        tk.Label(right, text="La exportación requiere aprobación manual. Modificar un guion aprobado anula su aprobación.",
+                 bg=self.colors["bg"], fg=self.colors["muted"], font=("Segoe UI", 8), anchor="w").pack(fill="x")
 
-    def _field(self, parent, label, variable, row):
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=4)
-        ttk.Entry(parent, textvariable=variable).grid(row=row, column=1, sticky="ew", pady=4)
+    def _field(self, parent, label, variable, row, col, values=None, span=1):
+        cell = tk.Frame(parent, bg=self.colors["panel"])
+        cell.grid(row=row, column=col, columnspan=span, sticky="ew", padx=5, pady=4)
+        tk.Label(cell, text=label, bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 9)).pack(anchor="w", pady=(0, 4))
+        if values is not None:
+            widget = ttk.Combobox(cell, textvariable=variable, values=values,
+                                  state="readonly", font=("Segoe UI", 9))
+        else:
+            widget = ttk.Entry(cell, textvariable=variable, font=("Segoe UI", 9))
+        widget.pack(fill="x")
+        return widget
 
     def new_project(self):
         if self.generation_running:
