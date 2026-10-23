@@ -182,7 +182,7 @@ class App(tk.Tk):
         render_high = max(render_low + 30, scenes * 1.5)
         # A first local model load can add substantial overhead.
         first_run = " La primera ejecución puede tardar más mientras carga el modelo." if not getattr(self, "ai_available", False) else ""
-        return f"Estimado para {minutes} min de video: guion {self._format_eta(script_low*60)}–{self._format_eta(script_high*60)}; render de escenas de texto {self._format_eta(render_low*60)}–{self._format_eta(render_high*60)}. Total orientativo {self._format_eta(script_low*60+render_low*60)}–{self._format_eta(script_high*60+render_high*60)}.{first_run} No incluye generación de imágenes, animación real ni voz, todavía no implementadas."
+        return f"Estimado para {minutes} min de vídeo: guion {self._format_eta(script_low*60)}–{self._format_eta(script_high*60)}; render de escenas de texto {self._format_eta(render_low*60)}–{self._format_eta(render_high*60)}. Total base orientativo {self._format_eta(script_low*60+render_low*60)}–{self._format_eta(script_high*60+render_high*60)}.{first_run} La generación de ilustraciones con ComfyUI y la narración de Windows se estiman por separado, porque dependen del checkpoint, la voz y el hardware; esos tiempos no están incluidos en el total base."
 
     @staticmethod
     def _format_eta(seconds):
