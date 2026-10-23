@@ -8,7 +8,9 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 ## Funciones presentes en el código
 - Interfaz de edición oscura inspirada en Premiere, maximizada, con biblioteca y paneles redimensionables.
 - Pestañas **Guion**, **Escenas**, **Montaje**, **Vista previa** y **Audio**.
-- Timeline multipista visual con clips por escena, pistas de narración/música, bloques de subtítulos aproximados, cabezal navegable, zoom y selección sincronizada con la lista de escenas. El cabezal sirve para navegación visual; no es reproducción en tiempo real ni permite todavía recortar/reordenar clips.
+- Timeline multipista visual con clips por escena, pistas de narración/música, bloques de subtítulos aproximados, cabezal navegable, zoom y selección sincronizada con la lista de escenas.
+- Edición básica de montaje: mover el clip seleccionado una posición a izquierda/derecha, editar la duración de cada escena (5–3600 segundos) y conservar duraciones e imágenes asignadas en los recursos del proyecto. Estos cambios invalidan la aprobación del guion y requieren volver a aprobar antes de exportar.
+- El monitor todavía no reproduce el montaje en tiempo real; el cabezal sirve para navegar y seleccionar escenas.
 - Género, premisa, protagonistas, conflicto, tono, narrador, desenlace, plataforma, duración, estilo de dibujo y animación.
 - Generación de historias por capítulos con Ollama/Qwen 2.5 3B local, en segundo plano y con cancelación entre solicitudes.
 - Detección del equipo y estimación inicial de tiempos.
