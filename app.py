@@ -92,8 +92,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_NAME)
-        self.geometry("1440x900")
-        self.minsize(960, 620)
+        self.geometry("1540x960")
+        self.minsize(1120, 720)
         self.state("zoomed")
         self.conn = db_connect()
         self.current_id = None
@@ -275,16 +275,16 @@ class App(tk.Tk):
         shell.grid_rowconfigure(1, weight=1)
         shell.grid_columnconfigure(0, weight=1)
 
-        top = tk.Frame(shell, bg="#09101d", padx=18, pady=12,
+        top = tk.Frame(shell, bg="#09101d", padx=22, pady=16,
                        highlightthickness=1, highlightbackground=self.colors["border"])
         top.grid(row=0, column=0, sticky="ew")
         top.grid_columnconfigure(0, weight=1)
         brand = tk.Frame(top, bg="#09101d")
         brand.grid(row=0, column=0, sticky="w")
         tk.Label(brand, text="MARC", bg="#09101d", fg="#edf4ff",
-                 font=("Segoe UI", 18, "bold")).pack(side="left")
+                 font=("Segoe UI", 20, "bold")).pack(side="left")
         tk.Label(brand, text=" / VIDEO STUDIO", bg="#09101d", fg="#2da8ff",
-                 font=("Segoe UI", 18, "bold")).pack(side="left")
+                 font=("Segoe UI", 20, "bold")).pack(side="left")
         tk.Label(brand, text="   AI CREATIVE WORKSPACE", bg="#09101d", fg=self.colors["muted"],
                  font=("Segoe UI", 8, "bold")).pack(side="left", padx=(12, 0), pady=(7, 0))
         head_right = tk.Frame(top, bg="#09101d")
@@ -300,14 +300,14 @@ class App(tk.Tk):
 
         workspace = tk.PanedWindow(shell, orient="horizontal", sashwidth=7, sashrelief="flat",
                                    bg=self.colors["bg"], bd=0, opaqueresize=True, showhandle=False)
-        workspace.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+        workspace.grid(row=1, column=0, sticky="nsew", padx=14, pady=14)
         self.workspace_panes = workspace
 
-        library = tk.Frame(workspace, bg=self.colors["panel"], width=220,
+        library = tk.Frame(workspace, bg=self.colors["panel"], width=250,
                            highlightthickness=1, highlightbackground=self.colors["border"])
         library.grid_rowconfigure(2, weight=1)
         library.grid_columnconfigure(0, weight=1)
-        workspace.add(library, minsize=175, width=220)
+        workspace.add(library, minsize=205, width=250)
         tk.Label(library, text="BIBLIOTECA", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 10, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=13, pady=(14, 2))
         tk.Label(library, text="Proyectos y guiones", bg=self.colors["panel"], fg=self.colors["muted"],
@@ -337,14 +337,14 @@ class App(tk.Tk):
         self.vertical_panes = vertical
 
         controls_area = tk.Frame(vertical, bg=self.colors["bg"])
-        vertical.add(controls_area, minsize=245, height=340, stretch="never")
-        card = tk.Frame(controls_area, bg=self.colors["panel"], padx=13, pady=10,
+        vertical.add(controls_area, minsize=280, height=390, stretch="never")
+        card = tk.Frame(controls_area, bg=self.colors["panel"], padx=18, pady=15,
                         highlightthickness=1, highlightbackground=self.colors["border"])
         card.pack(fill="both", expand=True)
         tk.Label(card, text="CONFIGURACIÓN DE HISTORIA", bg=self.colors["panel"], fg=self.colors["text"],
-                 font=("Segoe UI", 11, "bold")).pack(anchor="w")
+                 font=("Segoe UI", 13, "bold")).pack(anchor="w")
         tk.Label(card, text="Define narrativa, formato y dirección visual. Los paneles se pueden redimensionar.",
-                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).pack(anchor="w", pady=(3, 7))
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 10)).pack(anchor="w", pady=(5, 12))
 
         self.title_var = tk.StringVar()
         self.topic_var = tk.StringVar()
@@ -418,18 +418,18 @@ class App(tk.Tk):
                                                command=self.cancel_export, state="disabled")
         self.cancel_render_button.pack(side="left", padx=(6, 0))
 
-        statuscard = tk.Frame(lower, bg=self.colors["panel"], padx=11, pady=8,
+        statuscard = tk.Frame(lower, bg=self.colors["panel"], padx=15, pady=12,
                               highlightthickness=1, highlightbackground=self.colors["border"])
         statuscard.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         self.pc_summary_var = tk.StringVar(value="Detectando equipo…")
         tk.Label(statuscard, textvariable=self.pc_summary_var, bg=self.colors["panel"],
-                 fg=self.colors["muted"], font=("Segoe UI", 8), justify="left", wraplength=1100).pack(anchor="w")
+                 fg=self.colors["muted"], font=("Segoe UI", 9), justify="left", wraplength=1250).pack(anchor="w")
         self.estimate_var = tk.StringVar(value="Calculando estimación de producción…")
         tk.Label(statuscard, textvariable=self.estimate_var, bg=self.colors["panel"],
-                 fg=self.colors["success"], font=("Segoe UI", 9, "bold"), justify="left", wraplength=1100).pack(anchor="w", pady=(4, 2))
+                 fg=self.colors["success"], font=("Segoe UI", 10, "bold"), justify="left", wraplength=1250).pack(anchor="w", pady=(4, 2))
         self.progress_label_var = tk.StringVar(value="Listo para crear el guion")
         tk.Label(statuscard, textvariable=self.progress_label_var, bg=self.colors["panel"],
-                 fg=self.colors["text"], font=("Segoe UI", 9, "bold")).pack(anchor="w")
+                 fg=self.colors["text"], font=("Segoe UI", 10, "bold")).pack(anchor="w")
         self.progressbar = ttk.Progressbar(statuscard, mode="determinate", maximum=100, value=0)
         self.progressbar.pack(fill="x", pady=(4, 3))
         self.progress_detail_var = tk.StringVar(value="0% · En espera")
@@ -1803,15 +1803,15 @@ Write-Output 'NARRATION_OK'
 
     def _field(self, parent, label, variable, row, col, values=None, span=1):
         cell = tk.Frame(parent, bg=self.colors["panel"])
-        cell.grid(row=row, column=col, columnspan=span, sticky="ew", padx=6, pady=5)
+        cell.grid(row=row, column=col, columnspan=span, sticky="ew", padx=8, pady=7)
         tk.Label(cell, text=label.upper(), bg=self.colors["panel"], fg="#8fa8c8",
-                 font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 5))
+                 font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
         if values is not None:
             widget = ttk.Combobox(cell, textvariable=variable, values=values,
-                                  state="readonly", font=("Segoe UI", 9))
+                                  state="readonly", font=("Segoe UI", 10))
         else:
-            widget = ttk.Entry(cell, textvariable=variable, font=("Segoe UI", 9))
-        widget.pack(fill="x")
+            widget = ttk.Entry(cell, textvariable=variable, font=("Segoe UI", 10))
+        widget.pack(fill="x", ipady=2)
         self.form_widgets.append((widget, "readonly" if values is not None else "normal"))
         return widget
 
