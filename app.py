@@ -2589,9 +2589,12 @@ Write-Output 'NARRATION_OK'
                     "Prohíbe 'Había una vez', 'En un mundo donde' y presentaciones biográficas lentas. Cada escena debe cambiar lo que se sabe, se desea o se arriesga. "
                     "Usa detalles sensoriales selectivos, subtexto, silencios y diálogos con voz propia. Evita repeticiones, relleno y resolver conflictos sin coste. "
                     "Termina con una consecuencia emocional o una pregunta dramática que impulse la continuación, salvo que se haya pedido un final definitivo.\n"
-                    "FORMATO DE VOZ: cada intervención hablada en un párrafo separado y usa etiquetas EXACTAS como [NARRADOR]: prosa narrativa, "
-                    "[JUAN]: diálogo del personaje. Usa el nombre canónico en mayúsculas y entre corchetes. No pongas dos hablantes en el mismo párrafo. "
-                    "Usa [NARRADOR] para acciones y descripción, y permite que los personajes hablen por sí mismos. No leas instrucciones técnicas como diálogo.\n"
+                    "FORMATO DE ESCENAS Y VOCES: divide el capítulo en escenas visuales con encabezados como [ESCENA 01 — Título breve]. "
+                    "Dentro de cada escena, coloca cada intervención en su propia línea usando etiquetas como [NARRADOR]: prosa "
+                    "y [JUAN]: diálogo. No pongas dos hablantes en una línea, pero no dejes líneas vacías entre voces de la misma escena; "
+                    "deja una línea vacía solo entre escenas. Usa nombres canónicos en mayúsculas y entre corchetes. "
+                    "Usa [NARRADOR] para acciones y descripción, y deja que cada personaje hable por sí mismo. "
+                    "No leas indicaciones técnicas como diálogo.\n"
                     "CONTINUIDAD: no presentes de nuevo a personajes conocidos. Conserva nombres, voces, relaciones, heridas, objetos, escenarios, tiempo y secretos. "
                     "En una continuación, empieza después del estado más reciente; no reinicies ni contradigas el canon.\n"
                     f"Modo: {data['video_mode']}. Género: {data['genre']}. Premisa: {data['topic']}. Tono: {data['tone']}. "
@@ -3331,17 +3334,20 @@ try {
   foreach ($rawLine in ($text -split '\r?\n')) {
     $line = $rawLine.Trim()
     if ([string]::IsNullOrWhiteSpace($line)) { continue }
-    if ($line -match '^\[([^\]]+)\]\s*:\s*(.*)$') {
-      $speaker = $matches[1].Trim().ToUpperInvariant()
-      $spoken = $matches[2].Trim()
-      if ($voiceMap.ContainsKey($speaker) -and $voiceMap[$speaker] -and $voiceMap[$speaker] -ne '(Voz principal)') {
-        $synth.SelectVoice($voiceMap[$speaker])
-      } elseif ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+    $segments = [regex]::Matches($line, '\[([^\]]+)\]\s*:\s*(.*?)(?=\s+\[[^\]]+\]\s*:\s*|$)')
+    if ($segments.Count -gt 0) {
+      foreach ($segment in $segments) {
+        $speaker = $segment.Groups[1].Value.Trim().ToUpperInvariant()
+        $spoken = $segment.Groups[2].Value.Trim()
+        if ($voiceMap.ContainsKey($speaker) -and $voiceMap[$speaker] -and $voiceMap[$speaker] -ne '(Voz principal)') {
+          $synth.SelectVoice($voiceMap[$speaker])
+        } elseif ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+        if (![string]::IsNullOrWhiteSpace($spoken)) { $synth.Speak($spoken) }
+      }
     } else {
-      $spoken = $line
       if ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+      $synth.Speak($line)
     }
-    if (![string]::IsNullOrWhiteSpace($spoken)) { $synth.Speak($spoken) }
   }
   $synth.SetOutputToNull()
 } finally { $synth.Dispose() }
