@@ -10,7 +10,7 @@
 - [x] Si cambian el guion o sus parámetros, la aprobación anterior se invalida.
 - [x] Búsqueda automática de FFmpeg y selección manual del ejecutable.
 - [x] Agrupación de texto para aproximar la duración solicitada en el render de tarjetas.
-- [ ] Ejecutar prueba sintáctica/automatizada desde GitHub Actions.
+- [x] Ejecutar comprobación sintáctica con GitHub Actions (`py_compile` correcto en el commit auditado).
 - [ ] Probar instalación limpia, escritura multicapítulo y render MP4 real en Windows.
 - [ ] Revisar escalado y legibilidad de la interfaz en diferentes resoluciones.
 
