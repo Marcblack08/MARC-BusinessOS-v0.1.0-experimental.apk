@@ -2159,7 +2159,8 @@ Write-Output 'NARRATION_OK'
         self.status_var.set("Generando una ilustración local. En la GTX 750 puede tardar varios minutos.")
         args = (
             int(self.current_id), idx + 1, scene, model_name,
-            self.drawing_style_var.get(), project["platform"], project["topic"]
+            self.drawing_style_var.get(), project["platform"], project["topic"],
+            project["story_bible"] or "", project["continuity_state"] or ""
         )
         threading.Thread(target=self._generate_scene_image_worker, args=args, daemon=True).start()
 
@@ -2188,7 +2189,7 @@ Write-Output 'NARRATION_OK'
             self.progressbar.stop()
             self.progressbar.configure(mode="determinate")
 
-    def _generate_scene_image_worker(self, project_id, scene_number, scene, checkpoint, drawing_style, platform_name, project_topic):
+    def _generate_scene_image_worker(self, project_id, scene_number, scene, checkpoint, drawing_style, platform_name, project_topic, story_bible="", continuity_state=""):
         try:
             self.generation_queue.put(("image_progress", scene_number, "Preparando el prompt visual local…"))
             style_prompts = {
@@ -2204,21 +2205,29 @@ Write-Output 'NARRATION_OK'
             style_prompt = style_prompts.get(drawing_style, "cinematic illustrated story scene")
             story_excerpt = " ".join(str(scene.get("text", "")).split())[:650]
             visual_description = ""
-            # Qwen optionally converts the prose to a compact English visual description; ComfyUI remains the local image engine.
+            canon_reference = " ".join(str(story_bible or "").split())[:1800]
+            continuity_reference = " ".join(str(continuity_state or "").split())[:700]
+            # Use the narrative canon as a consistency guide; text prompts help, but don't guarantee pixel-identical characters.
             try:
                 visual_description = self._ollama_request(
                     "Convert this Spanish story excerpt into one concise English image-generation prompt. "
-                    "Describe only visible people, clothing, expression, action, setting, time of day, camera and lighting. "
-                    "Do not add events not in the excerpt. Return only the prompt, no explanations. "
-                    f"Story context: {project_topic}. Scene title: {scene.get('title', '')}. Excerpt: {story_excerpt}",
-                    max_tokens=180
+                    "Describe only visible people, clothing, face/hair details, expressions, action, setting, time of day, camera and lighting. "
+                    "Follow the canon reference as a hard continuity constraint: preserve established character appearance, age range, clothing cues, "
+                    "color palette, recurring props and location landmarks. Do not add events or invent a new design. Do not describe characters "
+                    "who are not visible in the excerpt. Return only the prompt, no explanations. "
+                    f"Series premise: {project_topic}. Canon reference: {canon_reference}. "
+                    f"Previous episode state (if any): {continuity_reference}. "
+                    f"Scene title: {scene.get('title', '')}. Excerpt: {story_excerpt}",
+                    max_tokens=240
                 )
             except Exception:
                 visual_description = story_excerpt
             prompt = (
                 f"{style_prompt}. Story moment: {visual_description}. "
-                "single coherent frame, clear focal subject, strong composition, consistent character design, "
-                "high quality, readable silhouettes, no captions, no writing, no logos, no watermark."
+                f"Canonical visual continuity cues: {canon_reference[:900]}. "
+                "one coherent cinematic frame, maintain the same recognizable facial features, hairstyle, body proportions, costume details, "
+                "signature accessories, color palette and recurring location design described in the canon; only show characters required by this moment. "
+                "Clear focal subject, strong composition, readable silhouettes, no captions, no writing, no logos, no watermark."
             )
             negative = (
                 "text, subtitles, letters, watermark, logo, blurry, low resolution, malformed hands, "
@@ -2304,7 +2313,9 @@ Write-Output 'NARRATION_OK'
             destination.write_bytes(image_bytes)
             prompt_record = assets_dir / f"scene_{scene_number:03d}_ai_prompt.txt"
             prompt_record.write_text(
-                f"Checkpoint: {checkpoint}\nEstilo: {drawing_style}\nPrompt: {prompt}\nNegative: {negative}\n",
+                f"Checkpoint: {checkpoint}\nEstilo: {drawing_style}\nPlataforma: {platform_name}\n"
+                f"Canon aplicado: {canon_reference}\nEstado previo: {continuity_reference}\n"
+                f"Prompt: {prompt}\nNegative: {negative}\n",
                 encoding="utf-8"
             )
             self.generation_queue.put(("image_done", project_id, scene_number, str(destination.resolve()), prompt))
