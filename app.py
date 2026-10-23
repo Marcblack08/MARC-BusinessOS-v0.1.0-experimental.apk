@@ -104,6 +104,8 @@ class App(tk.Tk):
         self.last_export_path = ""
         self.audio_track_path = ""
         self.loop_audio_var = None
+        self.voice_generation_running = False
+        self.voice_cancel_event = threading.Event()
         self.comfy_available = False
         self.image_generation_running = False
         self._style()
@@ -113,6 +115,7 @@ class App(tk.Tk):
         self.check_tools()
         self.after(180, self._poll_generation_events)
         self.after(1100, lambda: self.detect_image_models(quiet=True))
+        self.after(1300, lambda: self.detect_local_voices(quiet=True))
 
     def detect_pc_async(self):
         self.pc_summary_var.set("Detectando procesador, memoria, gráficos y herramientas…")
@@ -473,11 +476,6 @@ class App(tk.Tk):
         self.refresh_scenes_button = ttk.Button(scene_actions, text="Actualizar escenas",
                                                 command=lambda: self._refresh_scene_outline(self.script_text.get("1.0", "end-1c")))
         self.refresh_scenes_button.pack(side="left", padx=(6, 0))
-        self.select_audio_button = ttk.Button(scene_actions, text="Añadir audio", command=self.select_audio_track)
-        self.select_audio_button.pack(side="left", padx=(14, 0))
-        self.clear_audio_button = ttk.Button(scene_actions, text="Quitar audio", command=self.clear_audio_track)
-        self.clear_audio_button.pack(side="left", padx=(6, 0))
-
         image_ai_bar = tk.Frame(scenes_tab, bg=self.colors["panel"])
         image_ai_bar.grid(row=4, column=0, sticky="ew", pady=(0, 8))
         tk.Label(image_ai_bar, text="MODELO LOCAL", bg=self.colors["panel"], fg=self.colors["muted"],
@@ -552,13 +550,69 @@ class App(tk.Tk):
                    command=self.open_last_video).pack(side="left")
         ttk.Button(preview_actions, text="Elegir MP4 para previsualizar",
                    command=self.choose_preview_video).pack(side="left", padx=(8, 0))
+        audio_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=16, pady=14)
+        studio_tabs.add(audio_tab, text="  ♪  AUDIO  ")
+        audio_tab.grid_columnconfigure(0, weight=1)
+        audio_tab.grid_rowconfigure(5, weight=1)
+        tk.Label(audio_tab, text="NARRACIÓN Y SONIDO", bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 13, "bold")).grid(row=0, column=0, sticky="w")
+        tk.Label(audio_tab, text="Importa una pista de voz/música o genera narración sin conexión usando las voces de Windows que ya estén instaladas.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
+                 wraplength=1050, justify="left").grid(row=1, column=0, sticky="w", pady=(4, 14))
+
+        track_card = tk.Frame(audio_tab, bg=self.colors["input"], padx=13, pady=12,
+                              highlightthickness=1, highlightbackground=self.colors["border"])
+        track_card.grid(row=2, column=0, sticky="ew", pady=(0, 10))
+        tk.Label(track_card, text="PISTA ACTUAL DEL PROYECTO", bg=self.colors["input"], fg="#69b8ff",
+                 font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        self.audio_track_label_var = tk.StringVar(value="Sin pista de audio")
+        tk.Label(track_card, textvariable=self.audio_track_label_var, bg=self.colors["input"],
+                 fg=self.colors["text"], font=("Segoe UI", 10), anchor="w",
+                 wraplength=1000, justify="left").pack(fill="x", pady=(5, 10))
+        track_actions = tk.Frame(track_card, bg=self.colors["input"])
+        track_actions.pack(fill="x")
+        self.select_audio_button = ttk.Button(track_actions, text="Añadir voz/música", style="Accent.TButton",
+                                              command=self.select_audio_track)
+        self.select_audio_button.pack(side="left")
+        self.clear_audio_button = ttk.Button(track_actions, text="Quitar pista", command=self.clear_audio_track)
+        self.clear_audio_button.pack(side="left", padx=(8, 0))
         self.loop_audio_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            preview_tab, text="Repetir la pista si es más corta que el vídeo (útil para música)",
-            variable=self.loop_audio_var, bg=self.colors["panel"], fg=self.colors["text"],
-            activebackground=self.colors["panel"], activeforeground=self.colors["text"],
-            selectcolor=self.colors["input"], font=("Segoe UI", 9)
-        ).grid(row=5, column=0, sticky="w", pady=(12, 0))
+            track_actions, text="Repetir si es más corta que el vídeo",
+            variable=self.loop_audio_var, bg=self.colors["input"], fg=self.colors["text"],
+            activebackground=self.colors["input"], activeforeground=self.colors["text"],
+            selectcolor=self.colors["panel"], font=("Segoe UI", 9)
+        ).pack(side="left", padx=(16, 0))
+
+        voice_card = tk.Frame(audio_tab, bg=self.colors["panel"], padx=13, pady=12,
+                              highlightthickness=1, highlightbackground=self.colors["border"])
+        voice_card.grid(row=3, column=0, sticky="ew", pady=(0, 10))
+        tk.Label(voice_card, text="GENERAR NARRACIÓN LOCAL", bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        tk.Label(voice_card, text="Usa Windows System.Speech y las voces instaladas en el equipo. No requiere token, API ni envío de texto a la nube.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
+                 wraplength=1050, justify="left").pack(anchor="w", pady=(3, 10))
+        voice_controls = tk.Frame(voice_card, bg=self.colors["panel"])
+        voice_controls.pack(fill="x")
+        tk.Label(voice_controls, text="VOZ", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 8, "bold")).pack(side="left", padx=(0, 7))
+        self.voice_var = tk.StringVar(value="(Automática)")
+        self.voice_combo = ttk.Combobox(voice_controls, textvariable=self.voice_var,
+                                        values=["(Automática)"], state="readonly", width=35, font=("Segoe UI", 9))
+        self.voice_combo.pack(side="left")
+        self.detect_voice_button = ttk.Button(voice_controls, text="Detectar voces", command=self.detect_local_voices)
+        self.detect_voice_button.pack(side="left", padx=(7, 0))
+        self.generate_voice_button = ttk.Button(voice_controls, text="Generar narración", style="Accent.TButton",
+                                                command=self.generate_local_voice)
+        self.generate_voice_button.pack(side="left", padx=(7, 0))
+        self.cancel_voice_button = ttk.Button(voice_controls, text="Cancelar voz", command=self.cancel_local_voice, state="disabled")
+        self.cancel_voice_button.pack(side="left", padx=(7, 0))
+        self.voice_status_var = tk.StringVar(value="Detectando voces locales de Windows…")
+        tk.Label(audio_tab, textvariable=self.voice_status_var, bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 9), anchor="w", wraplength=1050, justify="left").grid(row=4, column=0, sticky="ew", pady=(0, 10))
+        tk.Label(audio_tab, text="Para voces en español, instala un paquete de voz en Configuración de Windows → Hora e idioma → Voz. La voz disponible depende de Windows y del idioma instalado.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
+                 wraplength=1050, justify="left").grid(row=5, column=0, sticky="nw", pady=(2, 0))
 
         self.status_var = tk.StringVar(value="Listo. Define una historia o abre un proyecto de la biblioteca.")
         tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
