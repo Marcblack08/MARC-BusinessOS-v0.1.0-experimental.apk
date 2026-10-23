@@ -822,7 +822,7 @@ class App(tk.Tk):
             for index, duration in enumerate(durations):
                 if elapsed <= seconds < elapsed + duration or index == len(durations) - 1:
                     self.timeline_selected_scene = index + 1
-                    if hasattr(self, "scene_outline") and self.scene_outline.exists():
+                    if hasattr(self, "scene_outline") and self.scene_outline.winfo_exists():
                         iid = f"scene_{index + 1}"
                         if iid in self.scene_outline.get_children(""):
                             self.scene_outline.selection_set(iid)
