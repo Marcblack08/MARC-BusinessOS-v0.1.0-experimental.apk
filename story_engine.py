@@ -89,6 +89,26 @@ def build_series_context(story_bible: str, continuity_state: str, previous_excer
     return "\n\n".join(sections)
 
 
+def visual_shot_count(duration_seconds: int, max_shot_seconds: int = 5) -> int:
+    """Minimum number of shots needed for a duration and maximum shot length."""
+    try:
+        duration, shot_length = int(duration_seconds), int(max_shot_seconds)
+    except (TypeError, ValueError):
+        raise ValueError("Durations must be integers.") from None
+    if duration <= 0 or shot_length <= 0:
+        raise ValueError("Durations must be greater than zero.")
+    return (duration + shot_length - 1) // shot_length
+
+
+def format_short_chapter(chapter: str) -> str:
+    """Normalize short-script line breaks and add a stable chapter heading."""
+    body = (chapter or "").strip()
+    if not body:
+        raise ValueError("The short script cannot be empty.")
+    body = body.replace("\\n", "\n")
+    return "\n\n[CAPÍTULO 01 DE 01]\n" + body + "\n"
+
+
 def continuity_review_check(script: str, previous_state: str = "") -> list[str]:
     """Cheap deterministic flags to surface likely issues for human review.
 
