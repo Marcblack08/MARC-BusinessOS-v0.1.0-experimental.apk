@@ -4435,21 +4435,27 @@ Write-Output 'NARRATION_OK'
                         self._pipeline_checkpoint("montage", "completed", "Montaje final renderizado", artifacts=[event[1]])
                         self._pipeline_checkpoint("quality_check", "running", "Validando metadatos y pistas del MP4")
                         quality_errors = list(report.get("errors") or [])
+                        subtitle_report = report.get("subtitle_check") or {}
+                        subtitle_artifacts = [report["subtitle_path"]] if report.get("subtitle_path") else []
                         quality_summary = (
                             f"Resolución {report.get('width') or '?'}x{report.get('height') or '?'} · "
                             f"{(report.get('fps') or 0):.2f} FPS · "
                             f"duración {self._format_eta(report.get('duration') or event[3])} · "
-                            f"audio: {report.get('audio_streams', 0)} pista(s)"
+                            f"audio: {report.get('audio_streams', 0)} pista(s) · "
+                            f"SRT: {subtitle_report.get('cue_count', 0)} subtítulo(s)"
                         )
                         if report.get("passed") and output_file.is_file() and output_file.stat().st_size > 1024:
                             self._pipeline_checkpoint(
                                 "quality_check", "completed",
                                 "Validación MP4 superada. " + quality_summary,
-                                artifacts=[event[1]],
+                                artifacts=[event[1]] + subtitle_artifacts,
                             )
-                            self._pipeline_checkpoint("export", "completed", "MP4 final guardado y validado", artifacts=[event[1]])
+                            self._pipeline_checkpoint(
+                                "export", "completed", "MP4 y subtítulos SRT guardados y validados",
+                                artifacts=[event[1]] + subtitle_artifacts,
+                            )
                             self.progress_label_var.set("Vídeo exportado y validado")
-                            self.status_var.set("MP4 creado y validado: " + self.last_export_path if getattr(self, "last_export_path", "") else "MP4 creado y validado.")
+                            self.status_var.set("MP4 creado y validado. " + event[1])
                         else:
                             detail = " ".join(str(item) for item in quality_errors) or "El archivo no superó las comprobaciones básicas."
                             self._pipeline_checkpoint("quality_check", "failed", "La validación de calidad no se superó", error=detail)
@@ -4467,7 +4473,7 @@ Write-Output 'NARRATION_OK'
                             if report.get("passed") and output_file.is_file() and output_file.stat().st_size > 1024:
                                 messagebox.showinfo(
                                     "Exportación validada",
-                                    f"Vídeo MP4 creado y validado:\n{self.last_export_path}\n\n{quality_summary}\n\nPuedes abrirlo desde la pestaña VISTA PREVIA."
+                                    f"Vídeo MP4 creado y validado:\n{self.last_export_path}\nSubtítulos SRT:\n{report.get('subtitle_path') or 'No disponibles'}\n\n{quality_summary}\n\nPuedes abrirlo desde la pestaña VISTA PREVIA."
                                 )
                             else:
                                 messagebox.showwarning(
