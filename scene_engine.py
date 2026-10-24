@@ -361,6 +361,25 @@ def ffmpeg_filter_path(path: str | Path) -> str:
     return value
 
 
+def build_subtitle_drawtext_filter(textfile: str | Path, fontfile: str | Path | None, font_size: int,
+                                   color: str = "white", position: str = "Inferior", outline: bool = True) -> str:
+    """Build an escaped FFmpeg drawtext filter for subtitle styling."""
+    palette = {"Blanco": "white", "Amarillo": "yellow", "Cian": "cyan",
+               "white": "white", "yellow": "yellow", "cyan": "cyan"}
+    size = max(12, min(96, int(font_size)))
+    options = [f"textfile='{ffmpeg_filter_path(textfile)}'", "expansion=none",
+               f"fontcolor={palette.get(str(color), 'white')}", f"fontsize={size}", "x=(w-text_w)/2"]
+    if fontfile and Path(fontfile).is_file():
+        options.append(f"fontfile='{ffmpeg_filter_path(fontfile)}'")
+    options.append("y=(h-text_h)/2" if str(position).casefold() == "centro" else "y=h-text_h-h*0.06")
+    if outline:
+        options.extend(["borderw=3", "bordercolor=black", "shadowx=2", "shadowy=2"])
+    else:
+        options.extend(["shadowx=1", "shadowy=1"])
+    options.extend(["box=1", "boxcolor=0x06101d@0.68", "boxborderw=14"])
+    return "drawtext=" + ":".join(options)
+
+
 def scene_motion_filter(
     animation_style: str, width: int, height: int, seconds: int, intensity: str = "Normal"
 ) -> str:

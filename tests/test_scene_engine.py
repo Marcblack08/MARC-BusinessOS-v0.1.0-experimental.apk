@@ -1,8 +1,11 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 from scene_engine import (
     allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief,
-    build_srt_subtitles, ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
+    build_srt_subtitles, build_subtitle_drawtext_filter, ffmpeg_filter_path,
+    parse_script_scenes, scene_motion_filter
 )
 
 
@@ -185,6 +188,25 @@ class SceneEngineTests(unittest.TestCase):
         self.assertIn("s=1280x720", result)
         pixel = scene_motion_filter("Pixel animation", 720, 1280, 5)
         self.assertIn("flags=neighbor", pixel)
+
+    def test_subtitle_filter_supports_font_color_position_and_outline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            subtitle = Path(tmp) / "Marc's subtitles:01.txt"
+            subtitle.write_text("Texto de prueba", encoding="utf-8")
+            result = build_subtitle_drawtext_filter(subtitle, None, 42, color="Amarillo", position="Centro", outline=True)
+            self.assertIn("fontcolor=yellow", result)
+            self.assertIn("fontsize=42", result)
+            self.assertIn("y=(h-text_h)/2", result)
+            self.assertIn("borderw=3", result)
+            self.assertIn("box=1", result)
+            self.assertIn(r"Marc\'s subtitles\:01.txt", result)
+
+    def test_subtitle_filter_defaults_to_lower_third_and_validates_size(self):
+        result = build_subtitle_drawtext_filter("caption.txt", None, 1000, color="unknown")
+        self.assertIn("fontsize=96", result)
+        self.assertIn("fontcolor=white", result)
+        self.assertIn("y=h-text_h-h*0.06", result)
+        self.assertIn("borderw=3", result)
 
     def test_motion_intensity_changes_zoom_amount(self):
         subtle = scene_motion_filter("2D fluida", 1280, 720, 5, "Suave")
