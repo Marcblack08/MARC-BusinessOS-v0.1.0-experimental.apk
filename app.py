@@ -27,7 +27,7 @@ from urllib.parse import urlencode
 
 from scene_engine import (
     allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief,
-    build_srt_subtitles, build_subtitle_drawtext_filter, expand_scenes_to_shots, ffmpeg_filter_path,
+    build_srt_subtitles, build_srt_from_timed_segments, build_subtitle_drawtext_filter, expand_scenes_to_shots, ffmpeg_filter_path,
     parse_script_scenes, scene_motion_filter
 )
 from story_engine import (
@@ -2136,7 +2136,14 @@ try {
                 } else {
                     $synth.SelectVoice($defaultVoice)
                 }
-                if (![string]::IsNullOrWhiteSpace($spoken)) { $synth.Speak($spoken) }
+                if (![string]::IsNullOrWhiteSpace($spoken)) {
+          $startSeconds = $synth.AudioPosition.TotalSeconds
+          $synth.Speak($spoken)
+          $endSeconds = $synth.AudioPosition.TotalSeconds
+          if ($endSeconds -gt $startSeconds) {
+            $timedSegments.Add([ordered]@{ text = $spoken; start_seconds = [double]$startSeconds; end_seconds = [double]$endSeconds })
+          }
+        }
             }
         } else {
             $synth.SelectVoice($defaultVoice)
@@ -5048,13 +5055,14 @@ Write-Output 'NARRATION_OK'
                 narration_script_path = scene_dir / "auto_narration.ps1"
                 generated_voice_path = scene_dir / "auto_narration.wav"
                 voice_map_path = scene_dir / "voice_assignments.json"
+                narration_timing_path = scene_dir / "auto_narration.timing.json"
                 narration_text_path.write_text(narration_text, encoding="utf-8")
                 try:
                     voice_map = json.loads(voice_assignments_json or "{}")
                 except (TypeError, json.JSONDecodeError):
                     voice_map = {}
                 voice_map_path.write_text(json.dumps(voice_map, ensure_ascii=False), encoding="utf-8")
-                narration_script_path.write_text(r"""param([string]$TextFile,[string]$OutputFile,[string]$VoiceName,[string]$VoiceMapFile)
+                narration_script_path.write_text(r"""param([string]$TextFile,[string]$OutputFile,[string]$VoiceName,[string]$VoiceMapFile,[string]$TimingFile)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Speech
 $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
@@ -5076,6 +5084,7 @@ try {
   $text = [System.IO.File]::ReadAllText($TextFile, [System.Text.Encoding]::UTF8)
   if ([string]::IsNullOrWhiteSpace($text)) { throw 'El texto de narración está vacío.' }
   $synth.SetOutputToWaveFile($OutputFile)
+  $timedSegments = New-Object System.Collections.Generic.List[object]
   foreach ($rawLine in ($text -split '\r?\n')) {
     $line = $rawLine.Trim()
     if ([string]::IsNullOrWhiteSpace($line)) { continue }
@@ -5094,10 +5103,16 @@ try {
       }
     } else {
       if ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+      $startSeconds = $synth.AudioPosition.TotalSeconds
       $synth.Speak($line)
+      $endSeconds = $synth.AudioPosition.TotalSeconds
+      if ($endSeconds -gt $startSeconds) {
+        $timedSegments.Add([ordered]@{ text = $line; start_seconds = [double]$startSeconds; end_seconds = [double]$endSeconds })
+      }
     }
   }
   $synth.SetOutputToNull()
+  ConvertTo-Json -InputObject @($timedSegments) -Depth 4 | Set-Content -LiteralPath $TimingFile -Encoding UTF8
 } finally { $synth.Dispose() }
 if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile).Length -lt 44) {
   throw 'Windows no generó un archivo WAV válido.'
@@ -5106,7 +5121,7 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                 ps_args = [
                     "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
                     str(narration_script_path), str(narration_text_path), str(generated_voice_path),
-                    chosen_voice or "(Automática)", str(voice_map_path)
+                    chosen_voice or "(Automática)", str(voice_map_path), str(narration_timing_path)
                 ]
                 creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
                 try:
@@ -5373,12 +5388,31 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                 # planned repeated-shot timeline when narration ends earlier.
                 timing_probe = inspect_media_file(str(temp_output_path), ffmpeg_path=ffmpeg)
                 actual_media_duration = timing_probe.get("duration") if timing_probe.get("passed") else None
-                subtitle_text = build_srt_subtitles(
-                    subtitle_scenes,
-                    final_durations,
-                    total_duration_seconds=float(actual_media_duration)
-                    if actual_media_duration and actual_media_duration > 0 else float(sum(final_durations)),
+                subtitle_duration = (
+                    float(actual_media_duration)
+                    if actual_media_duration and actual_media_duration > 0
+                    else float(sum(final_durations))
                 )
+                timed_segments = []
+                if narration_text and has_voice:
+                    timing_sidecar = scene_dir / "auto_narration.timing.json"
+                    if timing_sidecar.is_file():
+                        try:
+                            loaded_segments = json.loads(timing_sidecar.read_text(encoding="utf-8-sig"))
+                            if isinstance(loaded_segments, list) and loaded_segments:
+                                timed_segments = loaded_segments
+                        except (OSError, json.JSONDecodeError):
+                            timed_segments = []
+                if timed_segments:
+                    subtitle_text = build_srt_from_timed_segments(
+                        timed_segments, total_duration_seconds=subtitle_duration
+                    )
+                else:
+                    subtitle_text = build_srt_subtitles(
+                        subtitle_scenes,
+                        final_durations,
+                        total_duration_seconds=subtitle_duration,
+                    )
                 subtitle_path.write_text(subtitle_text, encoding="utf-8-sig")
             except (OSError, ValueError, IndexError) as subtitle_exc:
                 try:
