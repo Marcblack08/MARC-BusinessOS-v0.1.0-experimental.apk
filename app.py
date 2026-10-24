@@ -27,7 +27,8 @@ from urllib.parse import urlencode
 
 from scene_engine import (
     allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief,
-    build_srt_subtitles, ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
+    build_srt_subtitles, build_subtitle_drawtext_filter, ffmpeg_filter_path,
+    parse_script_scenes, scene_motion_filter
 )
 from story_engine import (
     FPS_OPTIONS, RESOLUTION_PROFILES, SERIES_VIDEO_MODE, SHORT_VIDEO_MODE,
@@ -82,6 +83,11 @@ def db_connect():
             animation_intensity TEXT NOT NULL DEFAULT 'Muy animado',
             overlay_mode TEXT NOT NULL DEFAULT 'Título de escena',
             transition_style TEXT NOT NULL DEFAULT 'Fundido suave',
+            subtitle_font TEXT NOT NULL DEFAULT 'Arial',
+            subtitle_size TEXT NOT NULL DEFAULT 'Mediano',
+            subtitle_color TEXT NOT NULL DEFAULT 'Blanco',
+            subtitle_position TEXT NOT NULL DEFAULT 'Inferior',
+            subtitle_outline INTEGER NOT NULL DEFAULT 1,
             resolution TEXT NOT NULL DEFAULT '1080p (Full HD)',
             fps INTEGER NOT NULL DEFAULT 30,
             video_mode TEXT NOT NULL DEFAULT 'Novela / Serie',
@@ -105,6 +111,11 @@ def db_connect():
         "animation_intensity": "TEXT NOT NULL DEFAULT 'Muy animado'",
         "overlay_mode": "TEXT NOT NULL DEFAULT 'Título de escena'",
         "transition_style": "TEXT NOT NULL DEFAULT 'Fundido suave'",
+        "subtitle_font": "TEXT NOT NULL DEFAULT 'Arial'",
+        "subtitle_size": "TEXT NOT NULL DEFAULT 'Mediano'",
+        "subtitle_color": "TEXT NOT NULL DEFAULT 'Blanco'",
+        "subtitle_position": "TEXT NOT NULL DEFAULT 'Inferior'",
+        "subtitle_outline": "INTEGER NOT NULL DEFAULT 1",
         "resolution": "TEXT NOT NULL DEFAULT '1080p (Full HD)'",
         "fps": "INTEGER NOT NULL DEFAULT 30",
         "video_mode": "TEXT NOT NULL DEFAULT 'Novela / Serie'",
@@ -656,6 +667,11 @@ class App(tk.Tk):
         self.animation_intensity_var = tk.StringVar(value="Muy animado")
         self.overlay_mode_var = tk.StringVar(value="Título de escena")
         self.transition_style_var = tk.StringVar(value="Fundido suave")
+        self.subtitle_font_var = tk.StringVar(value="Arial")
+        self.subtitle_size_var = tk.StringVar(value="Mediano")
+        self.subtitle_color_var = tk.StringVar(value="Blanco")
+        self.subtitle_position_var = tk.StringVar(value="Inferior")
+        self.subtitle_outline_var = tk.BooleanVar(value=True)
         self.video_mode_var = tk.StringVar(value=SERIES_VIDEO_MODE)
         self.resolution_var = tk.StringVar(value="1080p (Full HD)")
         self.fps_var = tk.StringVar(value="30")
@@ -990,11 +1006,24 @@ class App(tk.Tk):
                     values=["Título de escena", "Subtítulo narrativo", "Sin texto"])
         self._field(visual_form, "Transición entre escenas", self.transition_style_var, 3, 0,
                     values=["Corte directo", "Fundido suave"])
-        tk.Label(visual_tab, text="La intensidad modifica el movimiento de cámara sobre imágenes fijas. Los fundidos se aplican al inicio y final de cada plano. El texto puede mostrar el título, una frase narrativa o quedar oculto; las escenas sin ilustración conservan su tarjeta de texto.",
+        self._field(visual_form, "Fuente de subtítulos", self.subtitle_font_var, 4, 0,
+                    values=["Arial", "Segoe UI", "Verdana", "Georgia", "Impact"])
+        self._field(visual_form, "Tamaño de subtítulos", self.subtitle_size_var, 4, 1,
+                    values=["Pequeño", "Mediano", "Grande"])
+        self._field(visual_form, "Color de subtítulos", self.subtitle_color_var, 5, 0,
+                    values=["Blanco", "Amarillo", "Cian"])
+        self._field(visual_form, "Posición de subtítulos", self.subtitle_position_var, 5, 1,
+                    values=["Inferior", "Centro"])
+        tk.Checkbutton(visual_form, text="Contorno negro y sombra para mejorar la lectura",
+            variable=self.subtitle_outline_var, bg=self.colors["panel"], fg=self.colors["text"],
+            activebackground=self.colors["panel"], activeforeground=self.colors["text"],
+            selectcolor=self.colors["input"], font=("Segoe UI", 9)
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(7, 0))
+        tk.Label(visual_tab, text="La intensidad modifica el movimiento de cámara sobre imágenes fijas. El estilo de subtítulos se aplica al texto sobre ilustraciones; la fuente se busca entre las instaladas en Windows.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
-                 wraplength=1050, justify="left").grid(row=4, column=0, sticky="w", pady=(16, 0))
+                 wraplength=1050, justify="left").grid(row=7, column=0, sticky="w", pady=(12, 0))
         canon_actions = tk.Frame(visual_tab, bg=self.colors["panel"])
-        canon_actions.grid(row=4, column=0, sticky="ew", pady=(18, 0))
+        canon_actions.grid(row=8, column=0, sticky="ew", pady=(12, 0))
         ttk.Button(canon_actions, text="📖 Biblia de la historia y continuidad",
                    style="Accent.TButton", command=self.edit_story_bible).pack(side="left")
         tk.Label(canon_actions,
@@ -3384,6 +3413,11 @@ Write-Output 'NARRATION_OK'
         self.animation_intensity_var.set("Muy animado")
         self.overlay_mode_var.set("Título de escena")
         self.transition_style_var.set("Fundido suave")
+        self.subtitle_font_var.set("Arial")
+        self.subtitle_size_var.set("Mediano")
+        self.subtitle_color_var.set("Blanco")
+        self.subtitle_position_var.set("Inferior")
+        self.subtitle_outline_var.set(True)
         self.video_mode_var.set(SERIES_VIDEO_MODE)
         self.resolution_var.set("1080p (Full HD)")
         self.fps_var.set("30")
@@ -3441,6 +3475,11 @@ Write-Output 'NARRATION_OK'
             "animation_intensity": self.animation_intensity_var.get(),
             "overlay_mode": self.overlay_mode_var.get(),
             "transition_style": self.transition_style_var.get(),
+            "subtitle_font": self.subtitle_font_var.get(),
+            "subtitle_size": self.subtitle_size_var.get(),
+            "subtitle_color": self.subtitle_color_var.get(),
+            "subtitle_position": self.subtitle_position_var.get(),
+            "subtitle_outline": bool(self.subtitle_outline_var.get()),
             "video_mode": mode,
             "resolution": self.resolution_var.get() if hasattr(self, "resolution_var") else "1080p (Full HD)",
             "fps": int(self.fps_var.get()) if hasattr(self, "fps_var") else 30,
@@ -3734,6 +3773,9 @@ Write-Output 'NARRATION_OK'
             "drawing_style": data["drawing_style"], "animation_style": data["animation_style"],
             "animation_intensity": data["animation_intensity"], "overlay_mode": data["overlay_mode"],
             "transition_style": data["transition_style"],
+            "subtitle_font": data["subtitle_font"], "subtitle_size": data["subtitle_size"],
+            "subtitle_color": data["subtitle_color"], "subtitle_position": data["subtitle_position"],
+            "subtitle_outline": int(data["subtitle_outline"]),
             "resolution": data["resolution"], "fps": data["fps"], "video_mode": data["video_mode"],
             "series_key": self.series_key, "episode_number": self.episode_number,
             "story_bible": self.story_bible or "", "continuity_state": self.continuity_state or "",
@@ -3748,15 +3790,18 @@ Write-Output 'NARRATION_OK'
         columns = (
             "title,topic,platform,duration_minutes,style,script,approved,created_at,"
             "protagonist,conflict,tone,narrator,ending,drawing_style,animation_style,"
-            "animation_intensity,overlay_mode,transition_style,resolution,fps,video_mode,series_key,episode_number,story_bible,continuity_state,voice_assignments"
+            "animation_intensity,overlay_mode,transition_style,subtitle_font,subtitle_size,subtitle_color,"
+            "subtitle_position,subtitle_outline,resolution,fps,video_mode,series_key,episode_number,story_bible,continuity_state,voice_assignments"
         )
         values = (
             record["title"], record["topic"], record["platform"], record["duration_minutes"],
             record["style"], record["script"], approved, now, record["protagonist"],
             record["conflict"], record["tone"], record["narrator"], record["ending"],
             record["drawing_style"], record["animation_style"], record["animation_intensity"],
-            record["overlay_mode"], record["transition_style"], record["resolution"],
-            record["fps"], record["video_mode"], record["series_key"], record["episode_number"],
+            record["overlay_mode"], record["transition_style"], record["subtitle_font"],
+            record["subtitle_size"], record["subtitle_color"], record["subtitle_position"],
+            record["subtitle_outline"], record["resolution"], record["fps"], record["video_mode"],
+            record["series_key"], record["episode_number"],
             record["story_bible"], record["continuity_state"], record["voice_assignments"]
         )
         if self.current_id is None:
@@ -4374,6 +4419,11 @@ Write-Output 'NARRATION_OK'
         self.animation_intensity_var.set(project["animation_intensity"] or "Muy animado")
         self.overlay_mode_var.set(project["overlay_mode"] or "Título de escena")
         self.transition_style_var.set(project["transition_style"] or "Fundido suave")
+        self.subtitle_font_var.set(project["subtitle_font"] or "Arial")
+        self.subtitle_size_var.set(project["subtitle_size"] or "Mediano")
+        self.subtitle_color_var.set(project["subtitle_color"] or "Blanco")
+        self.subtitle_position_var.set(project["subtitle_position"] or "Inferior")
+        self.subtitle_outline_var.set(bool(project["subtitle_outline"]))
         self.video_mode_var.set(project["video_mode"] or SERIES_VIDEO_MODE)
         self.resolution_var.set(project["resolution"] or "1080p (Full HD)")
         self.fps_var.set(str(project["fps"] or 30))
@@ -4691,7 +4741,10 @@ Write-Output 'NARRATION_OK'
             row["animation_intensity"] or "Muy animado", row["overlay_mode"] or "Título de escena",
             row["transition_style"] or "Fundido suave",
             audio_path, music_path, loop_music, narration_text, chosen_voice, fps,
-            voice_assignments_json, bool(preview)
+            voice_assignments_json, bool(preview),
+            row["subtitle_font"] or "Arial", row["subtitle_size"] or "Mediano",
+            row["subtitle_color"] or "Blanco", row["subtitle_position"] or "Inferior",
+            bool(row["subtitle_outline"])
         )
         threading.Thread(target=self._render_video_worker, args=args, daemon=True).start()
 
@@ -4731,7 +4784,10 @@ Write-Output 'NARRATION_OK'
                              animation_intensity="Muy animado", overlay_mode="Título de escena",
                              transition_style="Fundido suave", audio_path="", music_path="", loop_music=True,
                              narration_text="", chosen_voice="(Automática)", fps=30,
-                             voice_assignments_json="{}", is_preview=False):
+                             voice_assignments_json="{}", is_preview=False,
+                              subtitle_font="Arial", subtitle_size="Mediano",
+                              subtitle_color="Blanco", subtitle_position="Inferior",
+                              subtitle_outline=True):
         scene_dir = PROJECTS_DIR / str(project_id) / "render_work"
         scene_dir.mkdir(parents=True, exist_ok=True)
         output_path = Path(output)
@@ -4844,6 +4900,17 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
             has_audio = has_voice or has_music
             final_steps = total + 1 + (1 if has_audio else 0)
             font_size = max(20, min(44, width // 28))
+            subtitle_size_px = {"Pequeño": max(18, round(width * 0.022)),
+                                "Mediano": max(22, round(width * 0.030)),
+                                "Grande": max(28, round(width * 0.040))}.get(
+                                    subtitle_size, max(22, round(width * 0.030)))
+            font_files = {"Arial": "arial.ttf", "Segoe UI": "segoeui.ttf",
+                          "Verdana": "verdana.ttf", "Georgia": "georgia.ttf", "Impact": "impact.ttf"}
+            windows_fonts = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
+            font_candidate = windows_fonts / font_files.get(subtitle_font, "arial.ttf")
+            subtitle_fontfile = str(font_candidate) if font_candidate.is_file() else ""
+            subtitle_color_value = {"Blanco": "white", "Amarillo": "yellow", "Cian": "cyan"}.get(
+                subtitle_color, "white")
             elapsed_before_scene = 0
             chunk_seconds = 5 * 60
             for index, scene in enumerate(scenes):
@@ -4864,8 +4931,11 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                     "scene": scene, "duration": seconds, "asset": asset_signature,
                     "animation": animation_style, "intensity": animation_intensity,
                     "overlay": overlay_mode, "transition": transition_style,
+                    "subtitle_font": subtitle_font, "subtitle_size": subtitle_size,
+                    "subtitle_color": subtitle_color_value, "subtitle_position": subtitle_position,
+                    "subtitle_outline": bool(subtitle_outline), "subtitle_fontfile": subtitle_fontfile,
                     "width": width, "height": height,
-                    "fps": int(fps), "preset": "ultrafast", "crf": 25, "version": 4
+                    "fps": int(fps), "preset": "ultrafast", "crf": 25, "version": 5
                 }
                 cache_fingerprint = hashlib.sha256(
                     json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -4920,10 +4990,9 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                         label_file.write_text(scene_label, encoding="utf-8")
                         label_path = ffmpeg_filter_path(label_file)
                         label_size = max(16, min(30, width // (58 if overlay_mode == "Subtítulo narrativo" else 52)))
-                        label_filter = (
-                            f"drawtext=textfile='{label_path}':expansion=none:fontcolor=white:"
-                            f"fontsize={label_size}:x=(w-text_w)/2:y=h-text_h-h*0.045:"
-                            "box=1:boxcolor=0x06101d@0.68:boxborderw=14"
+                        label_filter = build_subtitle_drawtext_filter(
+                            label_file, subtitle_fontfile or None, subtitle_size_px,
+                            color=subtitle_color_value, position=subtitle_position, outline=subtitle_outline
                         )
                     motion = scene_motion_filter(animation_style, width, height, seconds, animation_intensity)
                     filters = [motion]
