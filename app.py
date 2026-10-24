@@ -1314,6 +1314,9 @@ class App(tk.Tk):
         self.more_menu.add_command(
             label="Continuar historia", command=self.create_continuation
         )
+        self.more_menu.add_command(
+            label="Estado / reanudar producción", command=self.show_pipeline_status
+        )
         self.more_menu.add_separator()
         self.more_menu.add_command(
             label="Cancelar generación", command=self.cancel_generation
@@ -3827,6 +3830,59 @@ Write-Output 'NARRATION_OK'
             return ""
         except (OSError, ValueError, TypeError):
             return ""
+
+    def show_pipeline_status(self):
+        """Show persisted production checkpoints and resume the failed stage on request."""
+        if self.current_id is None:
+            messagebox.showinfo("Producción MARC", "Guarda o abre un proyecto para consultar su estado de producción.")
+            return
+        try:
+            journal = ProductionPipeline(PROJECTS_DIR / str(self.current_id) / "production_pipeline.json")
+            snapshot = journal.snapshot()
+        except (OSError, ValueError, TypeError) as exc:
+            messagebox.showerror("Estado de producción", "No se pudo leer el registro de recuperación.\n\n" + str(exc))
+            return
+
+        stages = snapshot["stages"]
+        lines = []
+        symbols = {"completed": "✓", "running": "…", "failed": "!", "pending": "·", "skipped": "—"}
+        for name, label in STAGE_LABELS.items():
+            item = stages.get(name, {})
+            status = item.get("status", "pending")
+            line = f"{symbols.get(status, '·')} {label}: {status}"
+            if status == "failed" and item.get("error"):
+                line += " — " + str(item["error"]).replace("\n", " ")[:110]
+            lines.append(line)
+        failed = next((name for name in STAGE_LABELS if stages.get(name, {}).get("status") == "failed"), None)
+        header = "Estado guardado en el equipo. Los recursos y la caché no se borran.\n\n"
+        if not failed:
+            messagebox.showinfo("Estado de producción", header + "\n".join(lines))
+            return
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+            messagebox.showinfo("Producción en curso", header + "\n".join(lines))
+            return
+        prompt = header + "\n".join(lines) + "\n\n¿Reanudar desde la etapa fallida: " + STAGE_LABELS[failed] + "?"
+        if not messagebox.askyesno("Reanudar producción", prompt):
+            return
+        retry_stage = journal.retry_failed()
+        if not retry_stage:
+            messagebox.showinfo("Producción MARC", "No hay ninguna etapa fallida que reanudar.")
+            return
+        self.status_var.set("Reanudando producción desde: " + STAGE_LABELS.get(retry_stage, retry_stage))
+        if retry_stage == "script":
+            self.generate_script()
+        elif retry_stage == "review":
+            self.approve_script()
+        elif retry_stage in {"storyboard", "images"}:
+            self.generate_missing_scene_images(preconfirmed=True, preview_after=True)
+        elif retry_stage in {"montage", "quality_check", "export"}:
+            self._start_video_render(preview=False)
+        else:
+            messagebox.showinfo(
+                "Reanudación manual",
+                "Esta etapa tiene un punto de recuperación guardado, pero necesita una acción manual desde la pestaña correspondiente: "
+                + STAGE_LABELS.get(retry_stage, retry_stage)
+            )
 
     def save_project(self, reset_approval=False, quiet=False):
         data = self.get_form()
