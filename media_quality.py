@@ -135,6 +135,7 @@ def inspect_media_file(
     expected_fps: float | None = None,
     minimum_duration: float | None = None,
     require_audio: bool = False,
+    subtitle_path: str | None = None,
 ) -> dict[str, Any]:
     """Probe a rendered file, preferring ffprobe and falling back to FFmpeg's input report."""
     import json
@@ -187,8 +188,78 @@ def inspect_media_file(
             "warnings": [], "duration": None, "width": None, "height": None,
             "fps": None, "audio_streams": 0, "subtitle_streams": 0,
         }
-    return validate_media_info(
+    report = validate_media_info(
         info, expected_width=expected_width, expected_height=expected_height,
         expected_fps=expected_fps, minimum_duration=minimum_duration,
         require_audio=require_audio,
     )
+    if subtitle_path:
+        try:
+            subtitle_file = Path(subtitle_path)
+            subtitle_result = validate_srt_text(subtitle_file.read_text(encoding="utf-8-sig")) if subtitle_file.is_file() else {
+                "passed": False, "cue_count": 0, "errors": ["No se encontró el archivo de subtítulos SRT."]
+            }
+        except (OSError, UnicodeError) as exc:
+            subtitle_result = {"passed": False, "cue_count": 0, "errors": [f"No se pudo leer el archivo SRT: {exc}"]}
+        report["subtitle_check"] = subtitle_result
+        report["checks"].append({
+            "name": "subtitles", "passed": subtitle_result["passed"],
+            "detail": f"SRT válido: {subtitle_result['cue_count']} subtítulo(s)." if subtitle_result["passed"] else "El SRT no superó la validación."
+        })
+        report["subtitle_streams"] = subtitle_result["cue_count"]
+        if not subtitle_result["passed"]:
+            report["errors"].extend(subtitle_result["errors"])
+            report["passed"] = False
+    return report
+
+
+_SRT_BLOCK = re.compile(
+    r"(?m)^([0-9]+)\\s*\\n"
+    r"(\\d{2,}:\\d{2}:\\d{2},\\d{3})\\s+-->\\s+"
+    r"(\\d{2,}:\\d{2}:\\d{2},\\d{3})\\s*\\n"
+    r"(.+?)(?=\\n{2,}|\\Z)",
+    re.DOTALL,
+)
+
+
+def validate_srt_text(text: str) -> dict[str, Any]:
+    """Check SRT cue numbering, timestamps, non-empty text and cue ordering."""
+    source = str(text or "").strip()
+    if not source:
+        return {"passed": False, "cue_count": 0, "errors": ["El archivo SRT está vacío."]}
+    blocks = re.split(r"\\n\\s*\\n", source)
+    errors: list[str] = []
+    valid_count = 0
+    previous_end = -1
+
+    def milliseconds(stamp: str) -> int:
+        hours, minutes, seconds = stamp.split(":")
+        seconds, millis = seconds.split(",")
+        return ((int(hours) * 60 + int(minutes)) * 60 + int(seconds)) * 1000 + int(millis)
+
+    for index, block in enumerate(blocks, start=1):
+        lines = block.splitlines()
+        if len(lines) < 3 or not lines[0].strip().isdigit():
+            errors.append(f"Bloque {index}: falta número, intervalo o texto.")
+            continue
+        if int(lines[0].strip()) != index:
+            errors.append(f"Bloque {index}: numeración de subtítulos no consecutiva.")
+        timing = re.fullmatch(
+            r"(\\d{2,}:\\d{2}:\\d{2},\\d{3})\\s+-->\\s+(\\d{2,}:\\d{2}:\\d{2},\\d{3})",
+            lines[1].strip(),
+        )
+        if not timing:
+            errors.append(f"Bloque {index}: formato de tiempo SRT inválido.")
+            continue
+        start_ms, end_ms = milliseconds(timing.group(1)), milliseconds(timing.group(2))
+        if end_ms <= start_ms:
+            errors.append(f"Bloque {index}: la hora final debe ser posterior a la inicial.")
+        if start_ms < previous_end:
+            errors.append(f"Bloque {index}: los subtítulos se solapan o están desordenados.")
+        if not " ".join(lines[2:]).strip():
+            errors.append(f"Bloque {index}: el texto está vacío.")
+        previous_end = end_ms
+        valid_count += 1
+    if valid_count == 0:
+        errors.append("No se encontraron subtítulos válidos.")
+    return {"passed": not errors, "cue_count": valid_count, "errors": errors}
