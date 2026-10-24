@@ -339,8 +339,12 @@ class App(tk.Tk):
                         self.set_configuration_visible(True)
                         self.generate_script(remote=True)
                     elif action == "open_project":
+                        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+                            raise RuntimeError("Espera a que termine el trabajo actual antes de cambiar de proyecto.")
                         self._remote_load_project(payload.get("project_id"))
                     elif action == "save_script":
+                        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+                            raise RuntimeError("No se puede editar el guion mientras hay un trabajo en curso.")
                         self._remote_load_project(payload.get("project_id"))
                         script = str(payload.get("script", ""))
                         if len(script) > 200000:
@@ -352,6 +356,8 @@ class App(tk.Tk):
                         self.save_project(reset_approval=True, quiet=True)
                         self.status_var.set("Guion guardado desde el teléfono; vuelve a aprobarlo antes de exportar.")
                     elif action == "approve_script":
+                        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+                            raise RuntimeError("Espera a que termine el trabajo actual antes de aprobar el guion.")
                         self._remote_load_project(payload.get("project_id"))
                         self.approve_script(remote=True)
                     elif action == "generate_images":
@@ -4119,7 +4125,10 @@ Write-Output 'NARRATION_OK'
     def approve_script(self, remote=False):
         script = self.script_text.get("1.0", "end-1c").strip()
         if not script:
-            messagebox.showwarning("Sin guion", "Genera o escribe un guion antes de aprobarlo.")
+            if remote:
+                self.status_var.set("No hay guion para aprobar. Espera a que termine o genera uno primero.")
+            else:
+                messagebox.showwarning("Sin guion", "Genera o escribe un guion antes de aprobarlo.")
             return
         warnings = continuity_review_check(script, self.continuity_state if self.episode_number > 1 else "")
         review_text = "¿Has revisado el guion y confirmas que está listo para renderizar?"
