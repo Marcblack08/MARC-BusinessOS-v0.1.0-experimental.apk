@@ -2437,10 +2437,10 @@ Write-Output 'NARRATION_OK'
             pass
         detail = (
             "No se encontró una API de ComfyUI en los puertos locales habituales. "
-            + ollama_note + "\\n\\n"
+            + ollama_note + "\n\n"
             + "Para generar imágenes, inicia ComfyUI y descarga al menos un checkpoint compatible. "
             + "MARC no puede convertir Qwen/Ollama en un generador de imágenes por sí solo. "
-            + "Si ComfyUI utiliza otra dirección, define MARC_COMFYUI_URL antes de abrir MARC.\\n\\n"
+            + "Si ComfyUI utiliza otra dirección, define MARC_COMFYUI_URL antes de abrir MARC.\n\n"
             + "Últimos intentos: " + " | ".join(errors[-4:])
         )
         self.generation_queue.put(("image_models_error", detail, quiet))
