@@ -2532,6 +2532,7 @@ Write-Output 'NARRATION_OK'
         if self.current_id is None:
             messagebox.showwarning("Guarda el proyecto", "Completa el título y la premisa antes de generar imágenes.")
             return
+        self.save_project(quiet=True)
         if not self._existing_approval():
             messagebox.showwarning(
                 "Revisa el guion antes de generar imágenes",
@@ -2742,6 +2743,7 @@ Write-Output 'NARRATION_OK'
         if self.current_id is None:
             messagebox.showwarning("Guarda el proyecto", "Guarda el proyecto antes de generar imágenes.")
             return
+        self.save_project(quiet=True)
         if not self._existing_approval():
             messagebox.showwarning(
                 "Revisa el guion antes de generar imágenes",
