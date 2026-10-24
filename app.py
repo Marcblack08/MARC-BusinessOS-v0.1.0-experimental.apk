@@ -2418,42 +2418,70 @@ Write-Output 'NARRATION_OK'
                         return launcher
         return None
 
+    def _launch_comfyui(self, launcher):
+        """Launch a verified portable ComfyUI startup script in its own console."""
+        try:
+            subprocess.Popen(
+                ["cmd.exe", "/c", str(launcher)],
+                cwd=str(launcher.parent),
+                creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+            )
+            self.status_var.set("ComfyUI está iniciando. Mantén abierta su ventana y espera a que indique la dirección local.")
+            self.image_ai_status_var.set("ComfyUI iniciándose · buscando el servidor…")
+            self.after(12000, lambda: self.detect_image_models(quiet=False))
+        except OSError as exc:
+            messagebox.showerror(
+                "No se pudo iniciar ComfyUI",
+                f"No fue posible ejecutar el lanzador encontrado:\n{launcher}\n\n{exc}"
+            )
+
     def start_comfyui(self):
-        """Start a found ComfyUI portable instance or open the official setup guide."""
+        """Start ComfyUI portable if found, allow folder selection, or open its official installer guide."""
         if self.comfy_available:
             messagebox.showinfo(
                 "ComfyUI ya está conectado",
                 f"MARC ya detectó el motor visual en {self.comfy_url}. Selecciona un checkpoint y genera la ilustración."
             )
             return
+
         launcher = self._find_comfyui_launcher() if os.name == "nt" else None
         if launcher:
-            try:
-                subprocess.Popen(
-                    ["cmd.exe", "/c", str(launcher)],
-                    cwd=str(launcher.parent),
-                    creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-                )
-                self.status_var.set("ComfyUI está iniciando. Mantén abierta su ventana y espera a que indique la dirección local.")
-                self.image_ai_status_var.set("ComfyUI iniciándose · buscando el servidor…")
-                self.after(12000, lambda: self.detect_image_models(quiet=False))
-            except OSError as exc:
-                messagebox.showerror(
-                    "No se pudo iniciar ComfyUI",
-                    f"No fue posible ejecutar el lanzador encontrado:\n{launcher}\n\n{exc}"
-                )
+            self._launch_comfyui(launcher)
             return
+
+        if os.name == "nt" and messagebox.askyesno(
+            "Buscar ComfyUI Portable",
+            "No encontré automáticamente ComfyUI Portable. Si ya lo descargaste, puedes seleccionar ahora la carpeta donde lo extrajiste. "
+            "Responde No para abrir la guía oficial de instalación."
+        ):
+            selected_dir = filedialog.askdirectory(
+                title="Selecciona la carpeta ComfyUI_windows_portable",
+                initialdir=str(Path.home()),
+                mustexist=True
+            )
+            if selected_dir:
+                os.environ["MARC_COMFYUI_DIR"] = selected_dir
+                launcher = self._find_comfyui_launcher()
+                if launcher:
+                    self._launch_comfyui(launcher)
+                    return
+                messagebox.showwarning(
+                    "No se encontró el lanzador",
+                    "La carpeta seleccionada no contiene run_nvidia_gpu.bat ni run_cpu.bat. "
+                    "Selecciona la carpeta principal de ComfyUI Portable, no su subcarpeta models."
+                )
+                return
+            return
+
         message = (
-            "No encontré una instalación portable de ComfyUI en las ubicaciones habituales. "
-            "Ollama/Qwen sí puede generar el guion, pero no genera imágenes. "
-            "Instala ComfyUI para Windows, inicia una instancia local y descarga un checkpoint compatible; "
-            "después vuelve a MARC y pulsa «Detectar ComfyUI»."
+            "Ollama/Qwen genera el guion, pero no crea archivos de imagen. Para ilustrar las escenas necesitas "
+            "ComfyUI y un checkpoint compatible. La aplicación no los descarga automáticamente porque pueden ocupar varios GB."
         )
         if messagebox.askyesno(
             "Configurar el motor de imágenes",
             message + "\n\n¿Quieres abrir la guía oficial de instalación de ComfyUI para Windows?"
         ):
-            webbrowser.open("https://docs.comfy.org/installation/desktop/windows")
+            webbrowser.open("https://docs.comfy.org/installation/comfyui_portable_windows")
 
     def detect_image_models(self, quiet=False):
         if self.image_generation_running:
