@@ -190,6 +190,92 @@ def parse_script_scenes(script: str, max_scenes: int = 120) -> list[dict]:
     return scenes
 
 
+
+def expand_scenes_to_shots(
+    scenes: Iterable[dict],
+    target_shots: int,
+    max_scenes: int = 120,
+    min_words_to_split: int = 12,
+) -> list[dict]:
+    """Split overlong parsed scenes into smaller visual shots without inventing story text.
+
+    This only changes the visual storyboard records; narration is still synthesized
+    from the original script. A shot is split near its midpoint, preferring a
+    sentence/clause boundary, and speaker labels are carried into the second half
+    when the cut would otherwise detach dialogue from its speaker.
+    """
+    try:
+        target = max(0, int(target_shots))
+        limit = max(1, int(max_scenes))
+        minimum = max(4, int(min_words_to_split))
+    except (TypeError, ValueError):
+        raise ValueError("Shot counts and split limits must be integers.") from None
+
+    result = []
+    for original in scenes:
+        if len(result) >= limit:
+            break
+        item = dict(original)
+        item["text"] = str(item.get("text", "") or "").strip()
+        item["word_count"] = len(item["text"].split())
+        result.append(item)
+
+    def split_text(text: str) -> tuple[str, str] | None:
+        words = text.split()
+        if len(words) < minimum:
+            return None
+        midpoint = len(words) // 2
+        # Prefer a natural sentence or clause boundary near the middle.
+        candidates = []
+        for index in range(2, len(words) - 1):
+            if re.search(r"[.!?…;,]$", words[index - 1]):
+                candidates.append(index)
+        if candidates:
+            cut = min(candidates, key=lambda index: (abs(index - midpoint), index))
+        else:
+            cut = midpoint
+        cut = max(2, min(len(words) - 2, cut))
+        left = " ".join(words[:cut]).strip()
+        right = " ".join(words[cut:]).strip()
+        # Keep the most recent explicit speaker label with a continuation chunk.
+        labels = list(re.finditer(r"\[([^\]]{1,40})\]\s*:\s*", left))
+        if labels and not re.match(r"^\[[^\]]{1,40}\]\s*:", right):
+            label = labels[-1].group(1).strip()
+            right = f"[{label}]: {right}"
+        if not left or not right:
+            return None
+        return left, right
+
+    while len(result) < min(target, limit):
+        candidates = [
+            (len(str(item.get("text", "")).split()), index)
+            for index, item in enumerate(result)
+            if len(str(item.get("text", "")).split()) >= minimum
+        ]
+        if not candidates:
+            break
+        _, index = max(candidates, key=lambda pair: (pair[0], -pair[1]))
+        original = result[index]
+        halves = split_text(str(original.get("text", "")))
+        if not halves:
+            break
+        left_text, right_text = halves
+        base_title = str(original.get("title", f"Escena {index + 1}")).strip()
+        left = dict(original)
+        right = dict(original)
+        left["text"] = left_text
+        left["word_count"] = len(left_text.split())
+        left["title"] = f"{base_title} — plano A"
+        right["text"] = right_text
+        right["word_count"] = len(right_text.split())
+        right["title"] = f"{base_title} — plano B"
+        result[index:index + 1] = [left, right]
+
+    for index, item in enumerate(result, start=1):
+        item["index"] = index
+        item["word_count"] = len(str(item.get("text", "")).split())
+    return result
+
 def allocate_scene_durations(
     scenes: Iterable[dict], total_seconds: int, max_scene_seconds: int = 5
 ) -> list[int]:
