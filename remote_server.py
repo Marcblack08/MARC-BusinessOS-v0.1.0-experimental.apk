@@ -15,6 +15,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
@@ -387,7 +388,7 @@ class RemoteControlServer:
         return connection
 
     def _list_projects(self):
-        with self._connect_db() as db:
+        with closing(self._connect_db()) as db:
             rows = db.execute(
                 "SELECT id,title,topic,platform,duration_minutes,approved,created_at FROM projects ORDER BY id DESC LIMIT 200"
             ).fetchall()
@@ -396,7 +397,7 @@ class RemoteControlServer:
     def _get_project(self, project_id):
         if project_id is None or project_id < 1:
             return None
-        with self._connect_db() as db:
+        with closing(self._connect_db()) as db:
             row = db.execute("SELECT id,title,topic,platform,duration_minutes,approved,created_at,script,style,video_mode FROM projects WHERE id=?",
                              (project_id,)).fetchone()
         return dict(row) if row else None
