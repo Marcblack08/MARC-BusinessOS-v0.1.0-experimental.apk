@@ -16,7 +16,7 @@ if not exist ".venv\Scripts\python.exe" (
 ".venv\Scripts\python.exe" -m pip install --upgrade pyinstaller
 if errorlevel 1 goto error
 echo [1/4] Validando sintaxis y pruebas... 
-".venv\Scripts\python.exe" -m py_compile app.py scene_engine.py ollama_client.py tests\test_scene_engine.py
+"\.venv\Scripts\python.exe" -m py_compile app.py scene_engine.py story_engine.py ollama_client.py tests\test_scene_engine.py tests\test_story_engine.py tests\test_ffmpeg_smoke.py
 if errorlevel 1 goto error
 ".venv\Scripts\python.exe" -m unittest discover -s tests -v
 if errorlevel 1 goto error
@@ -24,7 +24,7 @@ echo [2/4] Limpiando compilacion anterior...
 if exist build rmdir /s /q build
 if exist "dist\MARC Video Studio AI Desktop" rmdir /s /q "dist\MARC Video Studio AI Desktop"
 echo [3/4] Construyendo aplicacion de escritorio...
-".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --windowed --onedir --name "MARC Video Studio AI Desktop" app.py
+"\.venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --windowed --onedir --hidden-import vlc --name "MARC Video Studio AI Desktop" app.py
 if errorlevel 1 goto error
 echo.
 echo [OK] Aplicacion empaquetada en:
