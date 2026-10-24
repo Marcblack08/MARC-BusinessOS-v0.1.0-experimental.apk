@@ -2157,6 +2157,7 @@ Write-Output 'NARRATION_OK'
         except OSError as exc:
             messagebox.showerror("No se pudo preparar la narración", str(exc))
             return
+        self._pipeline_checkpoint("narration", "running", "Sintetizando voz local con Windows")
         self.voice_generation_running = True
         self.voice_cancel_event.clear()
         self._set_voice_state(True)
@@ -4197,6 +4198,7 @@ Write-Output 'NARRATION_OK'
                     self.status_var.set(event[1])
                 elif kind == "voice_done":
                     project_id, audio_path, voice_name = event[1], event[2], event[3]
+                    self._pipeline_checkpoint("narration", "completed", f"Narración WAV generada con {voice_name}", artifacts=[audio_path])
                     self.voice_generation_running = False
                     self._set_voice_state(False)
                     if self.current_id == project_id:
@@ -4214,6 +4216,7 @@ Write-Output 'NARRATION_OK'
                         f"Se generó la narración local en:\n{audio_path}\n\nPuedes aprobar el guion y exportar el MP4 para combinar el audio."
                     )
                 elif kind == "voice_cancelled":
+                    self._pipeline_checkpoint("narration", "pending", "Síntesis de voz cancelada")
                     self.voice_generation_running = False
                     self._set_voice_state(False)
                     self.progress_label_var.set("Generación de voz cancelada")
@@ -4221,6 +4224,7 @@ Write-Output 'NARRATION_OK'
                     self.voice_status_var.set("Cancelado.")
                     self.status_var.set("Se canceló la síntesis de voz local.")
                 elif kind == "voice_error":
+                    self._pipeline_checkpoint("narration", "failed", "No se pudo generar la narración", error=str(event[1]))
                     self.voice_generation_running = False
                     self._set_voice_state(False)
                     self.progress_label_var.set("Error al generar la voz")
@@ -4880,6 +4884,14 @@ Write-Output 'NARRATION_OK'
         has_any_audio = bool(audio_path or music_path or (os.name == "nt" and not audio_path))
         render_steps = len(scenes) + 1 + (1 if has_any_audio else 0)
         self.render_cancel_event.clear()
+        if audio_path or narration_text:
+            self._pipeline_checkpoint("narration", "completed", "Pista de voz disponible para el render", artifacts=[audio_path] if audio_path else [])
+        else:
+            self._pipeline_checkpoint("narration", "skipped", "No se seleccionó narración ni síntesis local")
+        if music_path or audio_path:
+            self._pipeline_checkpoint("audio", "completed", "Pistas de audio disponibles para la mezcla", artifacts=[path for path in (audio_path, music_path) if path])
+        else:
+            self._pipeline_checkpoint("audio", "skipped", "El vídeo se renderizará sin pistas de audio externas")
         if preview:
             self._pipeline_checkpoint("montage", "running", "Generando vista previa del montaje")
         else:
