@@ -4426,28 +4426,54 @@ Write-Output 'NARRATION_OK'
                         self.after(300, self.play_preview_video)
                     else:
                         output_file = Path(event[1])
+                        report = event[5] if len(event) > 5 and isinstance(event[5], dict) else {
+                            "passed": output_file.is_file() and output_file.stat().st_size > 1024,
+                            "errors": ["No se recibió el informe detallado de calidad del MP4."],
+                            "duration": None, "width": None, "height": None, "fps": None,
+                            "audio_streams": 0, "subtitle_streams": 0,
+                        }
                         self._pipeline_checkpoint("montage", "completed", "Montaje final renderizado", artifacts=[event[1]])
-                        self._pipeline_checkpoint("quality_check", "running", "Comprobando archivo MP4 exportado")
-                        if output_file.is_file() and output_file.stat().st_size > 1024:
-                            self._pipeline_checkpoint("quality_check", "completed", "Validación básica: archivo MP4 presente y no vacío", artifacts=[event[1]])
-                            self._pipeline_checkpoint("export", "completed", "MP4 final guardado", artifacts=[event[1]])
+                        self._pipeline_checkpoint("quality_check", "running", "Validando metadatos y pistas del MP4")
+                        quality_errors = list(report.get("errors") or [])
+                        quality_summary = (
+                            f"Resolución {report.get('width') or '?'}x{report.get('height') or '?'} · "
+                            f"{(report.get('fps') or 0):.2f} FPS · "
+                            f"duración {self._format_eta(report.get('duration') or event[3])} · "
+                            f"audio: {report.get('audio_streams', 0)} pista(s)"
+                        )
+                        if report.get("passed") and output_file.is_file() and output_file.stat().st_size > 1024:
+                            self._pipeline_checkpoint(
+                                "quality_check", "completed",
+                                "Validación MP4 superada. " + quality_summary,
+                                artifacts=[event[1]],
+                            )
+                            self._pipeline_checkpoint("export", "completed", "MP4 final guardado y validado", artifacts=[event[1]])
+                            self.progress_label_var.set("Vídeo exportado y validado")
+                            self.status_var.set("MP4 creado y validado: " + self.last_export_path if getattr(self, "last_export_path", "") else "MP4 creado y validado.")
                         else:
-                            self._pipeline_checkpoint("quality_check", "failed", "El archivo de salida no existe o está vacío", error=event[1])
-                            self._pipeline_checkpoint("export", "failed", "La salida no superó la validación básica", error=event[1])
+                            detail = " ".join(str(item) for item in quality_errors) or "El archivo no superó las comprobaciones básicas."
+                            self._pipeline_checkpoint("quality_check", "failed", "La validación de calidad no se superó", error=detail)
+                            self._pipeline_checkpoint("export", "failed", "MP4 creado, pero pendiente de corregir las alertas de calidad", error=detail, artifacts=[event[1]])
+                            self.progress_label_var.set("MP4 creado con alertas de calidad")
+                            self.status_var.set("MP4 creado, pero no se considera validado.")
                         self.last_export_path = event[1]
                         self.manual_preview_path = ""
                         if hasattr(self, "preview_status_var"):
                             self.preview_status_var.set(f"Último vídeo exportado: {self.last_export_path}")
-                        self.progress_label_var.set("Vídeo exportado correctamente")
                         self.progress_detail_var.set(
-                            f"100% · {event[2]} escenas · duración aproximada {self._format_eta(event[3])}"
+                            f"100% · {event[2]} escenas · {quality_summary}"
                         )
-                        self.status_var.set(f"MP4 creado: {self.last_export_path}")
                         if not getattr(self, "remote_render_active", False):
-                            messagebox.showinfo(
-                                "Exportación terminada",
-                                f"Vídeo MP4 creado en:\n{self.last_export_path}\n\nPuedes abrirlo desde la pestaña VISTA PREVIA."
-                            )
+                            if report.get("passed") and output_file.is_file() and output_file.stat().st_size > 1024:
+                                messagebox.showinfo(
+                                    "Exportación validada",
+                                    f"Vídeo MP4 creado y validado:\n{self.last_export_path}\n\n{quality_summary}\n\nPuedes abrirlo desde la pestaña VISTA PREVIA."
+                                )
+                            else:
+                                messagebox.showwarning(
+                                    "MP4 con alertas de calidad",
+                                    f"El archivo se generó, pero MARC detectó problemas:\n\n{chr(10).join(quality_errors) or 'No se pudo confirmar la integridad completa.'}\n\n{quality_summary}\n\nRevisa el archivo antes de publicarlo."
+                                )
                         self.remote_render_active = False
                 elif kind == "audio_mux_done":
                     self.audio_mux_running = False
