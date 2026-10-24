@@ -3445,6 +3445,8 @@ Write-Output 'NARRATION_OK'
         self.progress_detail_var.set("0% · Esperando inicio")
         self.script_text.delete("1.0", "end")
         self.scene_assets = {}
+        self.auto_expand_storyboard = True
+        self.scene_duration_overrides = {}
         self.last_export_path = ""
         self.audio_track_path = ""
         self.music_track_path = ""
