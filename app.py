@@ -681,7 +681,7 @@ class App(tk.Tk):
         self.generate_missing_images_button = ttk.Button(
             image_ai_bar, text="Generar imágenes faltantes", command=self.generate_missing_scene_images)
         self.generate_missing_images_button.pack(side="left", padx=(6, 0))
-        self.image_ai_status_var = tk.StringVar(value="ComfyUI local opcional · comprobando modelos…")
+        self.image_ai_status_var = tk.StringVar(value="Motor visual local · comprobando ComfyUI y checkpoints…")
         tk.Label(scenes_tab, textvariable=self.image_ai_status_var, bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 8), anchor="w",
                  wraplength=1000, justify="left").grid(row=5, column=0, sticky="ew", pady=(0, 7))
@@ -707,7 +707,7 @@ class App(tk.Tk):
         self.scene_outline.configure(yscrollcommand=scene_scroll.set)
         self.scene_outline.bind("<Double-1>", lambda _event: self.assign_scene_image())
         self.scene_outline.bind("<<TreeviewSelect>>", self._timeline_scene_selected)
-        tk.Label(scenes_tab, text="La generación de ilustraciones se ejecuta en ComfyUI en tu PC. Requiere instalarlo y descargar al menos un checkpoint compatible. No usa claves API ni servicios en la nube.",
+        tk.Label(scenes_tab, text="Para generar ilustraciones, inicia/configura ComfyUI con «Iniciar / instalar» y descarga un checkpoint compatible. Ollama/Qwen genera el guion, no las imágenes. No se requieren claves API ni servicios en la nube.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1000, justify="left").grid(row=7, column=0, sticky="w", pady=(8, 0))
 
@@ -4088,7 +4088,7 @@ Write-Output 'NARRATION_OK'
                        self.clear_image_button, self.refresh_scenes_button,
                        self.select_audio_button, self.clear_audio_button,
                        self.select_music_button, self.clear_music_button,
-                       self.detect_models_button, self.generate_image_button, self.generate_missing_images_button,
+                       self.detect_models_button, self.start_comfyui_button, self.generate_image_button, self.generate_missing_images_button,
                        self.detect_voice_button, self.generate_voice_button, self.assign_character_voices_button,
                        self.inspector_assign_image_button, self.inspector_generate_image_button,
                        self.inspector_duration_button, self.export_srt_button):
