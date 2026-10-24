@@ -496,12 +496,13 @@ class App(tk.Tk):
         return f"{hours} h {minutes} min"
 
     def _style(self):
+        """Apply the unified MARC dark-cinematic design system to native Tk/ttk widgets."""
         self.colors = {
-            "bg": "#070d18", "panel": "#0e192a", "panel2": "#15243a",
-            "input": "#091321", "accent": "#168bff", "accent_hover": "#45a5ff",
-            "text": "#f2f7ff", "muted": "#9aadc6", "border": "#203651",
-            "success": "#62e6b4", "warning": "#ffd166", "danger": "#ff7f91",
-            "glow": "#173f70", "surface": "#111f33"
+            "bg": "#0b1120", "panel": "#111b2e", "panel2": "#18263d",
+            "input": "#0c1526", "accent": "#3478f6", "accent_hover": "#4b8bff",
+            "text": "#eaf1fc", "muted": "#a2b1c7", "border": "#263650",
+            "success": "#35d6a4", "warning": "#f5c451", "danger": "#ff718b",
+            "glow": "#1b3762", "surface": "#142239",
         }
         self.configure(bg=self.colors["bg"])
         style = ttk.Style(self)
@@ -509,56 +510,48 @@ class App(tk.Tk):
             style.theme_use("clam")
         except tk.TclError:
             pass
+        style.configure(".", font=("Segoe UI", 10), foreground=self.colors["text"])
         style.configure("TFrame", background=self.colors["bg"])
         style.configure("Panel.TFrame", background=self.colors["panel"])
+        style.configure("Surface.TFrame", background=self.colors["surface"])
         style.configure("TLabel", background=self.colors["bg"], foreground=self.colors["text"], font=("Segoe UI", 10))
         style.configure("Muted.TLabel", background=self.colors["bg"], foreground=self.colors["muted"], font=("Segoe UI", 9))
-        style.configure("Title.TLabel", background=self.colors["bg"], foreground="#62b7ff", font=("Segoe UI", 23, "bold"))
+        style.configure("Title.TLabel", background=self.colors["bg"], foreground="#70a7ff", font=("Segoe UI", 24, "bold"))
         style.configure("Section.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 11, "bold"))
-        style.configure("TButton", padding=(12, 9), font=("Segoe UI Semibold", 9), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=1, relief="flat")
-        style.map("TButton",
-                  background=[("active", "#203b5d"), ("pressed", self.colors["accent"])],
-                  foreground=[("disabled", "#60738b")],
-                  bordercolor=[("active", self.colors["accent"])])
-        style.configure("Accent.TButton", padding=(14, 10), font=("Segoe UI", 9, "bold"),
-                        background=self.colors["accent"], foreground="#ffffff", borderwidth=0, relief="flat")
-        style.map("Accent.TButton", background=[("active", self.colors["accent_hover"]), ("pressed", "#0875df")])
-        style.configure("TEntry", padding=(10, 9), fieldbackground=self.colors["input"],
-                        foreground=self.colors["text"], insertcolor=self.colors["text"],
-                        bordercolor=self.colors["border"], lightcolor=self.colors["border"],
-                        darkcolor=self.colors["border"], relief="flat")
-        style.map("TEntry", bordercolor=[("focus", self.colors["accent"])],
-                  lightcolor=[("focus", self.colors["accent"])])
-        style.configure("TCombobox", padding=(9, 8), fieldbackground=self.colors["input"],
-                        foreground=self.colors["text"], background=self.colors["panel2"],
-                        arrowcolor=self.colors["accent"], bordercolor=self.colors["border"],
-                        lightcolor=self.colors["border"], darkcolor=self.colors["border"], relief="flat")
-        style.map("TCombobox",
-                  fieldbackground=[("readonly", self.colors["input"]), ("focus", "#0d1d31")],
-                  foreground=[("readonly", self.colors["text"])],
-                  bordercolor=[("focus", self.colors["accent"])],
-                  lightcolor=[("focus", self.colors["accent"])])
-        style.configure("Horizontal.TProgressbar", troughcolor=self.colors["input"],
-                        background=self.colors["accent"], bordercolor=self.colors["border"],
-                        lightcolor=self.colors["accent"], darkcolor=self.colors["accent"], thickness=8)
-        style.configure("Vertical.TScrollbar", background=self.colors["panel2"],
-                        troughcolor=self.colors["input"], arrowcolor=self.colors["muted"],
-                        bordercolor=self.colors["input"], relief="flat")
+        style.configure("KPI.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 18, "bold"))
+        style.configure("TLabelFrame", background=self.colors["panel"], foreground=self.colors["text"], bordercolor=self.colors["border"], relief="solid", borderwidth=1)
+        style.configure("TLabelFrame.Label", background=self.colors["panel"], foreground=self.colors["muted"], font=("Segoe UI", 9, "bold"))
+        style.configure("TButton", padding=(13, 9), font=("Segoe UI", 9, "bold"), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=1, bordercolor=self.colors["border"], focusthickness=2, focuscolor=self.colors["accent"], relief="flat")
+        style.map("TButton", background=[("disabled", self.colors["panel"]), ("pressed", self.colors["accent"]), ("active", "#243a5c")], foreground=[("disabled", "#64758e"), ("active", self.colors["text"])], bordercolor=[("focus", self.colors["accent"]), ("active", "#35547d")])
+        style.configure("Accent.TButton", padding=(15, 10), font=("Segoe UI", 9, "bold"), background=self.colors["accent"], foreground="#ffffff", borderwidth=0, bordercolor=self.colors["accent"], focusthickness=2, focuscolor=self.colors["accent"], relief="flat")
+        style.map("Accent.TButton", background=[("disabled", "#263a5c"), ("pressed", "#255edb"), ("active", self.colors["accent_hover"])], foreground=[("disabled", "#93a4bd"), ("active", "#ffffff")])
+        style.configure("Quiet.TButton", padding=(10, 7), background=self.colors["panel"], foreground=self.colors["muted"], borderwidth=0, relief="flat")
+        style.map("Quiet.TButton", background=[("active", self.colors["panel2"])], foreground=[("active", self.colors["text"])])
+        style.configure("TEntry", padding=(10, 9), fieldbackground=self.colors["input"], foreground=self.colors["text"], insertcolor=self.colors["text"], bordercolor=self.colors["border"], lightcolor=self.colors["border"], darkcolor=self.colors["border"], relief="flat")
+        style.map("TEntry", bordercolor=[("focus", self.colors["accent"])], lightcolor=[("focus", self.colors["accent"])], fieldbackground=[("disabled", self.colors["panel"])])
+        style.configure("TCombobox", padding=(10, 8), fieldbackground=self.colors["input"], foreground=self.colors["text"], background=self.colors["panel2"], arrowcolor=self.colors["muted"], bordercolor=self.colors["border"], lightcolor=self.colors["border"], darkcolor=self.colors["border"], relief="flat")
+        style.map("TCombobox", fieldbackground=[("readonly", self.colors["input"]), ("focus", "#14233b")], foreground=[("readonly", self.colors["text"]), ("disabled", "#64758e")], background=[("readonly", self.colors["panel2"]), ("active", self.colors["surface"])], arrowcolor=[("active", self.colors["accent"]), ("disabled", "#64758e")], bordercolor=[("focus", self.colors["accent"])], lightcolor=[("focus", self.colors["accent"])])
+        self.option_add("*TCombobox*Listbox.background", self.colors["input"])
+        self.option_add("*TCombobox*Listbox.foreground", self.colors["text"])
+        self.option_add("*TCombobox*Listbox.selectBackground", self.colors["accent"])
+        self.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+        style.configure("Horizontal.TProgressbar", troughcolor=self.colors["input"], background=self.colors["accent"], bordercolor=self.colors["border"], lightcolor=self.colors["accent"], darkcolor=self.colors["accent"], thickness=9)
+        style.configure("Vertical.TScrollbar", background=self.colors["panel2"], troughcolor=self.colors["bg"], arrowcolor=self.colors["muted"], bordercolor=self.colors["bg"], relief="flat", arrowsize=12)
         style.map("Vertical.TScrollbar", background=[("active", self.colors["accent"])])
-        style.configure("TNotebook", background=self.colors["bg"], borderwidth=0, tabmargins=(2, 5, 2, 0))
-        style.configure("TNotebook.Tab", background=self.colors["panel2"], foreground=self.colors["muted"],
-                        padding=(16, 10), font=("Segoe UI", 9, "bold"), borderwidth=0)
-        style.map("TNotebook.Tab",
-                  background=[("selected", self.colors["accent"]), ("active", "#1b3553")],
-                  foreground=[("selected", "#ffffff"), ("active", self.colors["text"])])
-        style.configure("Treeview", background=self.colors["input"], fieldbackground=self.colors["input"],
-                        foreground=self.colors["text"], rowheight=34, borderwidth=0,
-                        font=("Segoe UI", 9))
-        style.configure("Treeview.Heading", background=self.colors["panel2"],
-                        foreground="#69b8ff", font=("Segoe UI", 8, "bold"), relief="flat")
-        style.map("Treeview", background=[("selected", self.colors["accent"])],
-                  foreground=[("selected", "#ffffff")])
-
+        style.configure("Horizontal.TScrollbar", background=self.colors["panel2"], troughcolor=self.colors["bg"], arrowcolor=self.colors["muted"], bordercolor=self.colors["bg"], relief="flat", arrowsize=12)
+        style.map("Horizontal.TScrollbar", background=[("active", self.colors["accent"])])
+        style.configure("TNotebook", background=self.colors["bg"], borderwidth=0, tabmargins=(3, 5, 3, 0))
+        style.configure("TNotebook.Tab", background=self.colors["panel"], foreground=self.colors["muted"], padding=(17, 11), font=("Segoe UI", 9, "bold"), borderwidth=0)
+        style.map("TNotebook.Tab", background=[("selected", self.colors["accent"]), ("active", self.colors["panel2"])], foreground=[("selected", "#ffffff"), ("active", self.colors["text"])])
+        style.configure("Treeview", background=self.colors["input"], fieldbackground=self.colors["input"], foreground=self.colors["text"], rowheight=36, borderwidth=0, font=("Segoe UI", 9))
+        style.configure("Treeview.Heading", background=self.colors["panel2"], foreground="#a9caff", font=("Segoe UI", 9, "bold"), relief="flat", padding=(10, 9))
+        style.map("Treeview", background=[("selected", self.colors["accent"])], foreground=[("selected", "#ffffff")])
+        style.configure("TCheckbutton", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 9), padding=(2, 4))
+        style.map("TCheckbutton", background=[("active", self.colors["panel"])], foreground=[("disabled", "#64758e")])
+        style.configure("TRadiobutton", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 9), padding=(2, 4))
+        style.map("TRadiobutton", background=[("active", self.colors["panel"])], foreground=[("disabled", "#64758e")])
+        style.configure("TSeparator", background=self.colors["border"])
+        style.configure("Status.TLabel", background=self.colors["surface"], foreground=self.colors["muted"], padding=(10, 6), font=("Segoe UI", 9))
     def _build(self):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -568,25 +561,25 @@ class App(tk.Tk):
         shell.grid_rowconfigure(1, weight=1)
         shell.grid_columnconfigure(0, weight=1)
 
-        top = tk.Frame(shell, bg="#09101d", padx=18, pady=10,
+        top = tk.Frame(shell, bg="#0b1424", padx=18, pady=10,
                        highlightthickness=1, highlightbackground=self.colors["border"])
         top.grid(row=0, column=0, sticky="ew")
         top.grid_columnconfigure(0, weight=1)
-        brand = tk.Frame(top, bg="#09101d")
+        brand = tk.Frame(top, bg="#0b1424")
         brand.grid(row=0, column=0, sticky="w")
-        tk.Label(brand, text="MARC", bg="#09101d", fg="#edf4ff",
+        tk.Label(brand, text="MARC", bg="#0b1424", fg="#eaf1fc",
                  font=("Segoe UI", 20, "bold")).pack(side="left")
-        tk.Label(brand, text=" / VIDEO STUDIO", bg="#09101d", fg="#2da8ff",
+        tk.Label(brand, text=" / VIDEO STUDIO", bg="#0b1424", fg="#3478f6",
                  font=("Segoe UI", 20, "bold")).pack(side="left")
-        tk.Label(brand, text="   ESTUDIO CREATIVO IA", bg="#09101d", fg=self.colors["muted"],
+        tk.Label(brand, text="   ESTUDIO CREATIVO IA", bg="#0b1424", fg=self.colors["muted"],
                  font=("Segoe UI", 8, "bold")).pack(side="left", padx=(12, 0), pady=(7, 0))
-        head_right = tk.Frame(top, bg="#09101d")
+        head_right = tk.Frame(top, bg="#0b1424")
         head_right.grid(row=0, column=1, sticky="e")
         self.ai_badge = tk.Label(head_right, text="● IA LOCAL · COMPROBANDO",
-                                 bg="#09101d", fg=self.colors["warning"], font=("Segoe UI", 9, "bold"))
+                                 bg="#0b1424", fg=self.colors["warning"], font=("Segoe UI", 9, "bold"))
         self.ai_badge.pack(side="left", padx=(0, 14))
         self.ffmpeg_badge = tk.Label(head_right, text="● FFMPEG · COMPROBANDO",
-                                     bg="#09101d", fg=self.colors["muted"], font=("Segoe UI", 9, "bold"))
+                                     bg="#0b1424", fg=self.colors["muted"], font=("Segoe UI", 9, "bold"))
         self.ffmpeg_badge.pack(side="left", padx=(0, 12))
         self.header_diagnose_button = ttk.Button(head_right, text="Diagnóstico PC", command=self.detect_pc_async)
         self.header_diagnose_button.pack(side="left", padx=(0, 6))
@@ -792,24 +785,24 @@ class App(tk.Tk):
                  fg=self.colors["text"], font=("Segoe UI", 10, "bold")).pack(side="left")
         self.preview_scene_var = tk.StringVar(value="SIN ESCENAS")
         tk.Label(monitor_header, textvariable=self.preview_scene_var, bg=self.colors["panel"],
-                 fg="#69b8ff", font=("Segoe UI", 8, "bold")).pack(side="right")
-        monitor = tk.Frame(preview_dock, bg="#03070d", highlightthickness=1,
+                 fg="#70a7ff", font=("Segoe UI", 8, "bold")).pack(side="right")
+        monitor = tk.Frame(preview_dock, bg="#070c16", highlightthickness=1,
                            highlightbackground=self.colors["border"])
         monitor.grid(row=1, column=0, sticky="nsew", padx=(0, 6))
         monitor.grid_columnconfigure(0, weight=1)
         monitor.grid_rowconfigure(0, weight=1)
-        self.preview_canvas = tk.Canvas(monitor, bg="#03070d", highlightthickness=0,
+        self.preview_canvas = tk.Canvas(monitor, bg="#070c16", highlightthickness=0,
                                         height=196, width=520)
         self.preview_canvas.grid(row=0, column=0, sticky="nsew")
         self.preview_canvas.bind("<Configure>", lambda _event: self._render_preview_frame())
-        self.preview_video_host = tk.Frame(monitor, bg="#03070d", borderwidth=0, highlightthickness=0)
+        self.preview_video_host = tk.Frame(monitor, bg="#070c16", borderwidth=0, highlightthickness=0)
         self.preview_video_host.grid(row=0, column=0, sticky="nsew")
         self.preview_video_host.grid_remove()
         scene_inspector = tk.Frame(preview_dock, bg=self.colors["input"], padx=10, pady=8,
                                    highlightthickness=1, highlightbackground=self.colors["border"])
         scene_inspector.grid(row=1, column=1, sticky="nsew")
         tk.Label(scene_inspector, text="ESCENA ACTUAL", bg=self.colors["input"],
-                 fg="#69b8ff", font=("Segoe UI", 8, "bold")).pack(anchor="w")
+                 fg="#70a7ff", font=("Segoe UI", 8, "bold")).pack(anchor="w")
         self.preview_scene_title_var = tk.StringVar(value="Genera un guion")
         tk.Label(scene_inspector, textvariable=self.preview_scene_title_var, bg=self.colors["input"],
                  fg=self.colors["text"], font=("Segoe UI", 11, "bold"),
@@ -914,7 +907,7 @@ class App(tk.Tk):
         tk.Frame(scene_summary_card, bg=self.colors["accent"], width=3).pack(side="left", fill="y", padx=(0, 10))
         tk.Label(
             scene_summary_card, textvariable=self.scene_summary_var, bg=self.colors["surface"],
-            fg="#83c7ff", font=("Segoe UI Semibold", 9), anchor="w", justify="left", wraplength=1000
+            fg="#a9caff", font=("Segoe UI Semibold", 9), anchor="w", justify="left", wraplength=1000
         ).pack(side="left", fill="x", expand=True)
 
         scene_actions = tk.Frame(scenes_tab, bg=self.colors["panel"])
@@ -1045,7 +1038,7 @@ class App(tk.Tk):
                  fg=self.colors["text"], font=("Segoe UI", 12, "bold")).pack(side="left")
         self.timeline_time_var = tk.StringVar(value="00:00 / 10:00")
         tk.Label(timeline_head, textvariable=self.timeline_time_var, bg=self.colors["panel"],
-                 fg="#69b8ff", font=("Consolas", 10, "bold")).pack(side="right")
+                 fg="#70a7ff", font=("Consolas", 10, "bold")).pack(side="right")
         timeline_tools = tk.Frame(timeline_tab, bg=self.colors["panel"])
         timeline_tools.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         ttk.Button(timeline_tools, text="◀ Escena", command=lambda: self._step_timeline_scene(-1)).pack(side="left")
@@ -1093,13 +1086,13 @@ class App(tk.Tk):
         tk.Label(preview_head, text="MONITOR DE VÍDEO", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 14, "bold")).pack(side="left")
         tk.Label(preview_head, textvariable=self.preview_scene_var, bg=self.colors["panel"],
-                 fg="#69b8ff", font=("Segoe UI", 9, "bold")).pack(side="right")
-        monitor = tk.Frame(preview_tab, bg="#03070d", highlightthickness=1,
+                 fg="#70a7ff", font=("Segoe UI", 9, "bold")).pack(side="right")
+        monitor = tk.Frame(preview_tab, bg="#070c16", highlightthickness=1,
                            highlightbackground=self.colors["border"])
         monitor.grid(row=1, column=0, sticky="nsew")
         monitor.grid_columnconfigure(0, weight=1)
         monitor.grid_rowconfigure(0, weight=1)
-        self.preview_tab_canvas = tk.Canvas(monitor, bg="#03070d", highlightthickness=0,
+        self.preview_tab_canvas = tk.Canvas(monitor, bg="#070c16", highlightthickness=0,
                                             height=300, width=800)
         self.preview_tab_canvas.grid(row=0, column=0, sticky="nsew")
         self.preview_tab_canvas.bind("<Configure>", lambda _event: self._render_preview_frame())
@@ -1130,7 +1123,7 @@ class App(tk.Tk):
         track_card = tk.Frame(audio_tab, bg=self.colors["input"], padx=13, pady=12,
                               highlightthickness=1, highlightbackground=self.colors["border"])
         track_card.grid(row=2, column=0, sticky="ew", pady=(0, 10))
-        tk.Label(track_card, text="NARRACIÓN / VOZ", bg=self.colors["input"], fg="#69b8ff",
+        tk.Label(track_card, text="NARRACIÓN / VOZ", bg=self.colors["input"], fg="#70a7ff",
                  font=("Segoe UI", 9, "bold")).pack(anchor="w")
         self.audio_track_label_var = tk.StringVar(value="Sin pista de narración")
         tk.Label(track_card, textvariable=self.audio_track_label_var, bg=self.colors["input"],
@@ -1144,7 +1137,7 @@ class App(tk.Tk):
         self.clear_audio_button = ttk.Button(track_actions, text="Quitar narración", command=self.clear_audio_track)
         self.clear_audio_button.pack(side="left", padx=(8, 0))
         tk.Frame(track_card, bg=self.colors["border"], height=1).pack(fill="x", pady=(0, 10))
-        tk.Label(track_card, text="MÚSICA DE FONDO", bg=self.colors["input"], fg="#69b8ff",
+        tk.Label(track_card, text="MÚSICA DE FONDO", bg=self.colors["input"], fg="#70a7ff",
                  font=("Segoe UI", 9, "bold")).pack(anchor="w")
         self.music_track_label_var = tk.StringVar(value="Sin música de fondo")
         tk.Label(track_card, textvariable=self.music_track_label_var, bg=self.colors["input"],
@@ -1231,7 +1224,7 @@ class App(tk.Tk):
                  fg=self.colors["text"], font=("Segoe UI", 8, "bold")).pack(side="left")
         self.mini_time_var = tk.StringVar(value="00:00 / 10:00")
         tk.Label(mini_head, textvariable=self.mini_time_var, bg=self.colors["panel"],
-                 fg="#69b8ff", font=("Consolas", 8, "bold")).pack(side="right")
+                 fg="#70a7ff", font=("Consolas", 8, "bold")).pack(side="right")
         mini_shell = tk.Frame(mini_timeline, bg="#080e18")
         mini_shell.grid(row=1, column=0, sticky="ew")
         mini_shell.grid_columnconfigure(0, weight=1)
@@ -4058,10 +4051,10 @@ Write-Output 'NARRATION_OK'
         editors.grid_columnconfigure(1, weight=1, uniform="canon")
         editors.grid_rowconfigure(1, weight=1)
         tk.Label(editors, text="PERSONAJES, REGLAS Y ESCENARIOS",
-                 bg=self.colors["bg"], fg="#69b8ff",
+                 bg=self.colors["bg"], fg="#70a7ff",
                  font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=(2, 6))
         tk.Label(editors, text="ESTADO AL CIERRE DEL EPISODIO",
-                 bg=self.colors["bg"], fg="#69b8ff",
+                 bg=self.colors["bg"], fg="#70a7ff",
                  font=("Segoe UI", 9, "bold")).grid(row=0, column=1, sticky="w", padx=(8, 0), pady=(2, 6))
         bible_frame = tk.Frame(editors, bg=self.colors["input"])
         bible_frame.grid(row=1, column=0, sticky="nsew", padx=(0, 6))
