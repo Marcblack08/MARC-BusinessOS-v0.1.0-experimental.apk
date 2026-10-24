@@ -34,7 +34,7 @@ from story_engine import (
     FPS_OPTIONS, RESOLUTION_PROFILES, SERIES_VIDEO_MODE, SHORT_VIDEO_MODE,
     build_series_context, continuity_review_check, export_dimensions,
     extract_speaker_names, target_word_count, format_short_chapter, visual_shot_count,
-    creative_direction
+    creative_direction, dialogue_quality_warnings
 )
 from remote_server import RemoteControlServer
 
@@ -4407,6 +4407,7 @@ Write-Output 'NARRATION_OK'
             self.continuity_state if self.episode_number > 1 else "",
             expected_scenes=expected_scenes,
         )
+        warnings.extend(dialogue_quality_warnings(script, self.style_var.get()))
         review_text = "¿Has revisado el guion y confirmas que está listo para renderizar?"
         if warnings:
             review_text = (
