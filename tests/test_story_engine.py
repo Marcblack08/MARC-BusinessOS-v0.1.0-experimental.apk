@@ -6,6 +6,7 @@ from story_engine import (
     build_series_context,
     continuity_review_check,
     creative_direction,
+    dialogue_quality_warnings,
     export_dimensions,
     format_short_chapter,
     extract_speaker_names,
@@ -78,6 +79,26 @@ class StoryEngineTests(unittest.TestCase):
         self.assertIn("FORMATO CORTO", horror)
         self.assertIn("llamada a la acción", promo)
         self.assertIn("FORMATO SERIE", promo)
+
+
+    def test_dialogue_quality_flags_narrator_only_fiction(self):
+        script = "[ESCENA 01 — La casa]\\n[NARRADOR]: " + "La casa estaba vacía. " * 60
+        warnings = dialogue_quality_warnings(script, "Terror")
+        self.assertTrue(any("depende casi por completo" in warning for warning in warnings))
+
+    def test_dialogue_quality_accepts_multiple_character_interactions(self):
+        script = (
+            "[ESCENA 01 — La puerta]\\n[NARRADOR]: " + "La lluvia golpea el techo. " * 10 + "\\n"
+            "[MARTA]: No debiste venir.\\n[IVÁN]: Tenía que contártelo.\\n"
+            "[MARTA]: ¿Qué hiciste?\\n[IVÁN]: Le di la carta a tu hermano.\\n"
+            + "Marta retrocedió al comprender el peligro. " * 10
+        )
+        self.assertEqual(dialogue_quality_warnings(script, "Drama"), [])
+
+    def test_dialogue_quality_skips_nonfiction_genres(self):
+        script = "[NARRADOR]: " + "Hoy explicaremos cómo funciona el sistema. " * 40
+        self.assertEqual(dialogue_quality_warnings(script, "Educativo"), [])
+
 
     def test_continuity_review_flags_missing_scene_structure(self):
         script = "Un guion de prueba con suficiente contenido. " + "palabra " * 120
