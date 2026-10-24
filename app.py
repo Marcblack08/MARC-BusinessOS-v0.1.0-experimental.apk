@@ -45,7 +45,9 @@ DATA_DIR = APP_DATA_ROOT / "data"
 PROJECTS_DIR = APP_DATA_ROOT / "projects"
 DB_PATH = DATA_DIR / "marc_video_studio.db"
 
-COMFYUI_URL = "http://127.0.0.1:8188"
+COMFYUI_URL = os.environ.get("MARC_COMFYUI_URL", "http://127.0.0.1:8188").strip().rstrip("/")
+# Probe common local ports; accept only a valid ComfyUI API endpoint.
+COMFYUI_FALLBACK_PORTS = (8188, 8189, 8190, 8180, 7860, 8000)
 
 PLATFORMS = {
     "YouTube 16:9": (1280, 720),
@@ -154,6 +156,7 @@ class App(tk.Tk):
         self.voice_generation_running = False
         self.voice_cancel_event = threading.Event()
         self.available_voice_names = []
+        self.comfy_url = COMFYUI_URL
         self.comfy_available = False
         self.image_generation_running = False
         self._style()
@@ -2377,25 +2380,74 @@ Write-Output 'NARRATION_OK'
     def detect_image_models(self, quiet=False):
         if self.image_generation_running:
             return
-        self.image_ai_status_var.set("Conectando con ComfyUI local…")
+        self.image_ai_status_var.set("Buscando el motor visual local…")
         threading.Thread(target=self._detect_image_models_worker, args=(quiet,), daemon=True).start()
 
+    def _comfy_candidate_urls(self):
+        """Return unique local ComfyUI URLs, honoring an explicit environment override."""
+        candidates = [
+            os.environ.get("MARC_COMFYUI_URL", "").strip(),
+            getattr(self, "comfy_url", ""),
+            "http://127.0.0.1:8188",
+            "http://localhost:8188",
+        ]
+        candidates.extend(f"http://127.0.0.1:{port}" for port in COMFYUI_FALLBACK_PORTS)
+        normalized = []
+        for value in candidates:
+            value = str(value or "").strip().rstrip("/")
+            if value and value not in normalized:
+                normalized.append(value)
+        return normalized
+
     def _detect_image_models_worker(self, quiet=False):
+        """Find a working ComfyUI API and distinguish missing checkpoints from connection errors."""
+        errors = []
+        for base_url in self._comfy_candidate_urls():
+            try:
+                request = urllib.request.Request(
+                    base_url + "/object_info/CheckpointLoaderSimple",
+                    headers={"Accept": "application/json"}
+                )
+                with urllib.request.urlopen(request, timeout=2.5) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                node = payload.get("CheckpointLoaderSimple") if isinstance(payload, dict) else None
+                if not isinstance(node, dict):
+                    raise RuntimeError("el servidor respondió, pero no expone el nodo de checkpoints de ComfyUI")
+                required = node.get("input", {}).get("required", {})
+                option = required.get("ckpt_name", [])
+                models = option[0] if option and isinstance(option[0], list) else []
+                models = [str(model) for model in models]
+                self.generation_queue.put(("image_models", models, quiet, base_url))
+                return
+            except Exception as exc:
+                detail = str(exc).strip().replace("\n", " ")
+                errors.append(f"{base_url}: {detail[:180] or type(exc).__name__}")
+
+        # Report the text engine separately to avoid confusing Ollama with image generation.
+        ollama_note = "Ollama no responde en 127.0.0.1:11434."
         try:
-            request = urllib.request.Request(
-                COMFYUI_URL + "/object_info/CheckpointLoaderSimple",
-                headers={"Accept": "application/json"}
-            )
-            with urllib.request.urlopen(request, timeout=4) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-            node = payload.get("CheckpointLoaderSimple", payload)
-            required = node.get("input", {}).get("required", {})
-            option = required.get("ckpt_name", [])
-            models = option[0] if option and isinstance(option[0], list) else []
-            models = [str(model) for model in models]
-            self.generation_queue.put(("image_models", models, quiet))
-        except Exception as exc:
-            self.generation_queue.put(("image_models_error", str(exc), quiet))
+            with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=1.5) as response:
+                tags = json.loads(response.read().decode("utf-8"))
+            model_names = [
+                str(item.get("name", "")) for item in tags.get("models", [])
+                if isinstance(item, dict) and item.get("name")
+            ]
+            ollama_note = "Ollama responde (" + (", ".join(model_names[:4]) or "sin modelos listados") + "); este servicio genera texto, no imágenes."
+        except Exception:
+            pass
+        detail = (
+            "No se encontró una API de ComfyUI en los puertos locales habituales. "
+            + ollama_note + "
+
+"
+            + "Para generar imágenes, inicia ComfyUI y descarga al menos un checkpoint compatible. "
+            + "MARC no puede convertir Qwen/Ollama en un generador de imágenes por sí solo. "
+            + "Si ComfyUI utiliza otra dirección, define MARC_COMFYUI_URL antes de abrir MARC.
+
+"
+            + "Últimos intentos: " + " | ".join(errors[-4:])
+        )
+        self.generation_queue.put(("image_models_error", detail, quiet))
 
     def generate_scene_image(self):
         if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
@@ -2466,8 +2518,9 @@ Write-Output 'NARRATION_OK'
             self.progressbar.configure(mode="determinate")
 
     def _generate_scene_image_worker(self, project_id, scene_number, scene, checkpoint, drawing_style, platform_name, project_topic, story_bible="", continuity_state=""):
+        base_url = str(getattr(self, "comfy_url", COMFYUI_URL) or COMFYUI_URL).rstrip("/")
         try:
-            self.generation_queue.put(("image_progress", scene_number, "Preparando el prompt visual local…"))
+            self.generation_queue.put(("image_progress", scene_number, f"Preparando el prompt visual · ComfyUI en {base_url}…"))
             style_prompts = {
                 "Anime cinematográfico": "cinematic Japanese anime film frame, expressive character acting, dramatic lighting, detailed anime background art",
                 "Manga en blanco y negro": "black and white manga illustration, inked line art, screentones, expressive panels, high contrast",
@@ -2533,7 +2586,7 @@ Write-Output 'NARRATION_OK'
             }
             body = json.dumps({"prompt": workflow, "client_id": client_id}).encode("utf-8")
             request = urllib.request.Request(
-                COMFYUI_URL + "/prompt", data=body,
+                base_url + "/prompt", data=body,
                 headers={"Content-Type": "application/json"}, method="POST"
             )
             with urllib.request.urlopen(request, timeout=15) as response:
@@ -2547,7 +2600,7 @@ Write-Output 'NARRATION_OK'
             last_status_update = time.monotonic()
             while time.monotonic() < deadline:
                 request = urllib.request.Request(
-                    COMFYUI_URL + "/history/" + str(prompt_id),
+                    base_url + "/history/" + str(prompt_id),
                     headers={"Accept": "application/json"}
                 )
                 with urllib.request.urlopen(request, timeout=15) as response:
@@ -2578,7 +2631,7 @@ Write-Output 'NARRATION_OK'
                 "subfolder": image_info.get("subfolder", ""),
                 "type": image_info.get("type", "output")
             })
-            request = urllib.request.Request(COMFYUI_URL + "/view?" + query)
+            request = urllib.request.Request(base_url + "/view?" + query)
             with urllib.request.urlopen(request, timeout=60) as response:
                 image_bytes = response.read()
             if not image_bytes:
@@ -3381,6 +3434,8 @@ Write-Output 'NARRATION_OK'
                     )
                 elif kind == "image_models":
                     models, quiet = event[1], event[2]
+                    base_url = event[3] if len(event) > 3 else COMFYUI_URL
+                    self.comfy_url = base_url
                     self.comfy_available = True
                     self.image_model_combo.configure(values=models)
                     current_model = self.image_model_var.get()
@@ -3389,9 +3444,9 @@ Write-Output 'NARRATION_OK'
                     elif models:
                         self.image_model_var.set(models[0])
                     self.image_ai_status_var.set(
-                        f"ComfyUI conectado · {len(models)} modelo(s) local(es) disponibles"
+                        f"ComfyUI conectado · {len(models)} checkpoint(s) · {base_url}"
                         if models else
-                        "ComfyUI conectado, pero falta un checkpoint en models/checkpoints"
+                        f"ComfyUI conectado en {base_url}, pero falta un checkpoint en models/checkpoints"
                     )
                     if not models and not quiet:
                         messagebox.showwarning(
@@ -3403,11 +3458,11 @@ Write-Output 'NARRATION_OK'
                     self.comfy_available = False
                     self.image_model_combo.configure(values=[])
                     self.image_model_var.set("")
-                    self.image_ai_status_var.set("ComfyUI local no detectado · las imágenes propias siguen disponibles")
+                    self.image_ai_status_var.set("Motor visual sin conexión · revisar ComfyUI y checkpoint")
                     if not quiet:
-                        messagebox.showinfo(
-                            "Generador local de imágenes no detectado",
-                            "MARC puede renderizar imágenes que importes sin ComfyUI. Para generar ilustraciones localmente, instala/abre ComfyUI en http://127.0.0.1:8188 y coloca un checkpoint compatible.\n\nDetalle: " + detail
+                        messagebox.showwarning(
+                            "Generador de imágenes no disponible",
+                            "La IA de texto y el motor visual son componentes distintos. MARC necesita ComfyUI activo y al menos un checkpoint de imagen para generar ilustraciones.\n\n" + detail
                         )
                 elif kind == "image_progress":
                     self.progress_label_var.set(f"Ilustración IA · escena {event[1]}")
