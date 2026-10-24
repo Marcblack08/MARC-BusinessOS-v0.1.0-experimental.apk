@@ -2257,15 +2257,24 @@ Write-Output 'NARRATION_OK'
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
             return
         script = self.script_text.get("1.0", "end-1c")
-        scenes = parse_script_scenes(script)
-        if not scenes:
+        parsed_scenes = parse_script_scenes(script)
+        if not parsed_scenes:
             messagebox.showwarning("Sin guion", "Genera o escribe un guion antes de exportar subtítulos.")
             return
         try:
             target_seconds = max(60, int(self.duration_var.get() or "10") * 60)
         except ValueError:
             target_seconds = 600
+        required_shots = min(120, visual_shot_count(target_seconds))
+        scenes = (
+            expand_scenes_to_shots(parsed_scenes, required_shots, max_scenes=120)
+            if getattr(self, "auto_expand_storyboard", True) else parsed_scenes
+        )
         durations = allocate_scene_durations(scenes, target_seconds)
+        durations = [
+            min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value))))
+            for i, value in enumerate(durations)
+        ]
         subtitles = build_srt_subtitles(scenes, durations)
         if not subtitles:
             messagebox.showwarning("Sin subtítulos", "No se encontró texto de escena para exportar.")
