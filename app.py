@@ -32,7 +32,7 @@ from scene_engine import (
 from story_engine import (
     FPS_OPTIONS, RESOLUTION_PROFILES, SERIES_VIDEO_MODE, SHORT_VIDEO_MODE,
     build_series_context, continuity_review_check, export_dimensions,
-    extract_speaker_names, target_word_count
+    extract_speaker_names, target_word_count, format_short_chapter, visual_shot_count
 )
 from remote_server import RemoteControlServer
 
@@ -161,6 +161,7 @@ class App(tk.Tk):
         self.comfy_url = COMFYUI_URL
         self.comfy_available = False
         self.image_generation_running = False
+        self.image_prompt_cache = {}
         self._style()
         self._build()
         self.refresh_projects()
@@ -1779,7 +1780,9 @@ class App(tk.Tk):
         if hasattr(self, "scene_summary_var"):
             voice_label = Path(self.audio_track_path).name if self.audio_track_path and Path(self.audio_track_path).is_file() else "sin narración"
             music_label = Path(self.music_track_path).name if self.music_track_path and Path(self.music_track_path).is_file() else "sin música"
-            self.scene_summary_var.set(f"{len(self.scene_data)} escenas · {total_words} palabras · objetivo {self.duration_var.get()} min · {voice_label} · {music_label}")
+            long_shots = sum(1 for duration in durations if duration > 5)
+            visual_note = f" · revisar {long_shots} plano(s) >5 s" if long_shots else " · planos ≤5 s"
+            self.scene_summary_var.set(f"{len(self.scene_data)} planos · {total_words} palabras · objetivo {self.duration_var.get()} min{visual_note} · {voice_label} · {music_label}")
         self._draw_timeline()
         self._render_preview_frame()
 
@@ -2983,28 +2986,30 @@ Write-Output 'NARRATION_OK'
             scene_narration = visual_brief["narration"]
             scene_dialogue = " | ".join(visual_brief["dialogue"])[:900]
             scene_speakers = ", ".join(visual_brief["speakers"]) or "none explicitly labelled"
-            # Text guidance improves consistency but cannot guarantee pixel-identical characters.
-            try:
-                visual_description = self._ollama_request(
-                    "Act as a cinematic storyboard artist and image-prompt director. Convert this one Spanish story scene "
-                    "into one concise English prompt for a SINGLE still image, not a sequence or collage. "
-                    "Describe the visible subjects and their action, facial expression, body language, wardrobe, setting, time/weather, "
-                    "foreground/background, camera framing/angle, lighting and mood. The scene excerpt determines what is happening. "
-                    "Treat the canon as a lookup reference: apply only the visual profile of characters relevant to this scene and only "
-                    "locations or props that the excerpt calls for. Do not copy unrelated profiles into the image and do not invent a new design. "
-                    "Speaker labels are dialogue context, not proof that every speaker must appear on screen. Never render dialogue as written text. "
-                    "Preserve established age range, facial features, hairstyle, clothing cues and signature objects when relevant. "
-                    "Return only the prompt, without headings, markdown or explanation. "
-                    f"Series premise: {project_topic}. Scene title: {visual_brief['title']}. "
-                    f"Narration/action: {scene_narration or story_excerpt}. "
-                    f"Dialogue context for emotion only: {scene_dialogue or 'No explicit dialogue labels'}. "
-                    f"Speaker labels in this scene: {scene_speakers}. "
-                    f"Relevant canonical character reference: {canon_reference or 'No character profile was available'}. "
-                    f"Previous episode state: {continuity_reference or 'No previous episode state supplied'}.",
-                    max_tokens=280
-                )
-            except Exception:
-                visual_description = story_excerpt
+            # Batch mode prepares prompts in grouped Ollama calls before image rendering.
+            visual_description = str(getattr(self, "image_prompt_cache", {}).pop(str(scene_number), "")).strip()
+            if not visual_description:
+                try:
+                    visual_description = self._ollama_request(
+                        "Act as a cinematic storyboard artist and image-prompt director. Convert this one Spanish story scene "
+                        "into one concise English prompt for a SINGLE still image, not a sequence or collage. "
+                        "Describe the visible subjects and their action, facial expression, body language, wardrobe, setting, time/weather, "
+                        "foreground/background, camera framing/angle, lighting and mood. The scene excerpt determines what is happening. "
+                        "Treat the canon as a lookup reference: apply only the visual profile of characters relevant to this scene and only "
+                        "locations or props that the excerpt calls for. Do not copy unrelated profiles into the image and do not invent a new design. "
+                        "Speaker labels are dialogue context, not proof that every speaker must appear on screen. Never render dialogue as written text. "
+                        "Preserve established age range, facial features, hairstyle, clothing cues and signature objects when relevant. "
+                        "Return only the prompt, without headings, markdown or explanation. "
+                        f"Series premise: {project_topic}. Scene title: {visual_brief['title']}. "
+                        f"Narration/action: {scene_narration or story_excerpt}. "
+                        f"Dialogue context for emotion only: {scene_dialogue or 'No explicit dialogue labels'}. "
+                        f"Speaker labels in this scene: {scene_speakers}. "
+                        f"Relevant canonical character reference: {canon_reference or 'No character profile was available'}. "
+                        f"Previous episode state: {continuity_reference or 'No previous episode state supplied'}.",
+                        max_tokens=280
+                    )
+                except Exception:
+                    visual_description = story_excerpt
             prompt = (
                 f"{style_prompt}. One cinematic still of this precise story beat: {visual_description}. "
                 f"Relevant canonical visual cues: {canon_reference[:650]}. "
@@ -3105,6 +3110,70 @@ Write-Output 'NARRATION_OK'
         except Exception as exc:
             self.generation_queue.put(("image_error", scene_number, str(exc)))
 
+    def _prepare_batch_image_prompts_worker(
+        self, scenes_to_plan, drawing_style, project_topic, story_bible, continuity_state
+    ):
+        """Prepare scene prompts in groups, falling back to scene text on model errors."""
+        styles = {
+            "Anime cinematográfico": "cinematic Japanese anime film frame, expressive character acting, dramatic lighting",
+            "Manga en blanco y negro": "black and white manga illustration, inked line art, screentones, high contrast",
+            "Cartoon occidental": "polished western animated series frame, appealing shapes, clear silhouettes",
+            "Cómic realista": "realistic graphic novel illustration, detailed ink and painterly shading",
+            "Acuarela ilustrada": "hand-painted watercolor storybook illustration, delicate paper texture",
+            "Pixel art": "high-quality pixel art scene, coherent pixel grid, limited palette",
+            "3D estilizado": "stylized 3D animated film still, detailed materials, cinematic light",
+            "Realismo cinematográfico": "cinematic photorealistic movie still, natural dramatic lighting",
+        }
+        style_prompt = styles.get(drawing_style, "cinematic illustrated story scene")
+        results = {}
+        total = len(scenes_to_plan)
+        chunk_size = 12
+        for start in range(0, total, chunk_size):
+            group = scenes_to_plan[start:start + chunk_size]
+            briefs, records = {}, []
+            for scene_number, scene in group:
+                brief = build_scene_visual_brief(scene, story_bible, continuity_state)
+                briefs[str(scene_number)] = brief
+                records.append({
+                    "id": str(scene_number), "title": brief["title"],
+                    "action": brief["narration"] or brief["excerpt"],
+                    "dialogue_emotion_only": " | ".join(brief["dialogue"])[:180],
+                    "characters": brief["speakers"], "canon": brief["canon_reference"][:420],
+                })
+            self.generation_queue.put(("image_prompt_plan_progress", start, total,
+                f"Preparando storyboard visual · {start}/{total} escenas"))
+            generated = {}
+            prompt = (
+                "You are a cinematic storyboard artist. Return only a valid JSON object. "
+                "Keys must be supplied scene ids; values are concise English prompts for one still image each. "
+                "No markdown, collage, panels, captions, logos or watermarks. One coherent moment per image. "
+                "Describe visible action, expression, wardrobe, environment, framing, lighting and mood. "
+                "Use relevant character canon and preserve visual identity across scenes. "
+                f"Visual style: {style_prompt}. Premise: {project_topic[:600]}. "
+                "Scene records: " + json.dumps(records, ensure_ascii=False)
+            )
+            try:
+                raw = self._ollama_request(prompt, max_tokens=min(1100, max(320, len(group) * 75)))
+                left, right = raw.find("{"), raw.rfind("}")
+                if left >= 0 and right > left:
+                    parsed = json.loads(raw[left:right + 1])
+                    if isinstance(parsed, dict):
+                        generated = {str(k): str(v).strip() for k,v in parsed.items()
+                                     if str(k) in briefs and isinstance(v, str) and v.strip()}
+            except Exception:
+                generated = {}
+            for scene_number, _scene in group:
+                key = str(scene_number)
+                brief = briefs[key]
+                results[key] = generated.get(key,
+                    f"{brief['title']}. {brief['narration'] or brief['excerpt']}. "
+                    f"Relevant characters: {', '.join(brief['speakers']) or 'as described in the scene'}. "
+                    "One coherent cinematic still, clear focal point, consistent costume and setting.")
+            done = min(total, start + len(group))
+            self.generation_queue.put(("image_prompt_plan_progress", done, total,
+                f"Storyboard preparado · {done}/{total} escenas"))
+        self.generation_queue.put(("image_prompts_ready", results))
+
     def generate_missing_scene_images(self, preconfirmed=False, preview_after=False):
         """Generate missing scene illustrations sequentially through the existing ComfyUI worker."""
         if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
@@ -3152,8 +3221,22 @@ Write-Output 'NARRATION_OK'
         self.batch_image_active = True
         self.preview_after_image_batch = bool(preview_after)
         self.studio_tabs.select(self.scenes_tab)
-        self.status_var.set(f"Preparando {len(missing)} ilustraciones locales con ComfyUI…")
-        self._start_next_missing_scene_image()
+        self.image_prompt_cache = {}
+        self.image_generation_running = True
+        self._set_image_state(True)
+        self.progressbar.configure(mode="indeterminate")
+        self.progressbar.start(12)
+        self.progress_label_var.set("Preparando storyboard visual")
+        self.progress_detail_var.set(f"0/{len(missing)} escenas · agrupando prompts antes de crear imágenes")
+        self.status_var.set(f"Preparando prompts para {len(missing)} ilustraciones; después se generarán en secuencia.")
+        row = self.conn.execute("SELECT topic, story_bible, continuity_state FROM projects WHERE id=?", (self.current_id,)).fetchone()
+        project_topic = str(row["topic"] or "") if row else str(self.topic_var.get() or "")
+        story_bible = str(row["story_bible"] or "") if row else str(self.story_bible or "")
+        continuity_state = str(row["continuity_state"] or "") if row else str(self.continuity_state or "")
+        scenes_to_plan = [(number, dict(self.scene_data[number - 1])) for number in missing]
+        threading.Thread(target=self._prepare_batch_image_prompts_worker,
+            args=(scenes_to_plan, self.drawing_style_var.get(), project_topic, story_bible, continuity_state),
+            daemon=True).start()
 
     def _start_next_missing_scene_image(self):
         if not self.batch_image_active:
@@ -3167,6 +3250,7 @@ Write-Output 'NARRATION_OK'
                 self.status_var.set(f"Ilustraciones listas ({total}). Iniciando vista previa del vídeo…")
                 self.after(250, lambda: self._start_video_render(preview=True))
             else:
+                self.image_prompt_cache = {}
                 self.status_var.set(f"Generación por lotes completada: {total} ilustraciones.")
                 if not getattr(self, "remote_image_batch_active", False):
                     messagebox.showinfo("Ilustraciones listas", f"Se generaron {total} ilustraciones y se asignaron a sus escenas.")
@@ -3478,6 +3562,9 @@ Write-Output 'NARRATION_OK'
                     f"Protagonista: {protagonist}. Conflicto: {conflict}. Narrador: {data['narrator']}. Desenlace: {data['ending']}. "
                     f"Estilo visual: {data['drawing_style']}. Animación: {data['animation_style']}. Plataforma: {data['platform']}. "
                     "Duración aproximada: 2 minutos. Prioriza ritmo y claridad; guion de aproximadamente 220-300 palabras.\n"
+                    f"STORYBOARD OBLIGATORIO: incluye al menos {visual_shot_count(120)} planos/escenas numerados, uno por cada máximo de 5 segundos. "
+                    "Usa encabezados [ESCENA 01 — título concreto], cada uno con un instante visual único, breve y fácil de ilustrar. "
+                    "No agrupes varias acciones ni saltos temporales en una escena. Cada plano debe hacer avanzar la historia.\n"
                     f"Biblia previa si existe: {str(data.get('continuity_state', ''))[:900]}"
                 )
                 fast_result = self._ollama_request(fast_prompt, max_tokens=950)
@@ -3488,7 +3575,7 @@ Write-Output 'NARRATION_OK'
                 if not chapter:
                     raise RuntimeError("Qwen no devolvió un guion. Vuelve a intentarlo.")
                 self.generation_queue.put(("story_bible", story_bible))
-                self.generation_queue.put(("chapter", "\\n\\n[CAPÍTULO 01 DE 01]\\n" + chapter + "\\n", 1, 1))
+                self.generation_queue.put(("chapter", format_short_chapter(chapter), 1, 1))
                 new_state = ("Final del corto: " + chapter[-1800:]).strip()
                 self.generation_queue.put(("done", 1, story_bible, new_state))
                 return
@@ -3540,6 +3627,8 @@ Write-Output 'NARRATION_OK'
             completed = 0
             total_words = target_word_count(data["duration"], data["video_mode"])
             words_per_chapter = max(150, round(total_words / chapter_count))
+            seconds_per_chapter = max(60, round(data["duration"] * 60 / chapter_count))
+            visual_shots_per_chapter = visual_shot_count(seconds_per_chapter)
             for index in range(1, chapter_count + 1):
                 if self.cancel_event.is_set():
                     self.generation_queue.put(("cancelled",))
@@ -3565,7 +3654,9 @@ Write-Output 'NARRATION_OK'
                     f"Narrador: {data['narrator']}. Protagonista: {data['protagonist'] or 'según la biblia'}. Conflicto: {data['conflict'] or 'según la biblia'}. "
                     f"Desenlace: {data['ending']}. Dirección visual: {data['drawing_style']}; animación: {data['animation_style']}. Plataforma: {data['platform']}. "
                     f"Duración: {data['duration']} minutos. Tipo: {previous_label}. Episodio {episode_number}; capítulo {index}/{chapter_count}. "
-                    f"Objetivo aproximado: {words_per_chapter} palabras; si el ritmo pide menos, prioriza calidad sobre relleno.\n\n"
+                    f"Objetivo aproximado: {words_per_chapter} palabras; si el ritmo pide menos, prioriza calidad sobre relleno.\n"
+                    f"STORYBOARD: crea al menos {visual_shots_per_chapter} planos numerados para este capítulo, con máximo de 5 segundos por plano. "
+                    "Usa [ESCENA 01 — título concreto] y describe un momento visual único, no una secuencia de acciones agrupadas.\n\n"
                     "BIBLIA / ESCALETA CANÓNICA:\n" + story_bible + "\n\nESCALETA DEL EPISODIO ACTUAL:\n" + plan +
                     ("\n\nESTADO AL FINAL DEL EPISODIO ANTERIOR (continúa después de estos hechos):\n" + previous_excerpt
                      if previous_excerpt else "\n\nINICIO: introduce al público directamente en el conflicto.")
@@ -3963,6 +4054,21 @@ Write-Output 'NARRATION_OK'
                             "Generador de imágenes no disponible",
                             "La IA de texto y el motor visual son componentes distintos. MARC necesita ComfyUI activo y al menos un checkpoint de imagen para generar ilustraciones.\n\n" + detail
                         )
+                elif kind == "image_prompt_plan_progress":
+                    completed, total, detail = event[1], event[2], event[3]
+                    self.progress_label_var.set(f"Preparando storyboard · {completed}/{total}")
+                    self.progress_detail_var.set(detail)
+                    self.status_var.set(detail)
+                elif kind == "image_prompts_ready":
+                    self.image_prompt_cache = dict(event[1] or {})
+                    self.image_generation_running = False
+                    self.progressbar.stop()
+                    self.progressbar.configure(mode="determinate", maximum=max(1, len(self.image_prompt_cache)), value=0)
+                    self._set_image_state(False)
+                    self.progress_label_var.set(f"Storyboard listo · {len(self.image_prompt_cache)} prompts")
+                    self.progress_detail_var.set("Prompts agrupados con IA; iniciando generación local de imágenes.")
+                    self.status_var.set("Prompts visuales preparados. ComfyUI generará las ilustraciones una por una.")
+                    self.after(180, self._start_next_missing_scene_image)
                 elif kind == "image_progress":
                     self.progress_label_var.set(f"Ilustración IA · escena {event[1]}")
                     self.progress_detail_var.set(event[2])
@@ -3997,6 +4103,9 @@ Write-Output 'NARRATION_OK'
                     self.batch_image_active = False
                     self.batch_image_queue = []
                     self.batch_image_total = 0
+                    self.image_prompt_cache = {}
+                    self.progressbar.stop()
+                    self.progressbar.configure(mode="determinate")
                     self.preview_after_image_batch = False
                     self._set_image_state(False)
                     self.progress_label_var.set(f"Ilustración fallida · escena {scene_number}")
