@@ -1,3 +1,4 @@
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -93,6 +94,7 @@ class SceneEngineTests(unittest.TestCase):
         self.assertTrue(all(item["word_count"] == len(item["text"].split()) for item in expanded))
         self.assertIn("Marta", " ".join(item["text"] for item in expanded))
         self.assertTrue(all(item["text"].strip() for item in expanded))
+        self.assertTrue(all(not re.search(r"— plano [AB] — plano [AB]$", item["title"]) for item in expanded))
 
     def test_expand_scenes_keeps_short_scenes_and_respects_limit(self):
         scenes = [{"title": "Corto", "text": "[JUAN]: Corre.", "word_count": 2}]
