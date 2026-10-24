@@ -992,7 +992,7 @@ class App(tk.Tk):
                     values=["Corte directo", "Fundido suave"])
         tk.Label(visual_tab, text="La intensidad modifica el movimiento de cámara sobre imágenes fijas. Los fundidos se aplican al inicio y final de cada plano. El texto puede mostrar el título, una frase narrativa o quedar oculto; las escenas sin ilustración conservan su tarjeta de texto.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
-                 wraplength=1050, justify="left").grid(row=3, column=0, sticky="w", pady=(16, 0))
+                 wraplength=1050, justify="left").grid(row=4, column=0, sticky="w", pady=(16, 0))
         canon_actions = tk.Frame(visual_tab, bg=self.colors["panel"])
         canon_actions.grid(row=4, column=0, sticky="ew", pady=(18, 0))
         ttk.Button(canon_actions, text="📖 Biblia de la historia y continuidad",
