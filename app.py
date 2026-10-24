@@ -932,7 +932,7 @@ class App(tk.Tk):
             wraplength=800, justify="left"
         ).pack(side="left", padx=(10, 0))
 
-        # Compact overview timeline, always visible below the script/scene workspace.
+        # Secondary overview timeline kept available in code; the full editor lives in Montage.
         mini_timeline = tk.Frame(lower, bg=self.colors["panel"], padx=8, pady=5,
                                  highlightthickness=1, highlightbackground=self.colors["border"])
         mini_timeline.grid(row=4, column=0, sticky="ew", pady=(5, 0))
