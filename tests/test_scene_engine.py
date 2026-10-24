@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from scene_engine import (
-    allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief,
+    allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief, expand_scenes_to_shots,
     build_srt_subtitles, build_subtitle_drawtext_filter, ffmpeg_filter_path,
     parse_script_scenes, scene_motion_filter
 )
@@ -80,6 +80,29 @@ class SceneEngineTests(unittest.TestCase):
         self.assertEqual(brief["title"], "Título largo")
 
 
+    def test_expand_scenes_to_target_shot_count_without_losing_text(self):
+        original_text = (
+            "[NARRADOR]: La puerta se abre lentamente. Marta entra en la habitación y descubre "
+            "una fotografía sobre la mesa. Nadie debería estar allí. Una sombra se mueve detrás "
+            "de la cortina. Marta retrocede y escucha tres golpes en la pared."
+        )
+        original = [{"index": 1, "title": "La habitación", "text": original_text, "word_count": len(original_text.split())}]
+        expanded = expand_scenes_to_shots(original, target_shots=4)
+        self.assertGreaterEqual(len(expanded), 4)
+        self.assertEqual([item["index"] for item in expanded], list(range(1, len(expanded) + 1)))
+        self.assertTrue(all(item["word_count"] == len(item["text"].split()) for item in expanded))
+        self.assertIn("Marta", " ".join(item["text"] for item in expanded))
+        self.assertTrue(all(item["text"].strip() for item in expanded))
+
+    def test_expand_scenes_keeps_short_scenes_and_respects_limit(self):
+        scenes = [{"title": "Corto", "text": "[JUAN]: Corre.", "word_count": 2}]
+        short_result = expand_scenes_to_shots(scenes, target_shots=20)
+        self.assertEqual(len(short_result), 1)
+        self.assertEqual(short_result[0]["text"], scenes[0]["text"])
+        long_text = " ".join(["palabra"] * 80)
+        expanded = expand_scenes_to_shots([{"title": "Largo", "text": long_text}], target_shots=20, max_scenes=5)
+        self.assertEqual(len(expanded), 5)
+
     def test_scene_duration_sum_matches_target_when_feasible(self):
         scenes = [
             {"word_count": 100, "text": "one"},
@@ -113,6 +136,29 @@ class SceneEngineTests(unittest.TestCase):
         self.assertIn("1\n00:00:00,000 --> 00:00:07,000", srt)
         self.assertIn("2\n00:00:07,000 --> 00:00:12,000", srt)
         self.assertIn("Lucía cerró la puerta.", srt)
+
+    def test_srt_long_scene_is_split_into_readable_cues(self):
+        text = (
+            "[NARRADOR]: La puerta se abre lentamente y Marta entra en la habitación. "
+            "Una fotografía cae al suelo. Desde el pasillo, alguien susurra su nombre."
+        )
+        srt = build_srt_subtitles([{"text": text}], [5], chars_per_line=34)
+        cues = srt.strip().split("\n\n")
+        self.assertGreater(len(cues), 1)
+        self.assertTrue(all(len("\\n".join(cue.splitlines()[2:])) <= 34 for cue in cues))
+        self.assertNotIn("[NARRADOR]", srt)
+        self.assertIn("00:00:05,000", cues[-1])
+
+    def test_srt_cues_remain_contiguous_across_scenes(self):
+        srt = build_srt_subtitles(
+            [{"text": "Primera escena con bastante texto para dividir."}, {"text": "[MARTA]: Ya llegué."}],
+            [3, 2],
+            chars_per_line=20,
+        )
+        cues = [cue.splitlines() for cue in srt.strip().split("\n\n")]
+        self.assertTrue(cues[0][1].startswith("00:00:00,000 -->"))
+        self.assertTrue(cues[-1][1].endswith("00:00:05,000"))
+        self.assertEqual(cues[-1][2], "Ya llegué.")
 
     def test_srt_rejects_mismatched_scene_durations(self):
         with self.assertRaises(ValueError):
