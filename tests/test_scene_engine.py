@@ -186,6 +186,13 @@ class SceneEngineTests(unittest.TestCase):
         pixel = scene_motion_filter("Pixel animation", 720, 1280, 5)
         self.assertIn("flags=neighbor", pixel)
 
+    def test_motion_intensity_changes_zoom_amount(self):
+        subtle = scene_motion_filter("2D fluida", 1280, 720, 5, "Suave")
+        energetic = scene_motion_filter("2D fluida", 1280, 720, 5, "Muy animado")
+        self.assertIn("1.025", subtle)
+        self.assertIn("1.16", energetic)
+        self.assertNotEqual(subtle, energetic)
+
 
 if __name__ == "__main__":
     unittest.main()
