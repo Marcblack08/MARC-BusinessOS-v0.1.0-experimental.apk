@@ -5359,7 +5359,22 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                 temp_output_path.unlink()
                 audio_video_path.replace(temp_output_path)
             temp_output_path.replace(output_path)
-            self.generation_queue.put(("render_progress", final_steps, final_steps, "Verificando integridad, resolución, FPS, duración y audio del MP4…"))
+            self.generation_queue.put(("render_progress", final_steps, final_steps, "Generando subtítulos SRT y verificando integridad del MP4…"))
+            subtitle_path = output_path.with_suffix(".srt")
+            try:
+                subtitle_scenes = [scenes[index] for index in concat_scene_indexes]
+                subtitle_text = build_srt_subtitles(subtitle_scenes, final_durations)
+                subtitle_path.write_text(subtitle_text, encoding="utf-8-sig")
+            except (OSError, ValueError, IndexError) as subtitle_exc:
+                try:
+                    if subtitle_path.exists():
+                        subtitle_path.unlink()
+                except OSError:
+                    pass
+                self.generation_queue.put((
+                    "render_progress", final_steps, final_steps,
+                    f"Aviso: no se pudo crear el archivo SRT: {subtitle_exc}"
+                ))
             quality_report = inspect_media_file(
                 str(output_path),
                 ffmpeg_path=ffmpeg,
@@ -5368,7 +5383,9 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                 expected_fps=fps,
                 minimum_duration=sum(final_durations),
                 require_audio=bool(has_audio),
+                subtitle_path=str(subtitle_path),
             )
+            quality_report["subtitle_path"] = str(subtitle_path) if subtitle_path.is_file() else None
             project_dir = PROJECTS_DIR / str(project_id)
             (project_dir / "last_export.txt").write_text(str(output_path), encoding="utf-8")
             self.generation_queue.put((
