@@ -178,7 +178,7 @@ def inspect_media_file(
                 [ffmpeg_path, "-hide_banner", "-i", str(media_path.resolve())],
                 capture_output=True, text=True, timeout=45, creationflags=creationflags,
             )
-            info = parse_ffmpeg_probe_text((completed.stderr or "") + "\\n" + (completed.stdout or ""))
+            info = parse_ffmpeg_probe_text((completed.stderr or "") + "\n" + (completed.stdout or ""))
         except (OSError, subprocess.TimeoutExpired):
             info = None
     if info is None:
