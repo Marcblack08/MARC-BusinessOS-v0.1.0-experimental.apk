@@ -104,17 +104,17 @@ def validate_media_info(
 def parse_ffmpeg_probe_text(text: str) -> dict[str, Any]:
     """Extract conservative stream facts from FFmpeg stderr when ffprobe is unavailable."""
     source = str(text or "")
-    duration_match = re.search(r"Duration:\\s*(\\d+):(\\d+):(\\d+(?:\\.\\d+)?)", source)
+    duration_match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", source)
     duration = None
     if duration_match:
         hours, minutes, seconds = duration_match.groups()
         duration = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
     video_match = re.search(
-        r"Stream #\\d+:\\d+.*?Video:.*?(?:,\\s*(\\d{2,5})x(\\d{2,5})(?:\\[[^]]+\\])?)",
+        r"Stream #\d+:\d+.*?Video:.*?(?:,\s*(\d{2,5})x(\d{2,5})(?:\[[^]]+\])?)",
         source, re.IGNORECASE
     )
-    fps_match = re.search(r"(?:,\\s*|\\s)(\\d+(?:\\.\\d+)?)\\s*fps", source, re.IGNORECASE)
-    has_audio = bool(re.search(r"Stream #\\d+:\\d+.*?Audio:", source, re.IGNORECASE))
+    fps_match = re.search(r"(?:,\s*|\s)(\d+(?:\.\d+)?)\s*fps", source, re.IGNORECASE)
+    has_audio = bool(re.search(r"Stream #\d+:\d+.*?Audio:", source, re.IGNORECASE))
     streams = []
     if video_match:
         stream = {"codec_type": "video", "width": int(video_match.group(1)), "height": int(video_match.group(2))}
