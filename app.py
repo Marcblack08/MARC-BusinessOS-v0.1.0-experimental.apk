@@ -354,6 +354,19 @@ class App(tk.Tk):
                     elif action == "approve_script":
                         self._remote_load_project(payload.get("project_id"))
                         self.approve_script(remote=True)
+                    elif action == "generate_images":
+                        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+                            raise RuntimeError("MARC ya tiene un trabajo en curso.")
+                        self._remote_load_project(payload.get("project_id"))
+                        if not self._existing_approval():
+                            raise RuntimeError("Revisa y aprueba el guion antes de generar imágenes.")
+                        if not self.comfy_available or not self.image_model_var.get().strip():
+                            self.detect_image_models(quiet=True)
+                            raise RuntimeError("ComfyUI o el checkpoint no están listos. Abre ComfyUI, selecciona/detecta un modelo y vuelve a intentarlo.")
+                        self.remote_image_batch_active = True
+                        self.generate_missing_scene_images(preconfirmed=True, preview_after=False)
+                        if not self.batch_image_active and not self.image_generation_running:
+                            self.remote_image_batch_active = False
                     elif action == "render_video":
                         if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
                             raise RuntimeError("MARC ya tiene un trabajo en curso.")
@@ -3144,7 +3157,9 @@ Write-Output 'NARRATION_OK'
                 self.after(250, lambda: self._start_video_render(preview=True))
             else:
                 self.status_var.set(f"Generación por lotes completada: {total} ilustraciones.")
-                messagebox.showinfo("Ilustraciones listas", f"Se generaron {total} ilustraciones y se asignaron a sus escenas.")
+                if not getattr(self, "remote_image_batch_active", False):
+                    messagebox.showinfo("Ilustraciones listas", f"Se generaron {total} ilustraciones y se asignaron a sus escenas.")
+                self.remote_image_batch_active = False
             return
         scene_number = self.batch_image_queue.pop(0)
         item = f"scene_{scene_number}"
@@ -3941,7 +3956,9 @@ Write-Output 'NARRATION_OK'
                     self.progress_label_var.set(f"Ilustración fallida · escena {scene_number}")
                     self.progress_detail_var.set("Comprueba ComfyUI, el checkpoint y su consola.")
                     self.status_var.set("No se pudo generar la ilustración local.")
-                    messagebox.showerror("Error de ilustración IA", detail)
+                    if not getattr(self, "remote_image_batch_active", False):
+                        messagebox.showerror("Error de ilustración IA", detail)
+                    self.remote_image_batch_active = False
                 elif kind == "chapter":
                     self.completed_chapters = event[2]
                     percent = round((self.completed_chapters / max(1, event[3])) * 100)
@@ -4290,7 +4307,10 @@ Write-Output 'NARRATION_OK'
                 messagebox.showerror("Proyecto no encontrado", "Vuelve a abrir o guardar el proyecto e inténtalo otra vez.")
             return
         if not preview and not row["approved"]:
-            messagebox.showerror("Aprobación obligatoria", "No se puede exportar: primero debes aprobar el guion.")
+            if remote:
+                self.status_var.set("No se puede exportar: primero revisa y aprueba el guion desde el teléfono.")
+            else:
+                messagebox.showerror("Aprobación obligatoria", "No se puede exportar: primero debes aprobar el guion.")
             return
         scenes = parse_script_scenes(row["script"] or "")
         if not scenes:
