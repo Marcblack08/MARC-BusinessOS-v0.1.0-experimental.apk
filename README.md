@@ -87,3 +87,17 @@ Ollama, sus modelos, ComfyUI/checkpoints y FFmpeg no se incluyen en el instalado
 - La estimación de tiempo es orientativa; ComfyUI depende mucho del checkpoint y del hardware y puede tardar mucho o no funcionar en GPUs antiguas.
 - La reproducción integrada utiliza VLC Media Player instalado en el equipo junto con el envoltorio `python-vlc` incluido en el paquete. Si libVLC no está disponible, MARC ofrece abrir el MP4 en el reproductor externo del sistema. La vista de storyboard sigue siendo distinta del reproductor de vídeo.
 - La validación de CI no sustituye las pruebas del programa gráfico, generación local y exportación sobre el PC real.
+
+
+## Acceso remoto desde el teléfono
+
+La versión con panel remoto inicia un pequeño servidor web dentro de MARC, ligado únicamente a `127.0.0.1:8765`. En el menú **Más → Acceso remoto desde el teléfono**, MARC muestra el código privado y las instrucciones para conectar el navegador del teléfono.
+
+1. Abre MARC en la computadora y deja la aplicación en ejecución.
+2. En CMD o PowerShell de Windows, ejecuta `tailscale serve --bg 8765`. Usa **Serve**, no Funnel: el panel debe permanecer privado dentro de tu red Tailscale.
+3. Copia la dirección HTTPS que Tailscale muestre y ábrela en el navegador del teléfono, con Tailscale conectado.
+4. Introduce el código que MARC muestra en **Acceso remoto desde el teléfono**.
+
+El panel permite crear guiones en Ollama local, revisar y guardar guiones, aprobarlos, solicitar lotes de imágenes mediante ComfyUI, exportar MP4, cancelar trabajos, subir recursos al proyecto y descargar archivos. Los MP4 solicitados desde el teléfono se guardan en la carpeta `projects/<id>/exports` para que el panel los ofrezca como descarga.
+
+**Requisitos y seguridad:** la computadora debe permanecer encendida, conectada a Internet y con MARC abierto; Ollama y ComfyUI se ejecutan en la computadora. El servidor no se publica directamente en la LAN ni en Internet; Tailscale Serve lo expone solo dentro del tailnet. No ejecutes `tailscale funnel` ni compartas el código de acceso. Los archivos subidos se guardan en `projects/<id>/uploads`; para asignar una imagen a una escena, abre el proyecto en MARC y selecciónala desde los controles de escenas. La carga y descarga remotas deben probarse con el instalador de Windows antes de utilizar el flujo en producción.
