@@ -1,6 +1,6 @@
 import unittest
 
-from media_quality import parse_ffmpeg_probe_text, validate_media_info
+from media_quality import parse_ffmpeg_probe_text, validate_media_info, validate_srt_text
 
 
 class MediaQualityTests(unittest.TestCase):
@@ -56,6 +56,26 @@ class MediaQualityTests(unittest.TestCase):
         self.assertTrue(result["passed"], result["errors"])
         self.assertAlmostEqual(result["duration"], 120.5)
         self.assertEqual(result["audio_streams"], 1)
+
+    def test_srt_validator_accepts_sequential_non_overlapping_cues(self):
+        text = (
+            "1\\n00:00:00,000 --> 00:00:02,000\\nLa puerta estaba abierta.\\n\\n"
+            "2\\n00:00:02,000 --> 00:00:04,500\\nNo debiste venir."
+        )
+        result = validate_srt_text(text)
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["cue_count"], 2)
+
+    def test_srt_validator_rejects_bad_timestamps_and_nonconsecutive_numbers(self):
+        text = (
+            "1\\n00:00:03,000 --> 00:00:02,000\\nTexto uno.\\n\\n"
+            "3\\n00:00:01,000 --> 00:00:04,000\\nTexto dos."
+        )
+        result = validate_srt_text(text)
+        self.assertFalse(result["passed"])
+        self.assertTrue(any("hora final" in error for error in result["errors"]))
+        self.assertTrue(any("numeración" in error for error in result["errors"]))
+        self.assertTrue(any("solapan" in error for error in result["errors"]))
 
     def test_ffmpeg_fallback_does_not_invent_missing_streams(self):
         info = parse_ffmpeg_probe_text("Duration: 00:00:01.00, start: 0.0")
