@@ -1056,12 +1056,12 @@ class App(tk.Tk):
                                              variable=self.timeline_zoom_var,
                                              command=lambda _value: self._draw_timeline())
         self.timeline_zoom_scale.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        timeline_shell = tk.Frame(timeline_tab, bg="#080e18",
+        timeline_shell = tk.Frame(timeline_tab, bg="#0b1120",
                                   highlightthickness=1, highlightbackground=self.colors["border"])
         timeline_shell.grid(row=2, column=0, sticky="nsew")
         timeline_shell.grid_rowconfigure(0, weight=1)
         timeline_shell.grid_columnconfigure(0, weight=1)
-        self.timeline_canvas = tk.Canvas(timeline_shell, bg="#080e18", height=245,
+        self.timeline_canvas = tk.Canvas(timeline_shell, bg="#0b1120", height=245,
                                         highlightthickness=0, borderwidth=0)
         self.timeline_canvas.grid(row=0, column=0, sticky="nsew")
         timeline_xscroll = ttk.Scrollbar(timeline_shell, orient="horizontal",
@@ -1225,10 +1225,10 @@ class App(tk.Tk):
         self.mini_time_var = tk.StringVar(value="00:00 / 10:00")
         tk.Label(mini_head, textvariable=self.mini_time_var, bg=self.colors["panel"],
                  fg="#70a7ff", font=("Consolas", 8, "bold")).pack(side="right")
-        mini_shell = tk.Frame(mini_timeline, bg="#080e18")
+        mini_shell = tk.Frame(mini_timeline, bg="#0b1120")
         mini_shell.grid(row=1, column=0, sticky="ew")
         mini_shell.grid_columnconfigure(0, weight=1)
-        self.mini_timeline_canvas = tk.Canvas(mini_shell, bg="#080e18", height=76,
+        self.mini_timeline_canvas = tk.Canvas(mini_shell, bg="#0b1120", height=76,
                                              highlightthickness=0, borderwidth=0)
         self.mini_timeline_canvas.grid(row=0, column=0, sticky="ew")
         mini_xscroll = ttk.Scrollbar(mini_shell, orient="horizontal",
@@ -1359,29 +1359,29 @@ class App(tk.Tk):
         self.timeline_scale_px = scale
         self.timeline_left_px = left
         self.timeline_canvas.configure(scrollregion=(0, 0, width, height))
-        bg = "#080e18"
+        bg = "#0b1120"
         muted = self.colors["muted"]
         border = "#203651"
         canvas.create_rectangle(0, 0, width, height, fill=bg, outline=bg)
-        canvas.create_rectangle(0, 0, left - 1, height, fill="#0d1726", outline="#0d1726")
+        canvas.create_rectangle(0, 0, left - 1, height, fill="#111b2e", outline="#111b2e")
         # Time ruler
         canvas.create_text(12, 16, text="TIEMPO", anchor="w", fill=muted,
                            font=("Segoe UI", 8, "bold"))
         tick = 30 if total <= 600 else 60
         for seconds in range(0, total + 1, tick):
             x = left + seconds * scale
-            canvas.create_line(x, 28, x, height, fill="#18283b", width=1)
-            canvas.create_line(x, 24, x, 32, fill="#5d7591", width=1)
+            canvas.create_line(x, 28, x, height, fill="#263650", width=1)
+            canvas.create_line(x, 24, x, 32, fill="#7f91ac", width=1)
             canvas.create_text(x + 3, 15, text=f"{seconds // 60:02d}:{seconds % 60:02d}",
-                               anchor="w", fill="#9aadc6", font=("Consolas", 8))
+                               anchor="w", fill="#a2b1c7", font=("Consolas", 8))
         lanes = [
-            ("VÍDEO", 36, 82, "#2678b9"),
+            ("VÍDEO", 36, 82, "#3478f6"),
             ("NARRACIÓN", 91, 125, "#159d8a"),
             ("MÚSICA", 134, 168, "#8060c7"),
             ("SUBTÍTULOS", 177, 211, "#b7791f"),
         ]
         for label, y1, y2, color in lanes:
-            canvas.create_rectangle(0, y1, width, y2, fill="#0b1421", outline="#142338")
+            canvas.create_rectangle(0, y1, width, y2, fill="#0c1526", outline="#263650")
             canvas.create_text(12, (y1 + y2) / 2, text=label, anchor="w",
                                fill=color, font=("Segoe UI", 8, "bold"))
         durations = allocate_scene_durations(self.scene_data, total) if self.scene_data else []
@@ -1396,10 +1396,10 @@ class App(tk.Tk):
             x2 = left + (elapsed + seconds) * scale
             asset = self.scene_assets.get(str(index + 1), "")
             has_image = bool(asset and Path(asset).is_file())
-            color = "#245f91" if has_image else "#36475d"
+            color = "#245f91" if has_image else "#263650"
             selected = getattr(self, "timeline_selected_scene", 1) == index + 1
             canvas.create_rectangle(x1 + 1, 39, max(x1 + 5, x2 - 2), 79,
-                                    fill=color, outline="#55c5ff" if selected else "#42617f",
+                                    fill=color, outline="#55c5ff" if selected else "#35547d",
                                     width=2 if selected else 1, tags=(f"timeline_scene_{index + 1}",))
             max_chars = max(5, int((x2 - x1 - 8) / 7))
             title = scene.get("title", f"Escena {index + 1}")
@@ -1428,11 +1428,11 @@ class App(tk.Tk):
                                    anchor="w", fill="#ffffff", font=("Segoe UI", 8, "bold"))
             else:
                 canvas.create_text(left + 8, (y1 + y2) / 2, text=f"Sin pista · {label}",
-                                   anchor="w", fill="#62758b", font=("Segoe UI", 8))
+                                   anchor="w", fill="#8e9fb8", font=("Segoe UI", 8))
         playhead = max(0, min(total, int(getattr(self, "timeline_playhead_seconds", 0))))
         px = left + playhead * scale
-        canvas.create_line(px, 25, px, 215, fill="#ffcf5a", width=2, tags=("playhead",))
-        canvas.create_polygon(px - 5, 25, px + 5, 25, px, 32, fill="#ffcf5a", outline="#ffcf5a")
+        canvas.create_line(px, 25, px, 215, fill="#f5c451", width=2, tags=("playhead",))
+        canvas.create_polygon(px - 5, 25, px + 5, 25, px, 32, fill="#f5c451", outline="#f5c451")
         canvas.xview_moveto(max(0.0, min(1.0, (px - 180) / max(1, width))))
         if hasattr(self, "timeline_time_var"):
             self.timeline_time_var.set(f"{playhead // 60:02d}:{playhead % 60:02d} / {total // 60:02d}:{total % 60:02d}")
@@ -1465,18 +1465,18 @@ class App(tk.Tk):
                 x += clip_width
             full_width = max(viewport, x + 12)
             canvas.configure(scrollregion=(0, 0, full_width, height))
-            canvas.create_rectangle(0, 0, full_width, height, fill="#080e18", outline="#080e18")
-            canvas.create_rectangle(0, 0, left - 1, height, fill="#0d1726", outline="#0d1726")
-            canvas.create_text(8, 13, text="TIEMPO", anchor="w", fill="#9aadc6", font=("Segoe UI", 7, "bold"))
-            canvas.create_text(8, 35, text="VÍDEO", anchor="w", fill="#55b5ff", font=("Segoe UI", 7, "bold"))
+            canvas.create_rectangle(0, 0, full_width, height, fill="#0b1120", outline="#0b1120")
+            canvas.create_rectangle(0, 0, left - 1, height, fill="#111b2e", outline="#111b2e")
+            canvas.create_text(8, 13, text="TIEMPO", anchor="w", fill="#a2b1c7", font=("Segoe UI", 7, "bold"))
+            canvas.create_text(8, 35, text="VÍDEO", anchor="w", fill="#70a7ff", font=("Segoe UI", 7, "bold"))
             canvas.create_text(8, 57, text="VOZ", anchor="w", fill="#42d5ba", font=("Segoe UI", 7, "bold"))
             canvas.create_text(8, 75, text="MÚSICA", anchor="w", fill="#b29bff", font=("Segoe UI", 7, "bold"))
             tick = 60 if total <= 1800 else 300
             for seconds in range(0, total + 1, tick):
                 pos = left + seconds * scale
-                canvas.create_line(pos, 20, pos, height - 1, fill="#1c2b3e")
+                canvas.create_line(pos, 20, pos, height - 1, fill="#263650")
                 canvas.create_text(pos + 3, 13, text=f"{seconds//60:02d}:{seconds%60:02d}",
-                                   anchor="w", fill="#7489a3", font=("Consolas", 7))
+                                   anchor="w", fill="#8e9fb8", font=("Consolas", 7))
             if not hasattr(self, "_mini_thumb_cache"):
                 self._mini_thumb_cache = {}
             try:
@@ -1491,7 +1491,7 @@ class App(tk.Tk):
                 selected = number == getattr(self, "timeline_selected_scene", 1)
                 fill = "#176e9d" if has_image else "#29384b"
                 canvas.create_rectangle(x1, 24, x2 - 2, 45, fill=fill,
-                                        outline="#68d3ff" if selected else "#46617d",
+                                        outline="#68d3ff" if selected else "#35547d",
                                         width=2 if selected else 1, tags=(f"mini_scene_{number}",))
                 label_x = x1 + 4
                 if has_image and pillow_available and x2 - x1 >= 42:
@@ -1520,22 +1520,22 @@ class App(tk.Tk):
                     canvas.create_text(label_x, 34, text=clip_label, anchor="w",
                                        fill="#f4f8ff", font=("Segoe UI", 7, "bold"),
                                        tags=(f"mini_scene_{number}",))
-            voice_color = "#159d8a" if self.audio_track_path and Path(self.audio_track_path).is_file() else "#1a2935"
-            music_color = "#6a4eab" if self.music_track_path and Path(self.music_track_path).is_file() else "#1a2935"
+            voice_color = "#159d8a" if self.audio_track_path and Path(self.audio_track_path).is_file() else "#18263d"
+            music_color = "#6a4eab" if self.music_track_path and Path(self.music_track_path).is_file() else "#18263d"
             canvas.create_rectangle(left, 49, full_width - 6, 64, fill=voice_color, outline=voice_color)
-            voice_label = Path(self.audio_track_path).name if voice_color != "#1a2935" else "Sin narración"
+            voice_label = Path(self.audio_track_path).name if voice_color != "#18263d" else "Sin narración"
             canvas.create_text(left + 5, 56, text=voice_label, anchor="w",
-                               fill="#d9fff5" if voice_color != "#1a2935" else "#61748b",
+                               fill="#d9fff5" if voice_color != "#18263d" else "#8e9fb8",
                                font=("Segoe UI", 7, "bold"))
             canvas.create_rectangle(left, 68, full_width - 6, 82, fill=music_color, outline=music_color)
-            music_label = Path(self.music_track_path).name if music_color != "#1a2935" else "Sin música"
+            music_label = Path(self.music_track_path).name if music_color != "#18263d" else "Sin música"
             canvas.create_text(left + 5, 75, text=music_label, anchor="w",
-                               fill="#e8ddff" if music_color != "#1a2935" else "#61748b",
+                               fill="#e8ddff" if music_color != "#18263d" else "#8e9fb8",
                                font=("Segoe UI", 7, "bold"))
             playhead = max(0, int(getattr(self, "timeline_playhead_seconds", 0)))
             px = left + playhead * scale
-            canvas.create_line(px, 19, px, height, fill="#ffcf5a", width=2, tags=("mini_playhead",))
-            canvas.create_polygon(px - 4, 19, px + 4, 19, px, 25, fill="#ffcf5a", outline="#ffcf5a")
+            canvas.create_line(px, 19, px, height, fill="#f5c451", width=2, tags=("mini_playhead",))
+            canvas.create_polygon(px - 4, 19, px + 4, 19, px, 25, fill="#f5c451", outline="#f5c451")
             if hasattr(self, "mini_time_var"):
                 self.mini_time_var.set(
                     f"{playhead//60:02d}:{playhead%60:02d} / {target_seconds//60:02d}:{target_seconds%60:02d}"
@@ -2546,7 +2546,7 @@ Write-Output 'NARRATION_OK'
                                             fill="#101d30", outline="#24466c", width=2)
                     canvas.create_text(width // 2, height * 0.24,
                                        text=f"STORYBOARD  /  ESCENA {number:02d}",
-                                       fill="#55b5ff", font=("Segoe UI", 9, "bold"))
+                                       fill="#70a7ff", font=("Segoe UI", 9, "bold"))
                     title = scene.get("title", f"Escena {number}")
                     canvas.create_text(width // 2, height * 0.45, text=title[:90], width=width - 70,
                                        fill="#f2f7ff", font=("Segoe UI", 15 if height > 200 else 12, "bold"),
