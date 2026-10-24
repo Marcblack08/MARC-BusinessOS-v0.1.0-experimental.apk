@@ -4752,6 +4752,9 @@ Write-Output 'NARRATION_OK'
             index + 1 for index in range(len(scenes))
             if not asset_map.get(str(index + 1))
         ]
+        self._pipeline_checkpoint("storyboard", "completed", f"Storyboard preparado: {len(scenes)} planos")
+        if not missing_images:
+            self._pipeline_checkpoint("images", "completed", f"Todas las escenas tienen imagen ({len(scenes)})")
         if missing_images and not remote:
             model_ready = bool(self.image_model_var.get().strip())
             if preview and model_ready:
@@ -4781,6 +4784,11 @@ Write-Output 'NARRATION_OK'
                     )
                 if not messagebox.askyesno("Escenas sin ilustración", warning):
                     return
+        if missing_images:
+            self._pipeline_checkpoint(
+                "images", "skipped",
+                f"Se continúa con tarjetas de texto en {len(missing_images)} plano(s) sin ilustración"
+            )
 
         preview_audio_path = self.audio_track_path if self.audio_track_path and Path(self.audio_track_path).is_file() else ""
         chosen_voice = self.voice_var.get().strip() if hasattr(self, "voice_var") else "(Automática)"
