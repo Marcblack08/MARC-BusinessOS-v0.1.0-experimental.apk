@@ -190,26 +190,41 @@ def parse_script_scenes(script: str, max_scenes: int = 120) -> list[dict]:
     return scenes
 
 
-def allocate_scene_durations(scenes: Iterable[dict], total_seconds: int) -> list[int]:
-    """Allocate integer scene lengths proportional to word count, with a 5 s minimum."""
+def allocate_scene_durations(
+    scenes: Iterable[dict], total_seconds: int, max_scene_seconds: int = 5
+) -> list[int]:
+    """Allocate durations while ensuring no still-image shot exceeds the configured cap.
+
+    If there are too few scenes for the requested runtime, the resulting montage is
+    shorter rather than holding a still for longer than the cap. The scene panel
+    reports how many additional shots are needed to reach the requested runtime.
+    """
     items = list(scenes)
     if not items:
         return []
-    target = max(int(total_seconds), 5 * len(items))
-    weights = [max(1, int(item.get("word_count", len(str(item.get("text", "")).split())))) for item in items]
-    total_weight = sum(weights)
-    durations = [max(5, int(target * weight / total_weight)) for weight in weights]
-    # Bring the sum back to the target without violating a 5-second per-scene minimum.
-    delta = target - sum(durations)
-    if delta > 0:
-        durations[-1] += delta
-    elif delta < 0:
-        for i in sorted(range(len(durations)), key=lambda j: durations[j], reverse=True):
-            take = min(durations[i] - 5, -delta)
-            durations[i] -= take
-            delta += take
-            if delta == 0:
-                break
+    try:
+        cap = int(max_scene_seconds)
+        requested = int(total_seconds)
+    except (TypeError, ValueError):
+        raise ValueError("Durations must be integers.") from None
+    if cap < 1 or requested < 1:
+        raise ValueError("Durations must be greater than zero.")
+    weights = [
+        max(1, int(item.get("word_count", len(str(item.get("text", "")).split()))))
+        for item in items
+    ]
+    # Every scene needs at least one second, but no still-image clip may exceed cap.
+    target = min(max(requested, len(items)), cap * len(items))
+    durations = [1] * len(items)
+    remaining = target - len(items)
+    # Add seconds to the scenes with the highest weighted need, respecting the cap.
+    while remaining > 0:
+        eligible = [i for i, value in enumerate(durations) if value < cap]
+        if not eligible:
+            break
+        chosen = max(eligible, key=lambda i: (weights[i] / (durations[i] + 1), -i))
+        durations[chosen] += 1
+        remaining -= 1
     return durations
 
 
