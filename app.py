@@ -1200,7 +1200,7 @@ class App(tk.Tk):
             command=self.export_subtitles
         )
         self.export_srt_button.pack(side="left")
-        tk.Label(subtitle_actions, text="Crea un archivo de subtítulos con tiempos aproximados por escena.",
+        tk.Label(subtitle_actions, text="Ajusta los tiempos al MP4 final; la sincronía por palabra sigue siendo aproximada.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).pack(side="left", padx=(10, 0))
         tk.Label(audio_tab, text="Para voces en español, instala un paquete de voz en Configuración de Windows → Hora e idioma → Voz. La voz disponible depende de Windows y del idioma instalado.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
@@ -5369,7 +5369,16 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
             subtitle_path = output_path.with_suffix(".srt")
             try:
                 subtitle_scenes = [scenes[index] for index in concat_scene_indexes]
-                subtitle_text = build_srt_subtitles(subtitle_scenes, final_durations)
+                # Probe final muxed MP4: -shortest can make it shorter than the
+                # planned repeated-shot timeline when narration ends earlier.
+                timing_probe = inspect_media_file(str(temp_output_path), ffmpeg_path=ffmpeg)
+                actual_media_duration = timing_probe.get("duration") if timing_probe.get("passed") else None
+                subtitle_text = build_srt_subtitles(
+                    subtitle_scenes,
+                    final_durations,
+                    total_duration_seconds=float(actual_media_duration)
+                    if actual_media_duration and actual_media_duration > 0 else float(sum(final_durations)),
+                )
                 subtitle_path.write_text(subtitle_text, encoding="utf-8-sig")
             except (OSError, ValueError, IndexError) as subtitle_exc:
                 try:
