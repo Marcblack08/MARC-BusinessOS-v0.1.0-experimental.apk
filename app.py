@@ -494,12 +494,12 @@ class App(tk.Tk):
         style.configure("Muted.TLabel", background=self.colors["bg"], foreground=self.colors["muted"], font=("Segoe UI", 9))
         style.configure("Title.TLabel", background=self.colors["bg"], foreground="#62b7ff", font=("Segoe UI", 23, "bold"))
         style.configure("Section.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 11, "bold"))
-        style.configure("TButton", padding=(10, 7), font=("Segoe UI Semibold", 9), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=1, relief="flat")
+        style.configure("TButton", padding=(12, 9), font=("Segoe UI Semibold", 9), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=1, relief="flat")
         style.map("TButton",
                   background=[("active", "#203b5d"), ("pressed", self.colors["accent"])],
                   foreground=[("disabled", "#60738b")],
                   bordercolor=[("active", self.colors["accent"])])
-        style.configure("Accent.TButton", padding=(12, 8), font=("Segoe UI", 9, "bold"),
+        style.configure("Accent.TButton", padding=(14, 10), font=("Segoe UI", 9, "bold"),
                         background=self.colors["accent"], foreground="#ffffff", borderwidth=0, relief="flat")
         style.map("Accent.TButton", background=[("active", self.colors["accent_hover"]), ("pressed", "#0875df")])
         style.configure("TEntry", padding=(10, 9), fieldbackground=self.colors["input"],
@@ -526,12 +526,12 @@ class App(tk.Tk):
         style.map("Vertical.TScrollbar", background=[("active", self.colors["accent"])])
         style.configure("TNotebook", background=self.colors["bg"], borderwidth=0, tabmargins=(2, 5, 2, 0))
         style.configure("TNotebook.Tab", background=self.colors["panel2"], foreground=self.colors["muted"],
-                        padding=(12, 7), font=("Segoe UI", 9, "bold"), borderwidth=0)
+                        padding=(16, 10), font=("Segoe UI", 9, "bold"), borderwidth=0)
         style.map("TNotebook.Tab",
                   background=[("selected", self.colors["accent"]), ("active", "#1b3553")],
                   foreground=[("selected", "#ffffff"), ("active", self.colors["text"])])
         style.configure("Treeview", background=self.colors["input"], fieldbackground=self.colors["input"],
-                        foreground=self.colors["text"], rowheight=28, borderwidth=0,
+                        foreground=self.colors["text"], rowheight=34, borderwidth=0,
                         font=("Segoe UI", 9))
         style.configure("Treeview.Heading", background=self.colors["panel2"],
                         foreground="#69b8ff", font=("Segoe UI", 8, "bold"), relief="flat")
@@ -876,9 +876,17 @@ class App(tk.Tk):
         tk.Label(scenes_tab, text="Organiza el guion como escenas, asigna ilustraciones propias o genera imágenes con un motor local opcional.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1000, justify="left").grid(row=1, column=0, sticky="w", pady=(4, 6))
-        self.scene_summary_var = tk.StringVar(value="0 escenas · 0 palabras")
-        tk.Label(scenes_tab, textvariable=self.scene_summary_var, bg=self.colors["panel"],
-                 fg="#69b8ff", font=("Segoe UI", 9, "bold")).grid(row=2, column=0, sticky="w", pady=(0, 8))
+        self.scene_summary_var = tk.StringVar(value="0 planos · 0 palabras · planos ≤5 s")
+        scene_summary_card = tk.Frame(
+            scenes_tab, bg=self.colors["surface"], padx=12, pady=9,
+            highlightbackground=self.colors["border"], highlightthickness=1
+        )
+        scene_summary_card.grid(row=2, column=0, sticky="ew", pady=(0, 10))
+        tk.Frame(scene_summary_card, bg=self.colors["accent"], width=3).pack(side="left", fill="y", padx=(0, 10))
+        tk.Label(
+            scene_summary_card, textvariable=self.scene_summary_var, bg=self.colors["surface"],
+            fg="#83c7ff", font=("Segoe UI Semibold", 9), anchor="w", justify="left", wraplength=1000
+        ).pack(side="left", fill="x", expand=True)
 
         scene_actions = tk.Frame(scenes_tab, bg=self.colors["panel"])
         scene_actions.grid(row=3, column=0, sticky="ew", pady=(0, 7))
