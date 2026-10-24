@@ -124,3 +124,71 @@ def parse_ffmpeg_probe_text(text: str) -> dict[str, Any]:
     if has_audio:
         streams.append({"codec_type": "audio"})
     return {"format": {"duration": duration} if duration is not None else {}, "streams": streams}
+
+
+def inspect_media_file(
+    path: str,
+    ffmpeg_path: str | None = None,
+    ffprobe_path: str | None = None,
+    expected_width: int | None = None,
+    expected_height: int | None = None,
+    expected_fps: float | None = None,
+    minimum_duration: float | None = None,
+    require_audio: bool = False,
+) -> dict[str, Any]:
+    """Probe a rendered file, preferring ffprobe and falling back to FFmpeg's input report."""
+    import json
+    import os
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    media_path = Path(path)
+    if not media_path.is_file() or media_path.stat().st_size <= 1024:
+        return {
+            "passed": False, "checks": [],
+            "errors": ["El archivo de salida no existe o está vacío."],
+            "warnings": [], "duration": None, "width": None, "height": None,
+            "fps": None, "audio_streams": 0, "subtitle_streams": 0,
+        }
+    probe = ffprobe_path or shutil.which("ffprobe")
+    if not probe and ffmpeg_path:
+        sibling_name = "ffprobe.exe" if os.name == "nt" else "ffprobe"
+        sibling = Path(ffmpeg_path).resolve().with_name(sibling_name)
+        if sibling.is_file():
+            probe = str(sibling)
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    info = None
+    if probe:
+        try:
+            completed = subprocess.run(
+                [probe, "-v", "error", "-show_streams", "-show_format", "-of", "json", str(media_path.resolve())],
+                capture_output=True, text=True, timeout=45, creationflags=creationflags,
+            )
+            if completed.returncode == 0:
+                parsed = json.loads(completed.stdout or "{}")
+                if isinstance(parsed, dict):
+                    info = parsed
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            info = None
+    if info is None and ffmpeg_path:
+        try:
+            completed = subprocess.run(
+                [ffmpeg_path, "-hide_banner", "-i", str(media_path.resolve())],
+                capture_output=True, text=True, timeout=45, creationflags=creationflags,
+            )
+            info = parse_ffmpeg_probe_text((completed.stderr or "") + "\\n" + (completed.stdout or ""))
+        except (OSError, subprocess.TimeoutExpired):
+            info = None
+    if info is None:
+        return {
+            "passed": False, "checks": [],
+            "errors": ["No se pudo inspeccionar el MP4: no hay ffprobe disponible o la lectura falló."],
+            "warnings": [], "duration": None, "width": None, "height": None,
+            "fps": None, "audio_streams": 0, "subtitle_streams": 0,
+        }
+    return validate_media_info(
+        info, expected_width=expected_width, expected_height=expected_height,
+        expected_fps=expected_fps, minimum_duration=minimum_duration,
+        require_audio=require_audio,
+    )
