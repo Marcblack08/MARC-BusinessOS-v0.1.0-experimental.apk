@@ -5096,18 +5096,35 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                     sibling_probe = Path(ffmpeg).resolve().with_name(ffprobe_name)
                     if sibling_probe.is_file():
                         ffprobe = str(sibling_probe)
+                voice_seconds = 0.0
+                creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
                 if ffprobe:
                     try:
                         probe = subprocess.run(
                             [ffprobe, "-v", "error", "-show_entries", "format=duration",
                              "-of", "default=noprint_wrappers=1:nokey=1", str(Path(audio_path).resolve())],
-                            capture_output=True, text=True, timeout=30,
-                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+                            capture_output=True, text=True, timeout=30, creationflags=creationflags,
                         )
                         voice_seconds = float((probe.stdout or "").strip()) if probe.returncode == 0 else 0.0
                     except (OSError, ValueError, subprocess.TimeoutExpired):
                         voice_seconds = 0.0
-                    if math.isfinite(voice_seconds) and voice_seconds > sum(final_durations) + 0.25:
+                # Some portable FFmpeg bundles omit ffprobe; FFmpeg still reports duration on input.
+                if not voice_seconds:
+                    try:
+                        probe = subprocess.run(
+                            [ffmpeg, "-hide_banner", "-i", str(Path(audio_path).resolve())],
+                            capture_output=True, text=True, timeout=30, creationflags=creationflags,
+                        )
+                        duration_match = re.search(
+                            r"Duration:\\s*(\\d+):(\\d+):(\\d+(?:\\.\\d+)?)",
+                            (probe.stderr or "") + "\\n" + (probe.stdout or ""),
+                        )
+                        if duration_match:
+                            hours, minutes, seconds = duration_match.groups()
+                            voice_seconds = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+                    except (OSError, subprocess.TimeoutExpired):
+                        voice_seconds = 0.0
+                if math.isfinite(voice_seconds) and voice_seconds > sum(final_durations) + 0.25:
                         original_video_seconds = sum(final_durations)
                         while sum(final_durations) < math.ceil(voice_seconds):
                             concat_scene_indexes.extend(range(total))
