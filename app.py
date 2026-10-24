@@ -27,7 +27,7 @@ from urllib.parse import urlencode
 
 from scene_engine import (
     allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief,
-    build_srt_subtitles, build_subtitle_drawtext_filter, ffmpeg_filter_path,
+    build_srt_subtitles, build_subtitle_drawtext_filter, expand_scenes_to_shots, ffmpeg_filter_path,
     parse_script_scenes, scene_motion_filter
 )
 from story_engine import (
@@ -1800,11 +1800,13 @@ class App(tk.Tk):
         children = self.scene_outline.get_children("")
         if children:
             self.scene_outline.delete(*children)
-        self.scene_data = parse_script_scenes(script)
+        parsed_scenes = parse_script_scenes(script)
         try:
             target_seconds = max(60, int(self.duration_var.get() or "10") * 60)
         except (ValueError, tk.TclError):
             target_seconds = 600
+        required_shots = min(120, visual_shot_count(target_seconds))
+        self.scene_data = expand_scenes_to_shots(parsed_scenes, required_shots, max_scenes=120)
         durations = allocate_scene_durations(self.scene_data, target_seconds)
         durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value)))) for i, value in enumerate(durations)]
         total_words = 0
