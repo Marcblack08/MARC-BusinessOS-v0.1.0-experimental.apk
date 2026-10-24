@@ -37,6 +37,7 @@ from story_engine import (
     creative_direction, dialogue_quality_warnings
 )
 from production_pipeline import ProductionPipeline, STAGE_LABELS
+from media_quality import inspect_media_file
 from remote_server import RemoteControlServer
 
 APP_NAME = "MARC Video Studio AI Desktop"
@@ -5332,9 +5333,22 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                 temp_output_path.unlink()
                 audio_video_path.replace(temp_output_path)
             temp_output_path.replace(output_path)
+            self.generation_queue.put(("render_progress", final_steps, final_steps, "Verificando integridad, resolución, FPS, duración y audio del MP4…"))
+            quality_report = inspect_media_file(
+                str(output_path),
+                ffmpeg_path=ffmpeg,
+                expected_width=width,
+                expected_height=height,
+                expected_fps=fps,
+                minimum_duration=sum(final_durations),
+                require_audio=bool(has_audio),
+            )
             project_dir = PROJECTS_DIR / str(project_id)
             (project_dir / "last_export.txt").write_text(str(output_path), encoding="utf-8")
-            self.generation_queue.put(("render_done", str(output_path), len(concat_scene_indexes), sum(final_durations), bool(is_preview)))
+            self.generation_queue.put((
+                "render_done", str(output_path), len(concat_scene_indexes),
+                sum(final_durations), bool(is_preview), quality_report
+            ))
         except RuntimeError as exc:
             if "__MARC_RENDER_CANCELLED__" in str(exc):
                 self.generation_queue.put(("render_cancelled",))
