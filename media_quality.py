@@ -206,7 +206,7 @@ def inspect_media_file(
             "name": "subtitles", "passed": subtitle_result["passed"],
             "detail": f"SRT válido: {subtitle_result['cue_count']} subtítulo(s)." if subtitle_result["passed"] else "El SRT no superó la validación."
         })
-        report["subtitle_streams"] = subtitle_result["cue_count"]
+        report["subtitle_cues"] = subtitle_result["cue_count"]
         if not subtitle_result["passed"]:
             report["errors"].extend(subtitle_result["errors"])
             report["passed"] = False
