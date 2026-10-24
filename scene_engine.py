@@ -261,6 +261,7 @@ def expand_scenes_to_shots(
             break
         left_text, right_text = halves
         base_title = str(original.get("title", f"Escena {index + 1}")).strip()
+        base_title = re.sub(r"\s+—\s+plano\s+[AB]$", "", base_title, flags=re.IGNORECASE).strip()
         left = dict(original)
         right = dict(original)
         left["text"] = left_text
