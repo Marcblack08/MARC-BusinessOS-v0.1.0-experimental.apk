@@ -4,6 +4,7 @@ from story_engine import (
     SHORT_VIDEO_MODE,
     build_series_context,
     continuity_review_check,
+    creative_direction,
     export_dimensions,
     format_short_chapter,
     extract_speaker_names,
@@ -67,6 +68,20 @@ class StoryEngineTests(unittest.TestCase):
         self.assertIn("BIBLIA CANÓNICA", context)
         self.assertIn("ESTADO CANÓNICO", context)
         self.assertIn("continúa desde aquí", context)
+
+    def test_creative_direction_adapts_to_genre_and_platform(self):
+        horror = creative_direction("Terror", "TikTok / Reels / Shorts 9:16", SHORT_VIDEO_MODE)
+        promo = creative_direction("Promocional", "YouTube 16:9", SERIES_VIDEO_MODE)
+        self.assertIn("anomalía", horror)
+        self.assertIn("FORMATO VERTICAL", horror)
+        self.assertIn("FORMATO CORTO", horror)
+        self.assertIn("llamada a la acción", promo)
+        self.assertIn("FORMATO SERIE", promo)
+
+    def test_continuity_review_flags_missing_scene_structure(self):
+        script = "Un guion de prueba con suficiente contenido. " + "palabra " * 120
+        warnings = continuity_review_check(script)
+        self.assertTrue(any("encabezados [ESCENA" in warning for warning in warnings))
 
     def test_continuity_review_flags_generic_opening(self):
         warnings = continuity_review_check("Había una vez un reino muy lejano " + "palabra " * 110)
