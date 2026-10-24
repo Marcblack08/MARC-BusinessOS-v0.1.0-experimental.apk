@@ -28,7 +28,7 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 - Persistencia local en SQLite con migraciones para bases existentes.
 - Tabla de escenas con título, palabras, duración asignada y recurso visual.
 - Asignación de imágenes propias a las escenas.
-- Integración opcional con ComfyUI local en `http://127.0.0.1:8188` para generar una imagen fija por escena.
+- Integración opcional con ComfyUI local para generar una imagen fija por escena. MARC detecta el puerto predeterminado y varios puertos alternativos, muestra la URL conectada y diferencia un servicio apagado de la ausencia de checkpoints. Ollama/Qwen se usa para texto; no genera imágenes por sí solo. El endpoint se puede fijar con la variable de entorno `MARC_COMFYUI_URL`.
 - Render MP4 en segundo plano, con barra de progreso y cancelación. Las escenas terminadas se guardan como puntos de recuperación y se reutilizan si el contenido, la duración, la imagen o la resolución no han cambiado. El progreso informa de bloques aproximados de 5 minutos. Los perfiles exigentes pueden tardar considerablemente en equipos antiguos; MARC avisa antes de exportar y respeta la resolución elegida. Imágenes asignadas reciben movimiento sencillo de cámara; las escenas sin imágenes se renderizan como tarjetas de texto.
 - Pestaña de audio con pistas separadas de narración y música; generación de voz offline con Windows System.Speech, mezcla de ambas pistas con volumen de música reducido y repetición opcional de la música. Incluye la acción «Añadir audio al último vídeo» para aplicar narración y/o música a un MP4 ya exportado sin volver a renderizar las escenas.
 - Aprobación humana obligatoria antes de exportar; modificar el guion invalida la aprobación.
@@ -42,6 +42,14 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 - Ollama y el modelo local `qwen2.5:3b` para generar guiones.
 - FFmpeg para exportar MP4.
 - Opcional: ComfyUI local y un checkpoint compatible para generación de imágenes.
+
+### Diagnóstico de imágenes
+1. Abre ComfyUI y espera a que su interfaz/API esté lista. El puerto habitual es `8188`; MARC también comprueba algunos puertos alternativos.
+2. En **Escenas**, pulsa **Detectar ComfyUI** y selecciona un checkpoint disponible.
+3. Si MARC indica que Ollama responde pero no encuentra ComfyUI, la generación de guiones está operativa, pero falta iniciar/configurar el motor de imágenes. Instala o inicia ComfyUI y coloca un checkpoint compatible en su carpeta de modelos antes de volver a detectar.
+4. Para una instancia en otra dirección, define `MARC_COMFYUI_URL` (por ejemplo `http://127.0.0.1:8189`) en el entorno desde el que abres MARC.
+
+La detección de servicios no instala ComfyUI ni descarga checkpoints automáticamente; esos componentes requieren instalación y espacio/recursos locales.
 - Equipo objetivo: Intel Core i5 de 4.ª generación, 16 GB RAM, SSD y NVIDIA GTX 750. Las historias largas tardarán más; la GTX 750 tiene recursos limitados para modelos de imagen modernos.
 
 ## Instalación desde el código
