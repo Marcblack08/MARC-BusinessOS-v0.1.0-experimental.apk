@@ -2,7 +2,7 @@ name: Python source validation
 
 on:
   push:
-    branches: [main, "ui/**", "feature/**"]
+    branches: [main, "ui/**", "feature/**", "audit/**"]
   workflow_dispatch:
 
 jobs:
