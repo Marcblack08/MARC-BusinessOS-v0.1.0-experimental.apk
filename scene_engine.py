@@ -403,14 +403,40 @@ def build_audio_filter_graph(
     return ";".join(parts)
 
 
-def build_srt_subtitles(scenes: Iterable[dict], durations: Iterable[int], chars_per_line: int = 42) -> str:
-    """Build readable scene-timed SRT cues, splitting long lines and distributing time by words."""
+def build_srt_subtitles(
+    scenes: Iterable[dict],
+    durations: Iterable[int | float],
+    chars_per_line: int = 42,
+    total_duration_seconds: float | None = None,
+) -> str:
+    """Build readable scene-timed SRT cues scaled to the final media timeline.
+
+    Per-cue timing within a scene is estimated; this is not word-level forced alignment.
+    """
     items = list(scenes)
     times = list(durations)
     if len(items) != len(times):
         raise ValueError("Scene and duration counts must match.")
     if chars_per_line < 10:
         raise ValueError("chars_per_line must be at least 10.")
+    try:
+        numeric_times = [float(value) for value in times]
+    except (TypeError, ValueError):
+        raise ValueError("Durations must be numeric.") from None
+    if any(not math.isfinite(value) or value <= 0 for value in numeric_times):
+        raise ValueError("Durations must be finite numbers greater than zero.")
+    if total_duration_seconds is not None:
+        try:
+            target_duration = float(total_duration_seconds)
+        except (TypeError, ValueError):
+            raise ValueError("total_duration_seconds must be numeric.") from None
+        if not math.isfinite(target_duration) or target_duration <= 0:
+            raise ValueError("total_duration_seconds must be a finite number greater than zero.")
+        planned_duration = sum(numeric_times)
+        if planned_duration <= 0:
+            raise ValueError("The planned timeline must have positive duration.")
+        scale = target_duration / planned_duration
+        numeric_times = [value * scale for value in numeric_times]
 
     def stamp(milliseconds: int) -> str:
         milliseconds = max(0, int(milliseconds))
@@ -420,13 +446,11 @@ def build_srt_subtitles(scenes: Iterable[dict], durations: Iterable[int], chars_
         return f"{hours:02d}:{minutes:02d}:{seconds:02d},{millis:03d}"
 
     def clean_caption(value: str) -> str:
-        # Speaker labels are useful to the voice engine, but usually clutter captions.
         value = re.sub(r"(?i)\[(?:NARRADOR|NARRADORA|PERSONAJE|VOZ EN OFF)\]\s*:\s*", "", value)
         value = re.sub(r"\[([^\]]{1,40})\]\s*:\s*", "", value)
         return " ".join(value.split()).strip()
 
     def caption_chunks(value: str) -> list[str]:
-        # Split at word boundaries and prefer punctuation when it is close to the limit.
         words = value.split()
         chunks: list[str] = []
         current: list[str] = []
@@ -451,9 +475,10 @@ def build_srt_subtitles(scenes: Iterable[dict], durations: Iterable[int], chars_
     parts: list[str] = []
     elapsed_ms = 0
     cue_number = 0
-    for scene, duration in zip(items, times):
+    planned_ms = [max(1, round(value * 1000)) for value in numeric_times]
+    for scene_index, scene in enumerate(items):
+        duration_ms = planned_ms[scene_index]
         body = clean_caption(str(scene.get("text", "")))
-        duration_ms = max(1, int(duration)) * 1000
         if not body:
             elapsed_ms += duration_ms
             continue
@@ -467,13 +492,10 @@ def build_srt_subtitles(scenes: Iterable[dict], durations: Iterable[int], chars_
                 cue_end = elapsed_ms + duration_ms
             else:
                 allocated = round(duration_ms * weight / total_weight)
-                # Reserve at least one millisecond for each remaining cue.
                 allocated = min(max(1, allocated), max(1, duration_ms - consumed - (len(chunks) - index - 1)))
                 cue_end = cue_start + allocated
             cue_number += 1
-            parts.append(
-                f"{cue_number}\n{stamp(cue_start)} --> {stamp(cue_end)}\n{chunk}"
-            )
+            parts.append(f"{cue_number}\n{stamp(cue_start)} --> {stamp(cue_end)}\n{chunk}")
             consumed = cue_end - elapsed_ms
         elapsed_ms += duration_ms
     return "\n\n".join(parts) + ("\n" if parts else "")
