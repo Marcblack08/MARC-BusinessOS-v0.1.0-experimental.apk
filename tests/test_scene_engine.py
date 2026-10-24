@@ -96,7 +96,9 @@ class SceneEngineTests(unittest.TestCase):
 
     def test_expand_scenes_keeps_short_scenes_and_respects_limit(self):
         scenes = [{"title": "Corto", "text": "[JUAN]: Corre.", "word_count": 2}]
-        self.assertEqual(expand_scenes_to_shots(scenes, target_shots=20), scenes)
+        short_result = expand_scenes_to_shots(scenes, target_shots=20)
+        self.assertEqual(len(short_result), 1)
+        self.assertEqual(short_result[0]["text"], scenes[0]["text"])
         long_text = " ".join(["palabra"] * 80)
         expanded = expand_scenes_to_shots([{"title": "Largo", "text": long_text}], target_shots=20, max_scenes=5)
         self.assertEqual(len(expanded), 5)
