@@ -730,6 +730,10 @@ class App(tk.Tk):
         self.details_button = ttk.Button(status_head, text="＋ Diagnóstico y estimaciones",
                                          command=self.toggle_status_details)
         self.details_button.pack(side="right")
+        self.remote_access_button = ttk.Button(
+            status_head, text="Acceso remoto", command=self.show_remote_access
+        )
+        self.remote_access_button.pack(side="right", padx=(0, 6))
         self.progressbar = ttk.Progressbar(statuscard, mode="determinate", maximum=100, value=0)
         self.progressbar.pack(fill="x", pady=(4, 2))
         self.progress_detail_var = tk.StringVar(value="0% · En espera")
