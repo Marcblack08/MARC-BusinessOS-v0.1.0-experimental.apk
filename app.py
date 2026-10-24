@@ -27,7 +27,7 @@ from urllib.parse import urlencode
 
 from scene_engine import (
     allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief,
-    build_srt_subtitles, build_subtitle_drawtext_filter, ffmpeg_filter_path,
+    build_srt_subtitles, build_subtitle_drawtext_filter, expand_scenes_to_shots, ffmpeg_filter_path,
     parse_script_scenes, scene_motion_filter
 )
 from story_engine import (
@@ -169,6 +169,7 @@ class App(tk.Tk):
         self.scene_data = []
         self.scene_assets = {}
         self.scene_duration_overrides = {}
+        self.auto_expand_storyboard = True
         self.last_export_path = ""
         self.audio_track_path = ""
         self.music_track_path = ""
@@ -1720,6 +1721,15 @@ class App(tk.Tk):
                     self.scene_assets = {str(k): str(v) for k, v in loaded.items()}
         except (OSError, json.JSONDecodeError):
             self.scene_assets = {}
+        expansion_manifest = project_dir / "auto_expand_storyboard.txt"
+        try:
+            if expansion_manifest.is_file():
+                self.auto_expand_storyboard = expansion_manifest.read_text(encoding="utf-8").strip() == "1"
+            else:
+                # Existing projects with assigned images retain their original scene indexes.
+                self.auto_expand_storyboard = not bool(self.scene_assets)
+        except OSError:
+            self.auto_expand_storyboard = not bool(self.scene_assets)
         try:
             loaded_durations = json.loads(duration_manifest.read_text(encoding="utf-8")) if duration_manifest.is_file() else {}
             self.scene_duration_overrides = {str(k): max(1, min(5, int(v))) for k, v in loaded_durations.items() if str(k).isdigit()}
@@ -1762,6 +1772,8 @@ class App(tk.Tk):
         assets_dir.mkdir(parents=True, exist_ok=True)
         manifest = assets_dir.parent / "scene_assets.json"
         manifest.write_text(json.dumps(self.scene_assets, ensure_ascii=False, indent=2), encoding="utf-8")
+        expansion_manifest = assets_dir.parent / "auto_expand_storyboard.txt"
+        expansion_manifest.write_text("1" if getattr(self, "auto_expand_storyboard", True) else "0", encoding="utf-8")
         duration_manifest = assets_dir.parent / "scene_durations.json"
         duration_manifest.write_text(json.dumps(self.scene_duration_overrides, ensure_ascii=False, indent=2), encoding="utf-8")
         audio_manifest = assets_dir.parent / "audio_track.txt"
@@ -1800,11 +1812,16 @@ class App(tk.Tk):
         children = self.scene_outline.get_children("")
         if children:
             self.scene_outline.delete(*children)
-        self.scene_data = parse_script_scenes(script)
+        parsed_scenes = parse_script_scenes(script)
         try:
             target_seconds = max(60, int(self.duration_var.get() or "10") * 60)
         except (ValueError, tk.TclError):
             target_seconds = 600
+        required_shots = min(120, visual_shot_count(target_seconds))
+        self.scene_data = (
+            expand_scenes_to_shots(parsed_scenes, required_shots, max_scenes=120)
+            if getattr(self, "auto_expand_storyboard", True) else parsed_scenes
+        )
         durations = allocate_scene_durations(self.scene_data, target_seconds)
         durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value)))) for i, value in enumerate(durations)]
         total_words = 0
@@ -2240,15 +2257,24 @@ Write-Output 'NARRATION_OK'
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
             return
         script = self.script_text.get("1.0", "end-1c")
-        scenes = parse_script_scenes(script)
-        if not scenes:
+        parsed_scenes = parse_script_scenes(script)
+        if not parsed_scenes:
             messagebox.showwarning("Sin guion", "Genera o escribe un guion antes de exportar subtítulos.")
             return
         try:
             target_seconds = max(60, int(self.duration_var.get() or "10") * 60)
         except ValueError:
             target_seconds = 600
+        required_shots = min(120, visual_shot_count(target_seconds))
+        scenes = (
+            expand_scenes_to_shots(parsed_scenes, required_shots, max_scenes=120)
+            if getattr(self, "auto_expand_storyboard", True) else parsed_scenes
+        )
         durations = allocate_scene_durations(scenes, target_seconds)
+        durations = [
+            min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value))))
+            for i, value in enumerate(durations)
+        ]
         subtitles = build_srt_subtitles(scenes, durations)
         if not subtitles:
             messagebox.showwarning("Sin subtítulos", "No se encontró texto de escena para exportar.")
@@ -3428,6 +3454,8 @@ Write-Output 'NARRATION_OK'
         self.progress_detail_var.set("0% · Esperando inicio")
         self.script_text.delete("1.0", "end")
         self.scene_assets = {}
+        self.auto_expand_storyboard = True
+        self.scene_duration_overrides = {}
         self.last_export_path = ""
         self.audio_track_path = ""
         self.music_track_path = ""
