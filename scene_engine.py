@@ -403,7 +403,7 @@ def build_audio_filter_graph(
 
 
 def build_srt_subtitles(scenes: Iterable[dict], durations: Iterable[int], chars_per_line: int = 42) -> str:
-    """Build SRT captions from scene text and approximate scene-level durations."""
+    """Build readable scene-timed SRT cues, splitting long lines and distributing time by words."""
     items = list(scenes)
     times = list(durations)
     if len(items) != len(times):
@@ -418,21 +418,62 @@ def build_srt_subtitles(scenes: Iterable[dict], durations: Iterable[int], chars_
         seconds, millis = divmod(remainder, 1000)
         return f"{hours:02d}:{minutes:02d}:{seconds:02d},{millis:03d}"
 
+    def clean_caption(value: str) -> str:
+        # Speaker labels are useful to the voice engine, but usually clutter captions.
+        value = re.sub(r"(?i)\[(?:NARRADOR|NARRADORA|PERSONAJE|VOZ EN OFF)\]\s*:\s*", "", value)
+        value = re.sub(r"\[([^\]]{1,40})\]\s*:\s*", "", value)
+        return " ".join(value.split()).strip()
+
+    def caption_chunks(value: str) -> list[str]:
+        # Split at word boundaries and prefer punctuation when it is close to the limit.
+        words = value.split()
+        chunks: list[str] = []
+        current: list[str] = []
+        for word in words:
+            if current and len(" ".join(current + [word])) > chars_per_line:
+                punctuation_cut = next(
+                    (i + 1 for i in range(len(current) - 1, max(-1, len(current) - 5), -1)
+                     if re.search(r"[.!?…,:;]$", current[i])),
+                    None,
+                )
+                if punctuation_cut:
+                    chunks.append(" ".join(current[:punctuation_cut]))
+                    current = current[punctuation_cut:]
+                else:
+                    chunks.append(" ".join(current))
+                    current = []
+            current.append(word)
+        if current:
+            chunks.append(" ".join(current))
+        return chunks
+
     parts: list[str] = []
     elapsed_ms = 0
     cue_number = 0
     for scene, duration in zip(items, times):
-        body = " ".join(str(scene.get("text", "")).split()).strip()
-        if not body:
-            elapsed_ms += max(1, int(duration)) * 1000
-            continue
+        body = clean_caption(str(scene.get("text", "")))
         duration_ms = max(1, int(duration)) * 1000
-        wrapped = textwrap.wrap(body, width=chars_per_line, break_long_words=False) or [body]
-        cue_number += 1
-        parts.append(
-            f"{cue_number}\n{stamp(elapsed_ms)} --> {stamp(elapsed_ms + duration_ms)}\n"
-            + "\n".join(wrapped)
-        )
+        if not body:
+            elapsed_ms += duration_ms
+            continue
+        chunks = caption_chunks(body) or [body]
+        weights = [max(1, len(chunk.split())) for chunk in chunks]
+        total_weight = sum(weights)
+        consumed = 0
+        for index, (chunk, weight) in enumerate(zip(chunks, weights)):
+            cue_start = elapsed_ms + consumed
+            if index == len(chunks) - 1:
+                cue_end = elapsed_ms + duration_ms
+            else:
+                allocated = round(duration_ms * weight / total_weight)
+                # Reserve at least one millisecond for each remaining cue.
+                allocated = min(max(1, allocated), max(1, duration_ms - consumed - (len(chunks) - index - 1)))
+                cue_end = cue_start + allocated
+            cue_number += 1
+            parts.append(
+                f"{cue_number}\n{stamp(cue_start)} --> {stamp(cue_end)}\n{chunk}"
+            )
+            consumed = cue_end - elapsed_ms
         elapsed_ms += duration_ms
     return "\n\n".join(parts) + ("\n" if parts else "")
 
