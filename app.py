@@ -5056,6 +5056,8 @@ Write-Output 'NARRATION_OK'
                 generated_voice_path = scene_dir / "auto_narration.wav"
                 voice_map_path = scene_dir / "voice_assignments.json"
                 narration_timing_path = scene_dir / "auto_narration.timing.json"
+                if narration_timing_path.exists():
+                    narration_timing_path.unlink()
                 narration_text_path.write_text(narration_text, encoding="utf-8")
                 try:
                     voice_map = json.loads(voice_assignments_json or "{}")
@@ -5404,9 +5406,18 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                         except (OSError, json.JSONDecodeError):
                             timed_segments = []
                 if timed_segments:
-                    subtitle_text = build_srt_from_timed_segments(
-                        timed_segments, total_duration_seconds=subtitle_duration
-                    )
+                    try:
+                        subtitle_text = build_srt_from_timed_segments(
+                            timed_segments, total_duration_seconds=subtitle_duration
+                        )
+                    except (KeyError, TypeError, ValueError):
+                        # If Windows returns unusable timing metadata, preserve export
+                        # by falling back to scene-based SRT rather than failing the MP4.
+                        subtitle_text = build_srt_subtitles(
+                            subtitle_scenes,
+                            final_durations,
+                            total_duration_seconds=subtitle_duration,
+                        )
                 else:
                     subtitle_text = build_srt_subtitles(
                         subtitle_scenes,
