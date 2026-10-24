@@ -1341,7 +1341,7 @@ class App(tk.Tk):
             canvas.create_text(12, (y1 + y2) / 2, text=label, anchor="w",
                                fill=color, font=("Segoe UI", 8, "bold"))
         durations = allocate_scene_durations(self.scene_data, total) if self.scene_data else []
-        durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
+        durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value)))) for i, value in enumerate(durations)]
         timeline_total = max(total, sum(durations)) if durations else total
         width = left + timeline_total * scale + 32
         self.timeline_canvas.configure(scrollregion=(0, 0, width, height))
@@ -1408,7 +1408,7 @@ class App(tk.Tk):
             height = 86
             target_seconds = self._timeline_duration_seconds()
             durations = allocate_scene_durations(self.scene_data, target_seconds) if self.scene_data else []
-            durations = [self.scene_duration_overrides.get(str(i + 1), value)
+            durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value))))
                          for i, value in enumerate(durations)]
             total = max(1, sum(durations) if durations else target_seconds)
             scale = max(0.22, min(1.6, (viewport - left - 12) / total))
@@ -1511,7 +1511,7 @@ class App(tk.Tk):
         left = 88
         target = self._timeline_duration_seconds()
         durations = allocate_scene_durations(self.scene_data, target)
-        durations = [self.scene_duration_overrides.get(str(i + 1), value)
+        durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value))))
                      for i, value in enumerate(durations)]
         elapsed = 0
         scale = max(0.22, min(1.6, (viewport - left - 12) / max(1, sum(durations))))
@@ -1552,7 +1552,7 @@ class App(tk.Tk):
         canvas_y = self.timeline_canvas.canvasy(event.y)
         if 36 <= canvas_y <= 82 and self.scene_data:
             durations = allocate_scene_durations(self.scene_data, self._timeline_duration_seconds())
-            durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
+            durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value)))) for i, value in enumerate(durations)]
             elapsed = 0
             for index, duration in enumerate(durations):
                 if elapsed <= seconds < elapsed + duration or index == len(durations) - 1:
@@ -1590,12 +1590,12 @@ class App(tk.Tk):
         current = self.scene_duration_overrides.get(str(number), durations[number - 1])
         from tkinter import simpledialog
         value = simpledialog.askinteger(
-            "Duración del clip", f"Duración de la escena {number} en segundos (5–3600):",
-            initialvalue=current, minvalue=5, maxvalue=3600, parent=self
+            "Duración del clip", f"Duración de la escena {number} en segundos (1–5):",
+            initialvalue=min(5, max(1, int(current))), minvalue=1, maxvalue=5, parent=self
         )
         if value is None:
             return
-        self.scene_duration_overrides[str(number)] = int(value)
+        self.scene_duration_overrides[str(number)] = min(5, max(1, int(value)))
         self._save_scene_assets()
         self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
         self.save_project(reset_approval=True, quiet=True)
@@ -1677,7 +1677,7 @@ class App(tk.Tk):
             self.scene_assets = {}
         try:
             loaded_durations = json.loads(duration_manifest.read_text(encoding="utf-8")) if duration_manifest.is_file() else {}
-            self.scene_duration_overrides = {str(k): max(5, min(3600, int(v))) for k, v in loaded_durations.items() if str(k).isdigit()}
+            self.scene_duration_overrides = {str(k): max(1, min(5, int(v))) for k, v in loaded_durations.items() if str(k).isdigit()}
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             self.scene_duration_overrides = {}
         try:
@@ -1761,7 +1761,7 @@ class App(tk.Tk):
         except (ValueError, tk.TclError):
             target_seconds = 600
         durations = allocate_scene_durations(self.scene_data, target_seconds)
-        durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
+        durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value)))) for i, value in enumerate(durations)]
         total_words = 0
         for idx, scene in enumerate(self.scene_data):
             asset = self.scene_assets.get(str(idx + 1), "")
@@ -1788,8 +1788,12 @@ class App(tk.Tk):
         if hasattr(self, "scene_summary_var"):
             voice_label = Path(self.audio_track_path).name if self.audio_track_path and Path(self.audio_track_path).is_file() else "sin narración"
             music_label = Path(self.music_track_path).name if self.music_track_path and Path(self.music_track_path).is_file() else "sin música"
-            long_shots = sum(1 for duration in durations if duration > 5)
-            visual_note = f" · revisar {long_shots} plano(s) >5 s" if long_shots else " · planos ≤5 s"
+            required_shots = visual_shot_count(target_seconds)
+            missing_shots = max(0, required_shots - len(self.scene_data))
+            visual_note = (
+                f" · faltan {missing_shots} planos para cubrir la duración a ≤5 s"
+                if missing_shots else " · todos los planos ≤5 s"
+            )
             self.scene_summary_var.set(f"{len(self.scene_data)} planos · {total_words} palabras · objetivo {self.duration_var.get()} min{visual_note} · {voice_label} · {music_label}")
         self._draw_timeline()
         self._render_preview_frame()
@@ -4629,7 +4633,7 @@ Write-Output 'NARRATION_OK'
                     return
         target_seconds = max(60, int(row["duration_minutes"]) * 60)
         durations = allocate_scene_durations(scenes, target_seconds)
-        durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
+        durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value)))) for i, value in enumerate(durations)]
         audio_path = preview_audio_path
         music_path = self.music_track_path if self.music_track_path and Path(self.music_track_path).is_file() else ""
         loop_music = bool(self.loop_music_var.get()) if self.loop_music_var is not None else True
