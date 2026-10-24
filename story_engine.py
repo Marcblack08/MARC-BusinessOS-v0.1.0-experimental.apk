@@ -170,6 +170,43 @@ def creative_direction(genre: str, platform: str = "", mode: str = SERIES_VIDEO_
         )
     return direction
 
+
+def dialogue_quality_warnings(script: str, genre: str = "") -> list[str]:
+    """Flag weak character-dialogue coverage in fiction without blocking approval."""
+    body = (script or "").strip()
+    if not body or len(body.split()) < 100:
+        return []
+    genre_key = (genre or "").casefold()
+    non_fiction = (
+        "promocional", "publicidad", "anuncio", "educativo", "documental",
+        "tutorial", "noticia", "informativo", "reseña", "review",
+    )
+    if any(term in genre_key for term in non_fiction):
+        return []
+
+    speakers = extract_speaker_names(body)
+    narrator_names = {"narrador", "narrator", "voz en off", "voiceover"}
+    characters = [name for name in speakers if name.casefold() not in narrator_names]
+    if not characters:
+        return [
+            "La historia depende casi por completo de la narración: añade intervenciones de personajes con objetivos y voces distintas."
+        ]
+    if len(characters) == 1:
+        return [
+            f"Solo habla un personaje ({characters[0]}); si la premisa lo permite, incorpora otra voz que cuestione, oculte algo o eleve el conflicto."
+        ]
+
+    dialogue_lines = [
+        match for match in _SPEAKER_LINE.finditer(body)
+        if match.group(1).strip().casefold() not in narrator_names
+    ]
+    if len(dialogue_lines) < 4:
+        return [
+            "Hay varios personajes etiquetados, pero muy poco diálogo: añade intercambios que muestren conflicto, subtexto o decisiones."
+        ]
+    return []
+
+
 def continuity_review_check(script: str, previous_state: str = "", expected_scenes: int = 0) -> list[str]:
     """Cheap deterministic flags to surface likely issues for human review.
 
