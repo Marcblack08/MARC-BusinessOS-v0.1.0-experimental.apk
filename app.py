@@ -36,6 +36,7 @@ from story_engine import (
     extract_speaker_names, target_word_count, format_short_chapter, visual_shot_count,
     creative_direction, dialogue_quality_warnings
 )
+from production_pipeline import ProductionPipeline, STAGE_LABELS
 from remote_server import RemoteControlServer
 
 APP_NAME = "MARC Video Studio AI Desktop"
@@ -3299,6 +3300,8 @@ Write-Output 'NARRATION_OK'
             "En una GPU antigua el proceso puede tardar bastante. ¿Continuar?"
         ):
             return
+        self._pipeline_checkpoint("storyboard", "running", "Preparando prompts para las escenas pendientes")
+        self._pipeline_checkpoint("images", "running", f"Pendientes {len(missing)} ilustraciones")
         self.batch_image_queue = list(missing)
         self.batch_image_total = len(missing)
         self.batch_image_active = True
@@ -3326,6 +3329,7 @@ Write-Output 'NARRATION_OK'
             return
         if not self.batch_image_queue:
             self.batch_image_active = False
+            self._pipeline_checkpoint("images", "completed", "Todas las ilustraciones pendientes fueron procesadas")
             total = self.batch_image_total
             self.batch_image_total = 0
             if self.preview_after_image_batch:
@@ -3579,6 +3583,7 @@ Write-Output 'NARRATION_OK'
             if not confirm:
                 return
         self.save_project(reset_approval=True, quiet=True)
+        self._pipeline_checkpoint("script", "running", "Generación de guion iniciada")
         data.update({
             "series_key": self.series_key,
             "episode_number": self.episode_number,
@@ -3795,6 +3800,33 @@ Write-Output 'NARRATION_OK'
             self.generation_queue.put(("done", completed, story_bible, new_state))
         except Exception as exc:
             self.generation_queue.put(("error", str(exc)))
+
+    def _pipeline_checkpoint(self, stage, status, details="", error="", artifacts=None):
+        """Persist production progress independently of the project database."""
+        if self.current_id is None:
+            return
+        try:
+            journal = ProductionPipeline(PROJECTS_DIR / str(self.current_id) / "production_pipeline.json")
+            journal.mark(stage, status, details=details, error=error, artifacts=artifacts)
+        except (OSError, ValueError, TypeError) as exc:
+            # A journal failure must not interrupt the user's actual video work.
+            self.status_var.set("Aviso: no se pudo guardar el punto de recuperación: " + str(exc)[:180])
+
+    def _pipeline_checkpoint_summary(self):
+        if self.current_id is None:
+            return ""
+        try:
+            journal = ProductionPipeline(PROJECTS_DIR / str(self.current_id) / "production_pipeline.json")
+            snapshot = journal.snapshot()
+            current = snapshot.get("current_stage")
+            failed = [STAGE_LABELS[name] for name, item in snapshot["stages"].items() if item.get("status") == "failed"]
+            if current:
+                return f"Producción en curso: {STAGE_LABELS.get(current, current)}."
+            if failed:
+                return "Etapa pendiente de reintento: " + ", ".join(failed) + "."
+            return ""
+        except (OSError, ValueError, TypeError):
+            return ""
 
     def save_project(self, reset_approval=False, quiet=False):
         data = self.get_form()
@@ -4181,6 +4213,8 @@ Write-Output 'NARRATION_OK'
                     self.progress_detail_var.set(detail)
                     self.status_var.set(detail)
                 elif kind == "image_prompts_ready":
+                    self._pipeline_checkpoint("storyboard", "completed", f"Preparados {len(event[1] or {})} prompts visuales")
+                    self._pipeline_checkpoint("images", "running", "Generando ilustraciones en secuencia")
                     self.image_prompt_cache = dict(event[1] or {})
                     self.image_generation_running = False
                     self.progressbar.stop()
@@ -4220,6 +4254,7 @@ Write-Output 'NARRATION_OK'
                         )
                 elif kind == "image_error":
                     scene_number, detail = event[1], event[2]
+                    self._pipeline_checkpoint("images", "failed", f"Falló la ilustración de la escena {scene_number}", error=str(detail))
                     self.image_generation_running = False
                     self.batch_image_active = False
                     self.batch_image_queue = []
@@ -4260,6 +4295,7 @@ Write-Output 'NARRATION_OK'
                     self.script_text.insert("end", "\n\n[REVISIÓN HUMANA PENDIENTE]\nRevisa continuidad, nombres, ritmo y duración. El guion no está aprobado.")
                     self.script_text.configure(state="disabled")
                     self.save_project(reset_approval=True, quiet=True)
+                    self._pipeline_checkpoint("script", "completed", f"Guion generado: {event[1]} capítulo(s)")
                     self.generation_running = False
                     self.remote_generate_active = False
                     self._set_generation_state(False)
@@ -4279,6 +4315,7 @@ Write-Output 'NARRATION_OK'
                     self.progress_detail_var.set(f"{percent}% · Reanuda generando un nuevo borrador cuando quieras")
                     self.script_text.configure(state="normal")
                     self.save_project(reset_approval=True, quiet=True)
+                    self._pipeline_checkpoint("script", "pending", "Generación cancelada; borrador parcial conservado")
                     self.generation_running = False
                     self.remote_generate_active = False
                     self._set_generation_state(False)
@@ -4290,6 +4327,7 @@ Write-Output 'NARRATION_OK'
                     self.progress_detail_var.set(f"{percent}% · Revisa el mensaje de error y la conexión de Ollama")
                     self.script_text.configure(state="normal")
                     self.save_project(reset_approval=True, quiet=True)
+                    self._pipeline_checkpoint("script", "failed", "La generación no terminó", error=str(event[1]))
                     self.generation_running = False
                     was_remote_generation = bool(getattr(self, "remote_generate_active", False))
                     self.remote_generate_active = False
@@ -4310,6 +4348,7 @@ Write-Output 'NARRATION_OK'
                     is_preview = bool(event[4]) if len(event) > 4 else False
                     self.progressbar.configure(maximum=100, value=100)
                     if is_preview:
+                        self._pipeline_checkpoint("montage", "completed", "Vista previa MP4 renderizada", artifacts=[event[1]])
                         self.preview_render_path = event[1]
                         self.preview_render_signature = self._current_preview_signature()
                         self.manual_preview_path = ""
@@ -4325,6 +4364,15 @@ Write-Output 'NARRATION_OK'
                         self.studio_tabs.select(self.preview_tab)
                         self.after(300, self.play_preview_video)
                     else:
+                        output_file = Path(event[1])
+                        self._pipeline_checkpoint("montage", "completed", "Montaje final renderizado", artifacts=[event[1]])
+                        self._pipeline_checkpoint("quality_check", "running", "Comprobando archivo MP4 exportado")
+                        if output_file.is_file() and output_file.stat().st_size > 1024:
+                            self._pipeline_checkpoint("quality_check", "completed", "Validación básica: archivo MP4 presente y no vacío", artifacts=[event[1]])
+                            self._pipeline_checkpoint("export", "completed", "MP4 final guardado", artifacts=[event[1]])
+                        else:
+                            self._pipeline_checkpoint("quality_check", "failed", "El archivo de salida no existe o está vacío", error=event[1])
+                            self._pipeline_checkpoint("export", "failed", "La salida no superó la validación básica", error=event[1])
                         self.last_export_path = event[1]
                         self.manual_preview_path = ""
                         if hasattr(self, "preview_status_var"):
@@ -4365,6 +4413,8 @@ Write-Output 'NARRATION_OK'
                     self.status_var.set("Falló la mezcla de audio.")
                     messagebox.showerror("Error al mezclar audio", event[1])
                 elif kind == "render_cancelled":
+                    self._pipeline_checkpoint("montage", "pending", "Render cancelado; los recursos y caché se conservan")
+                    self._pipeline_checkpoint("export", "pending", "Exportación cancelada; se puede volver a intentar")
                     self.render_running = False
                     self.remote_render_active = False
                     self._set_render_state(False)
@@ -4372,6 +4422,8 @@ Write-Output 'NARRATION_OK'
                     self.progress_detail_var.set("El render se detuvo por petición del usuario. El MP4 parcial puede no reproducirse.")
                     self.status_var.set("Exportación cancelada.")
                 elif kind == "render_error":
+                    self._pipeline_checkpoint("montage", "failed", "No se pudo completar el montaje", error=str(event[1]))
+                    self._pipeline_checkpoint("export", "failed", "No se pudo completar el MP4", error=str(event[1]))
                     self.render_running = False
                     was_remote_render = bool(getattr(self, "remote_render_active", False))
                     self.remote_render_active = False
@@ -4418,6 +4470,8 @@ Write-Output 'NARRATION_OK'
         if not remote and not messagebox.askyesno("Revisión narrativa", review_text):
             return
         self.save_project(quiet=True)
+        self._pipeline_checkpoint("script", "completed", "Guion guardado para producción")
+        self._pipeline_checkpoint("review", "completed", "Guion aprobado por el usuario")
         if self.current_id is not None:
             self.conn.execute("UPDATE projects SET approved=1 WHERE id=?", (self.current_id,))
             self.conn.commit()
@@ -4770,6 +4824,11 @@ Write-Output 'NARRATION_OK'
         has_any_audio = bool(audio_path or music_path or (os.name == "nt" and not audio_path))
         render_steps = len(scenes) + 1 + (1 if has_any_audio else 0)
         self.render_cancel_event.clear()
+        if preview:
+            self._pipeline_checkpoint("montage", "running", "Generando vista previa del montaje")
+        else:
+            self._pipeline_checkpoint("montage", "running", "Renderizando montaje final")
+            self._pipeline_checkpoint("export", "running", "Exportación MP4 iniciada")
         self.render_running = True
         self._set_render_state(True)
         if getattr(self, "preview_player_active", False):
