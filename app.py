@@ -117,8 +117,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_NAME)
-        self.geometry("1540x960")
-        self.minsize(1160, 700)
+        self.geometry("1440x900")
+        self.minsize(1024, 680)
         self.state("zoomed")
         self.conn = db_connect()
         self.current_id = None
@@ -267,12 +267,12 @@ class App(tk.Tk):
         style.configure("Muted.TLabel", background=self.colors["bg"], foreground=self.colors["muted"], font=("Segoe UI", 9))
         style.configure("Title.TLabel", background=self.colors["bg"], foreground="#62b7ff", font=("Segoe UI", 23, "bold"))
         style.configure("Section.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 11, "bold"))
-        style.configure("TButton", padding=(12, 9), font=("Segoe UI Semibold", 9), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=1, relief="flat")
+        style.configure("TButton", padding=(10, 7), font=("Segoe UI Semibold", 9), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=1, relief="flat")
         style.map("TButton",
                   background=[("active", "#203b5d"), ("pressed", self.colors["accent"])],
                   foreground=[("disabled", "#60738b")],
                   bordercolor=[("active", self.colors["accent"])])
-        style.configure("Accent.TButton", padding=(15, 10), font=("Segoe UI", 9, "bold"),
+        style.configure("Accent.TButton", padding=(12, 8), font=("Segoe UI", 9, "bold"),
                         background=self.colors["accent"], foreground="#ffffff", borderwidth=0, relief="flat")
         style.map("Accent.TButton", background=[("active", self.colors["accent_hover"]), ("pressed", "#0875df")])
         style.configure("TEntry", padding=(10, 9), fieldbackground=self.colors["input"],
@@ -299,7 +299,7 @@ class App(tk.Tk):
         style.map("Vertical.TScrollbar", background=[("active", self.colors["accent"])])
         style.configure("TNotebook", background=self.colors["bg"], borderwidth=0, tabmargins=(2, 5, 2, 0))
         style.configure("TNotebook.Tab", background=self.colors["panel2"], foreground=self.colors["muted"],
-                        padding=(15, 9), font=("Segoe UI", 9, "bold"), borderwidth=0)
+                        padding=(12, 7), font=("Segoe UI", 9, "bold"), borderwidth=0)
         style.map("TNotebook.Tab",
                   background=[("selected", self.colors["accent"]), ("active", "#1b3553")],
                   foreground=[("selected", "#ffffff"), ("active", self.colors["text"])])
@@ -320,7 +320,7 @@ class App(tk.Tk):
         shell.grid_rowconfigure(1, weight=1)
         shell.grid_columnconfigure(0, weight=1)
 
-        top = tk.Frame(shell, bg="#09101d", padx=22, pady=16,
+        top = tk.Frame(shell, bg="#09101d", padx=18, pady=10,
                        highlightthickness=1, highlightbackground=self.colors["border"])
         top.grid(row=0, column=0, sticky="ew")
         top.grid_columnconfigure(0, weight=1)
@@ -330,7 +330,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 20, "bold")).pack(side="left")
         tk.Label(brand, text=" / VIDEO STUDIO", bg="#09101d", fg="#2da8ff",
                  font=("Segoe UI", 20, "bold")).pack(side="left")
-        tk.Label(brand, text="   AI CREATIVE WORKSPACE", bg="#09101d", fg=self.colors["muted"],
+        tk.Label(brand, text="   ESTUDIO CREATIVO IA", bg="#09101d", fg=self.colors["muted"],
                  font=("Segoe UI", 8, "bold")).pack(side="left", padx=(12, 0), pady=(7, 0))
         head_right = tk.Frame(top, bg="#09101d")
         head_right.grid(row=0, column=1, sticky="e")
@@ -340,8 +340,10 @@ class App(tk.Tk):
         self.ffmpeg_badge = tk.Label(head_right, text="● FFMPEG · COMPROBANDO",
                                      bg="#09101d", fg=self.colors["muted"], font=("Segoe UI", 9, "bold"))
         self.ffmpeg_badge.pack(side="left", padx=(0, 12))
-        ttk.Button(head_right, text="Diagnóstico PC", command=self.detect_pc_async).pack(side="left", padx=(0, 6))
-        ttk.Button(head_right, text="Herramientas", command=self.check_tools).pack(side="left")
+        self.header_diagnose_button = ttk.Button(head_right, text="Diagnóstico PC", command=self.detect_pc_async)
+        self.header_diagnose_button.pack(side="left", padx=(0, 6))
+        self.header_tools_button = ttk.Button(head_right, text="Herramientas", command=self.check_tools)
+        self.header_tools_button.pack(side="left")
 
         workspace = tk.PanedWindow(shell, orient="horizontal", sashwidth=7, sashrelief="flat",
                                    bg=self.colors["bg"], bd=0, opaqueresize=True, showhandle=False)
@@ -353,6 +355,8 @@ class App(tk.Tk):
         library.grid_rowconfigure(2, weight=1)
         library.grid_columnconfigure(0, weight=1)
         workspace.add(library, minsize=205, width=250)
+        self.project_library_pane = library
+        self.project_library_visible = True
         tk.Label(library, text="BIBLIOTECA", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 10, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=13, pady=(14, 2))
         tk.Label(library, text="Proyectos y guiones", bg=self.colors["panel"], fg=self.colors["muted"],
@@ -375,6 +379,7 @@ class App(tk.Tk):
 
         editor = tk.Frame(workspace, bg=self.colors["bg"])
         workspace.add(editor, minsize=620, stretch="always")
+        self.editor_pane = editor
         editor.grid_rowconfigure(0, weight=1)
         editor.grid_columnconfigure(0, weight=1)
 
@@ -400,8 +405,8 @@ class App(tk.Tk):
         self.config_canvas.bind("<Configure>", lambda event: self.config_canvas.itemconfigure(self.config_canvas_window, width=event.width))
         tk.Label(card, text="CONFIGURACIÓN DE HISTORIA", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 13, "bold")).pack(anchor="w")
-        tk.Label(card, text="Define narrativa, formato y dirección visual. Los paneles se pueden redimensionar.",
-                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 10)).pack(anchor="w", pady=(5, 12))
+        tk.Label(card, text="Define la historia y su estructura. El estilo visual y la calidad de salida están en «Visual».",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).pack(anchor="w", pady=(5, 10))
 
         self.title_var = tk.StringVar()
         self.topic_var = tk.StringVar()
@@ -443,25 +448,13 @@ class App(tk.Tk):
                             "Abierto para continuación", "Agridulce"])
         self._field(form, "Protagonista", self.protagonist_var, 4, 0)
         self._field(form, "Conflicto central", self.conflict_var, 4, 1)
-        self._field(form, "Estilo de dibujo", self.drawing_style_var, 5, 0,
-                    values=["Anime cinematográfico", "Manga en blanco y negro", "Cartoon occidental",
-                            "Cómic realista", "Acuarela ilustrada", "Pixel art", "3D estilizado",
-                            "Realismo cinematográfico"])
-        self._field(form, "Estilo de animación", self.animation_style_var, 5, 1,
-                    values=["2D fluida", "Anime con movimientos dinámicos", "Motion comic",
-                            "Cut-out / recortes", "3D cinematográfica", "Stop motion",
-                            "Pixel animation", "Presentación animada"])
-        self._field(form, "Premisa / idea", self.topic_var, 6, 0, span=2)
-        self.video_mode_field = self._field(form, "Modo de producción", self.video_mode_var, 7, 0, span=2,
+        self._field(form, "Premisa / idea", self.topic_var, 5, 0, span=2)
+        self.video_mode_field = self._field(form, "Modo de producción", self.video_mode_var, 6, 0, span=2,
                     values=[SHORT_VIDEO_MODE, SERIES_VIDEO_MODE])
         self.video_mode_field.bind("<<ComboboxSelected>>", lambda _event: self._on_video_mode_changed())
-        self._field(form, "Resolución de salida", self.resolution_var, 8, 0,
-                    values=list(RESOLUTION_PROFILES))
-        self._field(form, "Fotogramas por segundo", self.fps_var, 8, 1,
-                    values=list(FPS_OPTIONS))
-        tk.Label(form, text="En modo corto, el objetivo es 2 minutos. La resolución elegida se respeta durante la exportación.",
+        tk.Label(form, text="El modo corto prepara una historia breve; Novela / Serie conserva la estructura por episodios.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8),
-                 justify="left", wraplength=280).grid(row=9, column=0, columnspan=2,
+                 justify="left", wraplength=280).grid(row=7, column=0, columnspan=2,
                                                         sticky="w", padx=5, pady=(5, 2))
 
         lower = tk.Frame(vertical, bg=self.colors["bg"])
@@ -472,6 +465,7 @@ class App(tk.Tk):
 
         toolrow = tk.Frame(lower, bg=self.colors["bg"])
         toolrow.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        self.toolrow = toolrow
         self.generate_button = ttk.Button(toolrow, text="✦ Generar guion", style="Accent.TButton",
                                           command=self.generate_script)
         self.generate_button.pack(side="left")
@@ -529,6 +523,7 @@ class App(tk.Tk):
         preview_dock = tk.Frame(lower, bg=self.colors["panel"], padx=9, pady=7,
                                 highlightthickness=1, highlightbackground=self.colors["border"])
         preview_dock.grid(row=2, column=0, sticky="ew", pady=(0, 7))
+        self.preview_dock = preview_dock
         preview_dock.grid_columnconfigure(0, weight=3, uniform="monitor")
         preview_dock.grid_columnconfigure(1, weight=2, uniform="monitor")
         monitor_header = tk.Frame(preview_dock, bg=self.colors["panel"])
@@ -716,7 +711,7 @@ class App(tk.Tk):
                  wraplength=1000, justify="left").grid(row=7, column=0, sticky="w", pady=(8, 0))
 
         visual_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=18, pady=16)
-        studio_tabs.add(visual_tab, text="  ✧  DIRECCIÓN VISUAL  ")
+        studio_tabs.add(visual_tab, text="  ✧  VISUAL / SALIDA  ")
         visual_tab.grid_columnconfigure(0, weight=1)
         tk.Label(visual_tab, text="DIRECCIÓN VISUAL DEL PROYECTO",
                  bg=self.colors["panel"], fg=self.colors["text"],
@@ -737,16 +732,11 @@ class App(tk.Tk):
                     values=["2D fluida", "Anime con movimientos dinámicos", "Motion comic",
                             "Cut-out / recortes", "3D cinematográfica", "Stop motion",
                             "Pixel animation", "Presentación animada"])
-        self._field(visual_form, "Formato de salida", self.platform_var, 1, 0,
-                    values=list(PLATFORMS))
-        self._field(visual_form, "Género / dirección", self.style_var, 1, 1,
-                    values=["Novela dramática", "Reencarnación y venganza", "Superación personal", "Romance",
-                            "Fantasía", "Misterio y suspenso", "Terror", "Acción y aventura", "Ciencia ficción",
-                            "Drama familiar", "Educativo y directo", "Documental", "Promocional"])
-        self._field(visual_form, "Tono", self.tone_var, 2, 0,
-                    values=["Dramático e intenso", "Oscuro y misterioso", "Emotivo", "Inspirador",
-                            "Épico", "Ligero y humorístico", "Realista"])
-        tk.Label(visual_tab, text="Nota: elegir un estilo define las instrucciones visuales; no crea ilustraciones por sí solo. Para generar imágenes, abre ESCENAS y configura ComfyUI.",
+        self._field(visual_form, "Resolución de salida", self.resolution_var, 1, 0,
+                    values=list(RESOLUTION_PROFILES))
+        self._field(visual_form, "Fotogramas por segundo", self.fps_var, 1, 1,
+                    values=list(FPS_OPTIONS))
+        tk.Label(visual_tab, text="Estos ajustes determinan el estilo de las ilustraciones y la calidad del archivo exportado. Para crear imágenes con IA, configura ComfyUI en Escenas.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1050, justify="left").grid(row=3, column=0, sticky="w", pady=(16, 0))
         canon_actions = tk.Frame(visual_tab, bg=self.colors["panel"])
@@ -946,6 +936,7 @@ class App(tk.Tk):
         mini_timeline = tk.Frame(lower, bg=self.colors["panel"], padx=8, pady=5,
                                  highlightthickness=1, highlightbackground=self.colors["border"])
         mini_timeline.grid(row=4, column=0, sticky="ew", pady=(5, 0))
+        self.mini_timeline_panel = mini_timeline
         mini_timeline.grid_columnconfigure(0, weight=1)
         mini_head = tk.Frame(mini_timeline, bg=self.colors["panel"])
         mini_head.grid(row=0, column=0, sticky="ew", pady=(0, 3))
@@ -967,11 +958,99 @@ class App(tk.Tk):
         self.mini_timeline_canvas.bind("<Button-1>", self._mini_timeline_click)
         self.mini_timeline_canvas.bind("<Configure>", lambda _event: self._draw_mini_timeline())
 
-        self.status_var = tk.StringVar(value="Listo. Define una historia o abre un proyecto de la biblioteca.")
+        self.status_var = tk.StringVar(value="Listo. Configura la historia, genera el guion y revisa las escenas.")
         self.after(250, lambda: studio_tabs.select(script_tab))
         self.after(300, self._draw_timeline)
         tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
                  font=("Segoe UI", 8), anchor="w").grid(row=5, column=0, sticky="ew", pady=(3, 0))
+        self._apply_compact_workspace()
+
+    def _apply_compact_workspace(self):
+        """Start in a focused editor; secondary areas remain available on demand."""
+        # The editor should receive the available width by default.
+        self.toggle_project_library()
+        self.set_configuration_visible(False)
+
+        # A second always-visible monitor and overview timeline duplicated the
+        # dedicated Preview and Montage tabs and made the editor feel crowded.
+        self.preview_dock.grid_remove()
+        self.mini_timeline_panel.grid_remove()
+
+        # Keep only the actions used in the normal production flow.
+        for widget in (
+            self.generate_button, self.cancel_button, self.save_button,
+            self.approve_button, self.export_button, self.preview_render_button,
+            self.image_setup_button, self.cancel_render_button, self.config_toggle_button,
+        ):
+            widget.pack_forget()
+        self.header_diagnose_button.pack_forget()
+        self.header_tools_button.pack_forget()
+
+        self.toolbar_new_button = ttk.Button(
+            self.toolrow, text="＋ Nuevo", command=self.new_project
+        )
+        self.toolbar_new_button.pack(side="left", padx=(0, 6))
+        self.config_toggle_button.configure(text="⚙ Ajustes +", command=self.toggle_configuration)
+        self.config_toggle_button.pack(side="left", padx=(0, 6))
+        self.generate_button.configure(text="✦ Generar guion")
+        self.generate_button.pack(side="left", padx=(0, 6))
+        self.save_button.configure(text="Guardar")
+        self.save_button.pack(side="left", padx=(0, 6))
+        self.approve_button.configure(text="Aprobar guion")
+        self.approve_button.pack(side="left", padx=(0, 6))
+        self.preview_render_button.configure(text="Vista previa")
+        self.preview_render_button.pack(side="left", padx=(0, 6))
+        self.export_button.configure(text="Exportar MP4")
+        self.export_button.pack(side="left", padx=(0, 6))
+
+        self.more_button = ttk.Menubutton(self.toolrow, text="Más ▾")
+        self.more_menu = tk.Menu(
+            self.more_button, tearoff=0,
+            bg=self.colors["panel"], fg=self.colors["text"],
+            activebackground=self.colors["accent"], activeforeground="#ffffff",
+            bd=0, relief="flat",
+        )
+        self.more_menu.add_command(
+            label="Biblioteca de proyectos", command=self.toggle_project_library
+        )
+        self.more_menu.add_command(
+            label="Configurar imágenes IA", command=self.open_image_setup
+        )
+        self.more_menu.add_command(
+            label="Diagnóstico del equipo", command=self.detect_pc_async
+        )
+        self.more_menu.add_command(
+            label="Herramientas instaladas", command=self.check_tools
+        )
+        self.more_menu.add_command(
+            label="Continuar historia", command=self.create_continuation
+        )
+        self.more_menu.add_separator()
+        self.more_menu.add_command(
+            label="Cancelar generación", command=self.cancel_generation
+        )
+        self.more_menu.add_command(
+            label="Cancelar render", command=self.cancel_export
+        )
+        self.more_button.configure(menu=self.more_menu)
+        self.more_button.pack(side="left", padx=(0, 6))
+
+    def toggle_project_library(self):
+        """Show or hide the saved-project library without shrinking the editor all day."""
+        if not hasattr(self, "workspace_panes") or not hasattr(self, "project_library_pane"):
+            return
+        panes = tuple(self.workspace_panes.panes())
+        pane_name = str(self.project_library_pane)
+        is_visible = pane_name in panes
+        if is_visible:
+            self.workspace_panes.forget(self.project_library_pane)
+            self.project_library_visible = False
+        else:
+            self.workspace_panes.add(
+                self.project_library_pane, before=self.editor_pane,
+                minsize=205, width=250, stretch="never"
+            )
+            self.project_library_visible = True
 
     def _timeline_duration_seconds(self):
         try:
@@ -2895,7 +2974,7 @@ Write-Output 'NARRATION_OK'
             self.configuration_visible = is_visible
         if hasattr(self, "config_toggle_button"):
             self.config_toggle_button.configure(
-                text="Ocultar configuración" if self.configuration_visible else "Mostrar configuración"
+                text="⚙ Ajustes −" if self.configuration_visible else "⚙ Ajustes +"
             )
 
     def toggle_configuration(self):
