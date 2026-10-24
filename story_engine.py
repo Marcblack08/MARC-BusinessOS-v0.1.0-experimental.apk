@@ -113,7 +113,7 @@ def format_short_chapter(chapter: str) -> str:
 def creative_direction(genre: str, platform: str = "", mode: str = SERIES_VIDEO_MODE) -> str:
     """Return concise genre-aware writing rules for a faster, more specific script prompt."""
     normalized = (genre or "").casefold()
-    if any(term in normalized for term in ("terror", "horror", "suspenso", "misterio", "misterio")):
+    if any(term in normalized for term in ("terror", "horror", "suspenso", "misterio")):
         direction = (
             "TERROR / MISTERIO: abre con una anomalía concreta y visible; construye inquietud mediante pistas "
             "y consecuencias, no solo adjetivos. Revela una capa de información por escena, evita explicar el misterio "
@@ -187,7 +187,7 @@ def continuity_review_check(script: str, previous_state: str = "") -> list[str]:
     )
     if any(body.casefold().startswith(prefix) for prefix in repetitive_openings):
         warnings.append("El inicio puede resultar genérico; valora abrir con una acción, conflicto o revelación.")
-    scene_count = len(re.findall(r"(?im)^\\s*\\[ESCENA\\s+\\d+", body))
+    scene_count = len(re.findall(r"(?im)^\s*\[ESCENA\s+\d+", body))
     if scene_count == 0 and len(body.split()) >= 100:
         warnings.append("No se detectan encabezados [ESCENA 01 — título]; separa el guion en planos visuales concretos.")
     elif 0 < scene_count < 3:
