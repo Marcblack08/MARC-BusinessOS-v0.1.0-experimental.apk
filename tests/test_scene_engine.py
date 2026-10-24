@@ -1,8 +1,8 @@
 import unittest
 
 from scene_engine import (
-    allocate_scene_durations, build_audio_filter_graph, build_srt_subtitles,
-    ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
+    allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief,
+    build_srt_subtitles, ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
 )
 
 
@@ -25,6 +25,57 @@ class SceneEngineTests(unittest.TestCase):
         self.assertTrue(all("TÍTULO:" not in s["text"] for s in scenes))
         self.assertTrue(all("Revisa continuidad" not in s["text"] for s in scenes))
         self.assertIn("Lucía abrió la puerta", " ".join(s["text"] for s in scenes))
+
+    def test_visual_brief_extracts_dialogue_and_relevant_character_profiles(self):
+        scene = {
+            "title": "El ultimátum",
+            "text": (
+                "[NARRADOR]: La lluvia golpea la ventana. "
+                "[MARTA]: No voy a firmar. "
+                "[IVÁN]: Entonces perderás todo."
+            ),
+        }
+        bible = (
+            "BIBLIA DE PERSONAJES\n\n"
+            "MARTA: 32 años, cabello negro recogido, abrigo verde oscuro y una cicatriz fina sobre la ceja.\n\n"
+            "IVÁN: 45 años, cabello gris corto, traje azul marino, anillo de plata.\n\n"
+            "LUCÍA: 20 años, cabello rojo, chaqueta amarilla y botas de cuero."
+        )
+        brief = build_scene_visual_brief(
+            scene, story_bible=bible, continuity_state="Marta todavía conserva la carta."
+        )
+        self.assertEqual(brief["speakers"], ["MARTA", "IVÁN"])
+        self.assertIn("La lluvia golpea la ventana", brief["narration"])
+        self.assertEqual(len(brief["dialogue"]), 2)
+        self.assertIn("MARTA: No voy a firmar.", brief["dialogue"][0])
+        self.assertIn("MARTA:", brief["canon_reference"])
+        self.assertIn("IVÁN:", brief["canon_reference"])
+        self.assertNotIn("LUCÍA:", brief["canon_reference"])
+        self.assertIn("Marta todavía conserva la carta", brief["continuity_reference"])
+
+    def test_visual_brief_handles_unlabelled_scene_and_empty_context(self):
+        brief = build_scene_visual_brief(
+            {"title": "Pasillo", "text": "Una puerta se abre lentamente en el pasillo oscuro."}
+        )
+        self.assertEqual(brief["speakers"], [])
+        self.assertEqual(brief["narration"], "Una puerta se abre lentamente en el pasillo oscuro.")
+        self.assertEqual(brief["canon_reference"], "")
+        self.assertEqual(brief["continuity_reference"], "")
+
+    def test_visual_brief_respects_context_size_limits(self):
+        brief = build_scene_visual_brief(
+            {"title": " Título   largo ", "text": "texto " * 100},
+            story_bible="canon " * 100,
+            continuity_state="estado " * 100,
+            max_excerpt_chars=25,
+            max_canon_chars=35,
+            max_continuity_chars=20,
+        )
+        self.assertLessEqual(len(brief["excerpt"]), 25)
+        self.assertLessEqual(len(brief["canon_reference"]), 35)
+        self.assertLessEqual(len(brief["continuity_reference"]), 20)
+        self.assertEqual(brief["title"], "Título largo")
+
 
     def test_scene_duration_sum_matches_target_when_feasible(self):
         scenes = [

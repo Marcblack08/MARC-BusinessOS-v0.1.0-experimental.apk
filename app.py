@@ -26,8 +26,8 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from scene_engine import (
-    allocate_scene_durations, build_audio_filter_graph, build_srt_subtitles,
-    ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
+    allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief,
+    build_srt_subtitles, ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
 )
 from story_engine import (
     FPS_OPTIONS, RESOLUTION_PROFILES, SERIES_VIDEO_MODE, SHORT_VIDEO_MODE,
@@ -2659,31 +2659,46 @@ Write-Output 'NARRATION_OK'
                 "Realismo cinematográfico": "cinematic photorealistic movie still, natural dramatic lighting, carefully composed frame",
             }
             style_prompt = style_prompts.get(drawing_style, "cinematic illustrated story scene")
-            story_excerpt = " ".join(str(scene.get("text", "")).split())[:650]
+            # Pixnarr-inspired scene brief: apply only relevant character canon to this shot,
+            # rather than forcing the opening of the entire story bible into every image prompt.
+            visual_brief = build_scene_visual_brief(
+                scene, story_bible=story_bible, continuity_state=continuity_state
+            )
+            story_excerpt = visual_brief["excerpt"]
             visual_description = ""
-            canon_reference = " ".join(str(story_bible or "").split())[:1800]
-            continuity_reference = " ".join(str(continuity_state or "").split())[:700]
-            # Use the narrative canon as a consistency guide; text prompts help, but don't guarantee pixel-identical characters.
+            canon_reference = visual_brief["canon_reference"]
+            continuity_reference = visual_brief["continuity_reference"]
+            scene_narration = visual_brief["narration"]
+            scene_dialogue = " | ".join(visual_brief["dialogue"])[:900]
+            scene_speakers = ", ".join(visual_brief["speakers"]) or "none explicitly labelled"
+            # Text guidance improves consistency but cannot guarantee pixel-identical characters.
             try:
                 visual_description = self._ollama_request(
-                    "Convert this Spanish story excerpt into one concise English image-generation prompt. "
-                    "Describe only visible people, clothing, face/hair details, expressions, action, setting, time of day, camera and lighting. "
-                    "Follow the canon reference as a hard continuity constraint: preserve established character appearance, age range, clothing cues, "
-                    "color palette, recurring props and location landmarks. Do not add events or invent a new design. Do not describe characters "
-                    "who are not visible in the excerpt. Return only the prompt, no explanations. "
-                    f"Series premise: {project_topic}. Canon reference: {canon_reference}. "
-                    f"Previous episode state (if any): {continuity_reference}. "
-                    f"Scene title: {scene.get('title', '')}. Excerpt: {story_excerpt}",
-                    max_tokens=240
+                    "Act as a cinematic storyboard artist and image-prompt director. Convert this one Spanish story scene "
+                    "into one concise English prompt for a SINGLE still image, not a sequence or collage. "
+                    "Describe the visible subjects and their action, facial expression, body language, wardrobe, setting, time/weather, "
+                    "foreground/background, camera framing/angle, lighting and mood. The scene excerpt determines what is happening. "
+                    "Treat the canon as a lookup reference: apply only the visual profile of characters relevant to this scene and only "
+                    "locations or props that the excerpt calls for. Do not copy unrelated profiles into the image and do not invent a new design. "
+                    "Speaker labels are dialogue context, not proof that every speaker must appear on screen. Never render dialogue as written text. "
+                    "Preserve established age range, facial features, hairstyle, clothing cues and signature objects when relevant. "
+                    "Return only the prompt, without headings, markdown or explanation. "
+                    f"Series premise: {project_topic}. Scene title: {visual_brief['title']}. "
+                    f"Narration/action: {scene_narration or story_excerpt}. "
+                    f"Dialogue context for emotion only: {scene_dialogue or 'No explicit dialogue labels'}. "
+                    f"Speaker labels in this scene: {scene_speakers}. "
+                    f"Relevant canonical character reference: {canon_reference or 'No character profile was available'}. "
+                    f"Previous episode state: {continuity_reference or 'No previous episode state supplied'}.",
+                    max_tokens=280
                 )
             except Exception:
                 visual_description = story_excerpt
             prompt = (
-                f"{style_prompt}. Story moment: {visual_description}. "
-                f"Canonical visual continuity cues: {canon_reference[:900]}. "
-                "one coherent cinematic frame, maintain the same recognizable facial features, hairstyle, body proportions, costume details, "
-                "signature accessories, color palette and recurring location design described in the canon; only show characters required by this moment. "
-                "Clear focal subject, strong composition, readable silhouettes, no captions, no writing, no logos, no watermark."
+                f"{style_prompt}. One cinematic still of this precise story beat: {visual_description}. "
+                f"Relevant canonical visual cues: {canon_reference[:650]}. "
+                "Use only characters required by the described action; preserve recognizable facial features, hairstyle, proportions, "
+                "costume and recurring props when relevant. Show one coherent moment, strong focal hierarchy, readable silhouettes, "
+                "cinematic composition and intentional lighting. No captions, readable text, speech bubbles, logos or watermark."
             )
             negative = (
                 "text, subtitles, letters, watermark, logo, blurry, low resolution, malformed hands, "

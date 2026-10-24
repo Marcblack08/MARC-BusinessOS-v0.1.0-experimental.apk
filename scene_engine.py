@@ -17,6 +17,92 @@ _HEADING = re.compile(
 _SKIP_HEADINGS = {"REVISIÓN HUMANA PENDIENTE", "NOTA DE PRODUCCIÓN"}
 
 
+
+_SCENE_SPEAKER_INLINE = re.compile(
+    r"\[([^\]]{1,40})\]\s*:\s*(.*?)(?=\s+\[[^\]]{1,40}\]\s*:|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+_NARRATOR_LABELS = {"narrador", "narrator", "voz en off", "voiceover"}
+
+
+def build_scene_visual_brief(
+    scene: dict,
+    story_bible: str = "",
+    continuity_state: str = "",
+    max_excerpt_chars: int = 650,
+    max_canon_chars: int = 1200,
+    max_continuity_chars: int = 450,
+) -> dict:
+    """Build a scene-specific visual brief that applies only relevant story canon.
+
+    Speaker labels are treated as dialogue context, not as a guarantee that the
+    speaker must be visible. If character names are available, prefer canon
+    paragraphs mentioning those names instead of sending the full story bible
+    prefix to every image-generation request.
+    """
+    scene = scene if isinstance(scene, dict) else {}
+    title = " ".join(str(scene.get("title", "")).split())[:100]
+    raw_text = str(scene.get("text", "") or "").strip()
+    normalized_text = " ".join(raw_text.split())
+    excerpt_limit = max(0, int(max_excerpt_chars))
+    canon_limit = max(0, int(max_canon_chars))
+    continuity_limit = max(0, int(max_continuity_chars))
+    excerpt = normalized_text[:excerpt_limit]
+
+    speakers: list[str] = []
+    dialogue: list[str] = []
+    narrator_parts: list[str] = []
+    for match in _SCENE_SPEAKER_INLINE.finditer(raw_text):
+        name = " ".join(match.group(1).split()).strip()
+        spoken = " ".join(match.group(2).split()).strip()
+        if not name or not spoken:
+            continue
+        if name.casefold() in _NARRATOR_LABELS:
+            narrator_parts.append(spoken)
+            continue
+        if name.casefold() not in {item.casefold() for item in speakers}:
+            speakers.append(name)
+        dialogue.append(f"{name}: {spoken}")
+
+    unlabelled_text = " ".join(_SCENE_SPEAKER_INLINE.sub(" ", raw_text).split()).strip()
+    narration_parts = ([unlabelled_text] if unlabelled_text else []) + narrator_parts
+    narration = " ".join(narration_parts)
+    if not _SCENE_SPEAKER_INLINE.search(raw_text):
+        narration = normalized_text
+    narration = narration[:excerpt_limit]
+
+    bible = str(story_bible or "").strip()
+    relevant_paragraphs: list[str] = []
+    if speakers and bible:
+        for paragraph in re.split(r"\n\s*\n", bible):
+            cleaned = " ".join(paragraph.split()).strip()
+            if not cleaned:
+                continue
+            if any(
+                re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", cleaned, re.IGNORECASE)
+                for name in speakers
+            ):
+                relevant_paragraphs.append(cleaned)
+                if len(relevant_paragraphs) >= 5:
+                    break
+    if relevant_paragraphs:
+        canon_reference = "\n".join(relevant_paragraphs)
+    else:
+        canon_reference = " ".join(bible.split())
+    canon_reference = canon_reference[:canon_limit]
+
+    continuity_reference = " ".join(str(continuity_state or "").split())[:continuity_limit]
+    return {
+        "title": title,
+        "excerpt": excerpt,
+        "speakers": speakers,
+        "narration": narration,
+        "dialogue": dialogue[:8],
+        "canon_reference": canon_reference,
+        "continuity_reference": continuity_reference,
+    }
+
+
 def parse_script_scenes(script: str, max_scenes: int = 120) -> list[dict]:
     """Parse script headings/paragraphs into stable, displayable scene records."""
     if not script or not script.strip():
