@@ -55,7 +55,12 @@ class FFmpegAudioIntegrationTests(unittest.TestCase):
                 "-t", "0.5", "-c:a", "pcm_s16le", str(music)
             ])
 
-            graph = build_audio_filter_graph(True, True, voice_input_index=0, music_input_index=1)
+            graph = build_audio_filter_graph(
+                True, True, voice_input_index=0, music_input_index=1,
+                duration_seconds=2.0, music_fade_seconds=0.5
+            )
+            self.assertIn("sidechaincompress", graph)
+            self.assertIn("afade=t=out", graph)
             self._run([
                 FFMPEG, "-y", "-i", str(voice), "-stream_loop", "-1", "-i", str(music),
                 "-i", str(video), "-filter_complex", graph, "-map", "2:v:0", "-map", "[aout]",
@@ -65,6 +70,12 @@ class FFmpegAudioIntegrationTests(unittest.TestCase):
             self.assertTrue(output.is_file())
             self.assertGreater(output.stat().st_size, 1000)
             self._assert_contains_streams(output)
+            duration_result = subprocess.run(
+                [FFPROBE, "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", str(output)],
+                capture_output=True, text=True, timeout=30, check=True
+            )
+            self.assertAlmostEqual(float(duration_result.stdout.strip()), 2.0, delta=0.30)
 
     def test_mux_single_voice_track_to_mp4(self):
         with tempfile.TemporaryDirectory(prefix="marc_ffmpeg_voice_test_") as tmp:

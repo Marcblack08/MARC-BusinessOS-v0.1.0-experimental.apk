@@ -1,6 +1,7 @@
 """Pure helpers for turning an approved script into renderable scenes."""
 from __future__ import annotations
 
+import math
 import re
 import textwrap
 from pathlib import Path
@@ -219,32 +220,83 @@ def build_audio_filter_graph(
     music_input_index: int | None = None,
     voice_gain: float = 1.0,
     music_gain: float = 0.18,
+    duration_seconds: float | None = None,
+    music_fade_seconds: float = 1.5,
+    duck_music: bool = True,
 ) -> str:
-    """Build an FFmpeg filter graph for narration, background music, or both."""
+    """Build an FFmpeg graph with music fades and automatic speech ducking.
+
+    When output duration is known, music is trimmed to the video and receives
+    short fades at both ends. If narration is present, sidechain compression
+    lowers music while speech is active.
+    """
     if not has_voice and not has_music:
         return ""
     if has_voice and voice_input_index is None:
         raise ValueError("voice_input_index is required when narration is enabled.")
     if has_music and music_input_index is None:
         raise ValueError("music_input_index is required when music is enabled.")
+
+    try:
+        voice_gain = float(voice_gain)
+        music_gain = float(music_gain)
+        music_fade_seconds = float(music_fade_seconds)
+        duration = None if duration_seconds is None else float(duration_seconds)
+    except (TypeError, ValueError):
+        raise ValueError("Audio gains, duration and fade length must be numeric.") from None
+
+    if not math.isfinite(voice_gain) or not math.isfinite(music_gain):
+        raise ValueError("Audio gain must be finite.")
     if not 0.0 <= voice_gain <= 4.0 or not 0.0 <= music_gain <= 4.0:
         raise ValueError("Audio gain must be between 0 and 4.")
+    if not math.isfinite(music_fade_seconds) or not 0.0 <= music_fade_seconds <= 30.0:
+        raise ValueError("Music fade length must be between 0 and 30 seconds.")
+    if duration is not None and (not math.isfinite(duration) or duration <= 0.0):
+        raise ValueError("duration_seconds must be a finite number greater than zero.")
 
-    voice_filter = (
-        f"[{voice_input_index}:a:0]volume={voice_gain:.3f},apad[voice]"
-        if has_voice and has_music else
-        f"[{voice_input_index}:a:0]volume={voice_gain:.3f},apad[aout]"
-        if has_voice else ""
-    )
-    music_filter = (
-        f"[{music_input_index}:a:0]volume={music_gain:.3f},apad[music]"
-        if has_voice and has_music else
-        f"[{music_input_index}:a:0]volume={music_gain:.3f},apad[aout]"
-        if has_music else ""
-    )
-    parts = [part for part in (voice_filter, music_filter) if part]
+    fade = music_fade_seconds
+    if duration is not None and fade > 0.0:
+        # Prevent fade-in and fade-out from overlapping on short videos.
+        fade = min(fade, duration / 2.0)
+
+    parts: list[str] = []
+    if has_voice:
+        voice_label = "voice" if has_music else "aout"
+        parts.append(
+            f"[{voice_input_index}:a:0]volume={voice_gain:.3f},apad[{voice_label}]"
+        )
+
+    if has_music:
+        music_chain = [f"[{music_input_index}:a:0]"]
+        if duration is not None:
+            music_chain.extend([
+                f"atrim=duration={duration:.3f}",
+                "asetpts=PTS-STARTPTS",
+            ])
+        music_chain.append(f"volume={music_gain:.3f}")
+        if fade > 0.0:
+            music_chain.append(f"afade=t=in:st=0:d={fade:.3f}")
+            if duration is not None:
+                fade_out_start = max(0.0, duration - fade)
+                music_chain.append(
+                    f"afade=t=out:st={fade_out_start:.3f}:d={fade:.3f}"
+                )
+        music_label = "music" if has_voice else "aout"
+        music_chain.append("apad")
+        parts.append(",".join(music_chain) + f"[{music_label}]")
+
     if has_voice and has_music:
-        parts.append("[voice][music]amix=inputs=2:duration=longest:dropout_transition=2[aout]")
+        mixed_music = "music"
+        if duck_music:
+            parts.append(
+                "[music][voice]sidechaincompress="
+                "threshold=0.035:ratio=5:attack=20:release=450[ducked]"
+            )
+            mixed_music = "ducked"
+        parts.append(
+            f"[voice][{mixed_music}]amix=inputs=2:duration=longest:dropout_transition=2[aout]"
+        )
+
     return ";".join(parts)
 
 

@@ -116,21 +116,58 @@ class SceneEngineTests(unittest.TestCase):
 
     def test_audio_filter_graph_for_music_only(self):
         graph = build_audio_filter_graph(False, True, music_input_index=0)
-        self.assertIn("[0:a:0]volume=0.180,apad[aout]", graph)
+        self.assertIn("[0:a:0]volume=0.180,afade=t=in:st=0:d=1.500,apad[aout]", graph)
         self.assertNotIn("amix", graph)
+        self.assertNotIn("sidechaincompress", graph)
 
     def test_audio_filter_graph_mixes_voice_and_background_music(self):
-        graph = build_audio_filter_graph(True, True, voice_input_index=0, music_input_index=1)
+        graph = build_audio_filter_graph(
+            True, True, voice_input_index=0, music_input_index=1,
+            duration_seconds=12, music_fade_seconds=1.5
+        )
         self.assertIn("[0:a:0]volume=1.000,apad[voice]", graph)
-        self.assertIn("[1:a:0]volume=0.180,apad[music]", graph)
-        self.assertIn("[voice][music]amix=inputs=2", graph)
+        self.assertIn(
+            "[1:a:0]atrim=duration=12.000,asetpts=PTS-STARTPTS,"
+            "volume=0.180,afade=t=in:st=0:d=1.500,"
+            "afade=t=out:st=10.500:d=1.500,apad[music]",
+            graph,
+        )
+        self.assertIn(
+            "[music][voice]sidechaincompress=threshold=0.035:ratio=5:attack=20:release=450[ducked]",
+            graph,
+        )
+        self.assertIn("[voice][ducked]amix=inputs=2", graph)
         self.assertTrue(graph.endswith("[aout]"))
+
+    def test_audio_filter_graph_keeps_fades_non_overlapping_for_short_video(self):
+        graph = build_audio_filter_graph(
+            False, True, music_input_index=0,
+            duration_seconds=1, music_fade_seconds=1.5
+        )
+        self.assertIn("atrim=duration=1.000,asetpts=PTS-STARTPTS", graph)
+        self.assertIn("afade=t=in:st=0:d=0.500", graph)
+        self.assertIn("afade=t=out:st=0.500:d=0.500", graph)
+
+    def test_audio_filter_graph_can_disable_music_ducking(self):
+        graph = build_audio_filter_graph(
+            True, True, voice_input_index=0, music_input_index=1, duck_music=False
+        )
+        self.assertIn("[voice][music]amix=inputs=2", graph)
+        self.assertNotIn("sidechaincompress", graph)
 
     def test_audio_filter_graph_requires_audio_input_indexes(self):
         with self.assertRaises(ValueError):
             build_audio_filter_graph(True, False)
         with self.assertRaises(ValueError):
             build_audio_filter_graph(False, True)
+
+    def test_audio_filter_graph_rejects_invalid_duration_and_fade(self):
+        with self.assertRaises(ValueError):
+            build_audio_filter_graph(False, True, music_input_index=0, duration_seconds=0)
+        with self.assertRaises(ValueError):
+            build_audio_filter_graph(False, True, music_input_index=0, duration_seconds=-2)
+        with self.assertRaises(ValueError):
+            build_audio_filter_graph(False, True, music_input_index=0, music_fade_seconds=-1)
 
     def test_filter_path_escapes_windows_colon_and_apostrophe(self):
         escaped = ffmpeg_filter_path(r"C:\Users\Marc's files\scene:01.txt")

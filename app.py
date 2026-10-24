@@ -4448,7 +4448,8 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                 video_input_index = input_index
                 mux_cmd.extend(["-i", str(temp_output_path)])
                 filter_graph = build_audio_filter_graph(
-                    has_voice, has_music, voice_input_index, music_input_index
+                    has_voice, has_music, voice_input_index, music_input_index,
+                    duration_seconds=float(sum(durations)),
                 )
                 mux_cmd.extend([
                     "-filter_complex", filter_graph,
