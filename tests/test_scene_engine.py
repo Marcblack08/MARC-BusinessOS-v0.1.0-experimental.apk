@@ -83,17 +83,23 @@ class SceneEngineTests(unittest.TestCase):
             {"word_count": 200, "text": "two"},
             {"word_count": 100, "text": "three"},
         ]
-        durations = allocate_scene_durations(scenes, 120)
-        self.assertEqual(sum(durations), 120)
-        self.assertTrue(all(x >= 5 for x in durations))
-        self.assertGreater(durations[1], durations[0])
+        durations = allocate_scene_durations(scenes, 12)
+        self.assertEqual(sum(durations), 12)
+        self.assertTrue(all(1 <= x <= 5 for x in durations))
+        self.assertGreaterEqual(durations[1], durations[0])
 
-    def test_duration_respects_minimum_for_many_scenes(self):
+    def test_duration_respects_five_second_cap_for_many_scenes(self):
         scenes = [{"word_count": 1, "text": "scene"} for _ in range(30)]
         durations = allocate_scene_durations(scenes, 60)
         self.assertEqual(len(durations), 30)
-        self.assertTrue(all(x >= 5 for x in durations))
-        self.assertEqual(sum(durations), 150)
+        self.assertTrue(all(1 <= x <= 5 for x in durations))
+        self.assertEqual(sum(durations), 60)
+
+    def test_duration_shortens_if_there_are_too_few_scenes(self):
+        scenes = [{"word_count": 100, "text": "scene"} for _ in range(3)]
+        durations = allocate_scene_durations(scenes, 120)
+        self.assertEqual(durations, [5, 5, 5])
+        self.assertEqual(sum(durations), 15)
 
     def test_srt_cues_are_numbered_and_time_uses_comma_milliseconds(self):
         scenes = [

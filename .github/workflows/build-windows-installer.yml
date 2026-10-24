@@ -3,9 +3,10 @@ name: Build Windows desktop installer
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, "audit/**"]
     paths:
       - "app.py"
+      - "docs/INSTALACION_WINDOWS.md"
       - "remote_server.py"
       - "requirements.txt"
       - "scene_engine.py"

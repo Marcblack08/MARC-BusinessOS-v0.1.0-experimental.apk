@@ -14,7 +14,8 @@ set "PYEXE="
 set "PYARGS="
 where py >nul 2>nul
 if not errorlevel 1 (
-  for %%V in (3.15 3.13 3.12 3.11) do (
+  rem Prefer Python 3.12, the version used by the Windows validation workflow.
+  for %%V in (3.12 3.11 3.13 3.14) do (
     py -%%V -c "import sys" >nul 2>nul
     if not errorlevel 1 if not defined PYARGS (
       set "PYEXE=py"

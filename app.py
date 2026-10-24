@@ -32,7 +32,7 @@ from scene_engine import (
 from story_engine import (
     FPS_OPTIONS, RESOLUTION_PROFILES, SERIES_VIDEO_MODE, SHORT_VIDEO_MODE,
     build_series_context, continuity_review_check, export_dimensions,
-    extract_speaker_names, target_word_count
+    extract_speaker_names, target_word_count, format_short_chapter, visual_shot_count
 )
 from remote_server import RemoteControlServer
 
@@ -161,6 +161,7 @@ class App(tk.Tk):
         self.comfy_url = COMFYUI_URL
         self.comfy_available = False
         self.image_generation_running = False
+        self.image_prompt_cache = {}
         self._style()
         self._build()
         self.refresh_projects()
@@ -493,12 +494,12 @@ class App(tk.Tk):
         style.configure("Muted.TLabel", background=self.colors["bg"], foreground=self.colors["muted"], font=("Segoe UI", 9))
         style.configure("Title.TLabel", background=self.colors["bg"], foreground="#62b7ff", font=("Segoe UI", 23, "bold"))
         style.configure("Section.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 11, "bold"))
-        style.configure("TButton", padding=(10, 7), font=("Segoe UI Semibold", 9), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=1, relief="flat")
+        style.configure("TButton", padding=(12, 9), font=("Segoe UI Semibold", 9), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=1, relief="flat")
         style.map("TButton",
                   background=[("active", "#203b5d"), ("pressed", self.colors["accent"])],
                   foreground=[("disabled", "#60738b")],
                   bordercolor=[("active", self.colors["accent"])])
-        style.configure("Accent.TButton", padding=(12, 8), font=("Segoe UI", 9, "bold"),
+        style.configure("Accent.TButton", padding=(14, 10), font=("Segoe UI", 9, "bold"),
                         background=self.colors["accent"], foreground="#ffffff", borderwidth=0, relief="flat")
         style.map("Accent.TButton", background=[("active", self.colors["accent_hover"]), ("pressed", "#0875df")])
         style.configure("TEntry", padding=(10, 9), fieldbackground=self.colors["input"],
@@ -525,12 +526,12 @@ class App(tk.Tk):
         style.map("Vertical.TScrollbar", background=[("active", self.colors["accent"])])
         style.configure("TNotebook", background=self.colors["bg"], borderwidth=0, tabmargins=(2, 5, 2, 0))
         style.configure("TNotebook.Tab", background=self.colors["panel2"], foreground=self.colors["muted"],
-                        padding=(12, 7), font=("Segoe UI", 9, "bold"), borderwidth=0)
+                        padding=(16, 10), font=("Segoe UI", 9, "bold"), borderwidth=0)
         style.map("TNotebook.Tab",
                   background=[("selected", self.colors["accent"]), ("active", "#1b3553")],
                   foreground=[("selected", "#ffffff"), ("active", self.colors["text"])])
         style.configure("Treeview", background=self.colors["input"], fieldbackground=self.colors["input"],
-                        foreground=self.colors["text"], rowheight=28, borderwidth=0,
+                        foreground=self.colors["text"], rowheight=34, borderwidth=0,
                         font=("Segoe UI", 9))
         style.configure("Treeview.Heading", background=self.colors["panel2"],
                         foreground="#69b8ff", font=("Segoe UI", 8, "bold"), relief="flat")
@@ -875,9 +876,17 @@ class App(tk.Tk):
         tk.Label(scenes_tab, text="Organiza el guion como escenas, asigna ilustraciones propias o genera imágenes con un motor local opcional.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1000, justify="left").grid(row=1, column=0, sticky="w", pady=(4, 6))
-        self.scene_summary_var = tk.StringVar(value="0 escenas · 0 palabras")
-        tk.Label(scenes_tab, textvariable=self.scene_summary_var, bg=self.colors["panel"],
-                 fg="#69b8ff", font=("Segoe UI", 9, "bold")).grid(row=2, column=0, sticky="w", pady=(0, 8))
+        self.scene_summary_var = tk.StringVar(value="0 planos · 0 palabras · planos ≤5 s")
+        scene_summary_card = tk.Frame(
+            scenes_tab, bg=self.colors["surface"], padx=12, pady=9,
+            highlightbackground=self.colors["border"], highlightthickness=1
+        )
+        scene_summary_card.grid(row=2, column=0, sticky="ew", pady=(0, 10))
+        tk.Frame(scene_summary_card, bg=self.colors["accent"], width=3).pack(side="left", fill="y", padx=(0, 10))
+        tk.Label(
+            scene_summary_card, textvariable=self.scene_summary_var, bg=self.colors["surface"],
+            fg="#83c7ff", font=("Segoe UI Semibold", 9), anchor="w", justify="left", wraplength=1000
+        ).pack(side="left", fill="x", expand=True)
 
         scene_actions = tk.Frame(scenes_tab, bg=self.colors["panel"])
         scene_actions.grid(row=3, column=0, sticky="ew", pady=(0, 7))
@@ -1332,7 +1341,7 @@ class App(tk.Tk):
             canvas.create_text(12, (y1 + y2) / 2, text=label, anchor="w",
                                fill=color, font=("Segoe UI", 8, "bold"))
         durations = allocate_scene_durations(self.scene_data, total) if self.scene_data else []
-        durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
+        durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value)))) for i, value in enumerate(durations)]
         timeline_total = max(total, sum(durations)) if durations else total
         width = left + timeline_total * scale + 32
         self.timeline_canvas.configure(scrollregion=(0, 0, width, height))
@@ -1399,7 +1408,7 @@ class App(tk.Tk):
             height = 86
             target_seconds = self._timeline_duration_seconds()
             durations = allocate_scene_durations(self.scene_data, target_seconds) if self.scene_data else []
-            durations = [self.scene_duration_overrides.get(str(i + 1), value)
+            durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value))))
                          for i, value in enumerate(durations)]
             total = max(1, sum(durations) if durations else target_seconds)
             scale = max(0.22, min(1.6, (viewport - left - 12) / total))
@@ -1502,7 +1511,7 @@ class App(tk.Tk):
         left = 88
         target = self._timeline_duration_seconds()
         durations = allocate_scene_durations(self.scene_data, target)
-        durations = [self.scene_duration_overrides.get(str(i + 1), value)
+        durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value))))
                      for i, value in enumerate(durations)]
         elapsed = 0
         scale = max(0.22, min(1.6, (viewport - left - 12) / max(1, sum(durations))))
@@ -1543,7 +1552,7 @@ class App(tk.Tk):
         canvas_y = self.timeline_canvas.canvasy(event.y)
         if 36 <= canvas_y <= 82 and self.scene_data:
             durations = allocate_scene_durations(self.scene_data, self._timeline_duration_seconds())
-            durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
+            durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value)))) for i, value in enumerate(durations)]
             elapsed = 0
             for index, duration in enumerate(durations):
                 if elapsed <= seconds < elapsed + duration or index == len(durations) - 1:
@@ -1581,12 +1590,12 @@ class App(tk.Tk):
         current = self.scene_duration_overrides.get(str(number), durations[number - 1])
         from tkinter import simpledialog
         value = simpledialog.askinteger(
-            "Duración del clip", f"Duración de la escena {number} en segundos (5–3600):",
-            initialvalue=current, minvalue=5, maxvalue=3600, parent=self
+            "Duración del clip", f"Duración de la escena {number} en segundos (1–5):",
+            initialvalue=min(5, max(1, int(current))), minvalue=1, maxvalue=5, parent=self
         )
         if value is None:
             return
-        self.scene_duration_overrides[str(number)] = int(value)
+        self.scene_duration_overrides[str(number)] = min(5, max(1, int(value)))
         self._save_scene_assets()
         self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
         self.save_project(reset_approval=True, quiet=True)
@@ -1668,7 +1677,7 @@ class App(tk.Tk):
             self.scene_assets = {}
         try:
             loaded_durations = json.loads(duration_manifest.read_text(encoding="utf-8")) if duration_manifest.is_file() else {}
-            self.scene_duration_overrides = {str(k): max(5, min(3600, int(v))) for k, v in loaded_durations.items() if str(k).isdigit()}
+            self.scene_duration_overrides = {str(k): max(1, min(5, int(v))) for k, v in loaded_durations.items() if str(k).isdigit()}
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             self.scene_duration_overrides = {}
         try:
@@ -1752,7 +1761,7 @@ class App(tk.Tk):
         except (ValueError, tk.TclError):
             target_seconds = 600
         durations = allocate_scene_durations(self.scene_data, target_seconds)
-        durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
+        durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value)))) for i, value in enumerate(durations)]
         total_words = 0
         for idx, scene in enumerate(self.scene_data):
             asset = self.scene_assets.get(str(idx + 1), "")
@@ -1779,7 +1788,13 @@ class App(tk.Tk):
         if hasattr(self, "scene_summary_var"):
             voice_label = Path(self.audio_track_path).name if self.audio_track_path and Path(self.audio_track_path).is_file() else "sin narración"
             music_label = Path(self.music_track_path).name if self.music_track_path and Path(self.music_track_path).is_file() else "sin música"
-            self.scene_summary_var.set(f"{len(self.scene_data)} escenas · {total_words} palabras · objetivo {self.duration_var.get()} min · {voice_label} · {music_label}")
+            required_shots = visual_shot_count(target_seconds)
+            missing_shots = max(0, required_shots - len(self.scene_data))
+            visual_note = (
+                f" · faltan {missing_shots} planos para cubrir la duración a ≤5 s"
+                if missing_shots else " · todos los planos ≤5 s"
+            )
+            self.scene_summary_var.set(f"{len(self.scene_data)} planos · {total_words} palabras · objetivo {self.duration_var.get()} min{visual_note} · {voice_label} · {music_label}")
         self._draw_timeline()
         self._render_preview_frame()
 
@@ -2983,28 +2998,30 @@ Write-Output 'NARRATION_OK'
             scene_narration = visual_brief["narration"]
             scene_dialogue = " | ".join(visual_brief["dialogue"])[:900]
             scene_speakers = ", ".join(visual_brief["speakers"]) or "none explicitly labelled"
-            # Text guidance improves consistency but cannot guarantee pixel-identical characters.
-            try:
-                visual_description = self._ollama_request(
-                    "Act as a cinematic storyboard artist and image-prompt director. Convert this one Spanish story scene "
-                    "into one concise English prompt for a SINGLE still image, not a sequence or collage. "
-                    "Describe the visible subjects and their action, facial expression, body language, wardrobe, setting, time/weather, "
-                    "foreground/background, camera framing/angle, lighting and mood. The scene excerpt determines what is happening. "
-                    "Treat the canon as a lookup reference: apply only the visual profile of characters relevant to this scene and only "
-                    "locations or props that the excerpt calls for. Do not copy unrelated profiles into the image and do not invent a new design. "
-                    "Speaker labels are dialogue context, not proof that every speaker must appear on screen. Never render dialogue as written text. "
-                    "Preserve established age range, facial features, hairstyle, clothing cues and signature objects when relevant. "
-                    "Return only the prompt, without headings, markdown or explanation. "
-                    f"Series premise: {project_topic}. Scene title: {visual_brief['title']}. "
-                    f"Narration/action: {scene_narration or story_excerpt}. "
-                    f"Dialogue context for emotion only: {scene_dialogue or 'No explicit dialogue labels'}. "
-                    f"Speaker labels in this scene: {scene_speakers}. "
-                    f"Relevant canonical character reference: {canon_reference or 'No character profile was available'}. "
-                    f"Previous episode state: {continuity_reference or 'No previous episode state supplied'}.",
-                    max_tokens=280
-                )
-            except Exception:
-                visual_description = story_excerpt
+            # Batch mode prepares prompts in grouped Ollama calls before image rendering.
+            visual_description = str(getattr(self, "image_prompt_cache", {}).pop(str(scene_number), "")).strip()
+            if not visual_description:
+                try:
+                    visual_description = self._ollama_request(
+                        "Act as a cinematic storyboard artist and image-prompt director. Convert this one Spanish story scene "
+                        "into one concise English prompt for a SINGLE still image, not a sequence or collage. "
+                        "Describe the visible subjects and their action, facial expression, body language, wardrobe, setting, time/weather, "
+                        "foreground/background, camera framing/angle, lighting and mood. The scene excerpt determines what is happening. "
+                        "Treat the canon as a lookup reference: apply only the visual profile of characters relevant to this scene and only "
+                        "locations or props that the excerpt calls for. Do not copy unrelated profiles into the image and do not invent a new design. "
+                        "Speaker labels are dialogue context, not proof that every speaker must appear on screen. Never render dialogue as written text. "
+                        "Preserve established age range, facial features, hairstyle, clothing cues and signature objects when relevant. "
+                        "Return only the prompt, without headings, markdown or explanation. "
+                        f"Series premise: {project_topic}. Scene title: {visual_brief['title']}. "
+                        f"Narration/action: {scene_narration or story_excerpt}. "
+                        f"Dialogue context for emotion only: {scene_dialogue or 'No explicit dialogue labels'}. "
+                        f"Speaker labels in this scene: {scene_speakers}. "
+                        f"Relevant canonical character reference: {canon_reference or 'No character profile was available'}. "
+                        f"Previous episode state: {continuity_reference or 'No previous episode state supplied'}.",
+                        max_tokens=280
+                    )
+                except Exception:
+                    visual_description = story_excerpt
             prompt = (
                 f"{style_prompt}. One cinematic still of this precise story beat: {visual_description}. "
                 f"Relevant canonical visual cues: {canon_reference[:650]}. "
@@ -3105,6 +3122,70 @@ Write-Output 'NARRATION_OK'
         except Exception as exc:
             self.generation_queue.put(("image_error", scene_number, str(exc)))
 
+    def _prepare_batch_image_prompts_worker(
+        self, scenes_to_plan, drawing_style, project_topic, story_bible, continuity_state
+    ):
+        """Prepare scene prompts in groups, falling back to scene text on model errors."""
+        styles = {
+            "Anime cinematográfico": "cinematic Japanese anime film frame, expressive character acting, dramatic lighting",
+            "Manga en blanco y negro": "black and white manga illustration, inked line art, screentones, high contrast",
+            "Cartoon occidental": "polished western animated series frame, appealing shapes, clear silhouettes",
+            "Cómic realista": "realistic graphic novel illustration, detailed ink and painterly shading",
+            "Acuarela ilustrada": "hand-painted watercolor storybook illustration, delicate paper texture",
+            "Pixel art": "high-quality pixel art scene, coherent pixel grid, limited palette",
+            "3D estilizado": "stylized 3D animated film still, detailed materials, cinematic light",
+            "Realismo cinematográfico": "cinematic photorealistic movie still, natural dramatic lighting",
+        }
+        style_prompt = styles.get(drawing_style, "cinematic illustrated story scene")
+        results = {}
+        total = len(scenes_to_plan)
+        chunk_size = 12
+        for start in range(0, total, chunk_size):
+            group = scenes_to_plan[start:start + chunk_size]
+            briefs, records = {}, []
+            for scene_number, scene in group:
+                brief = build_scene_visual_brief(scene, story_bible, continuity_state)
+                briefs[str(scene_number)] = brief
+                records.append({
+                    "id": str(scene_number), "title": brief["title"],
+                    "action": brief["narration"] or brief["excerpt"],
+                    "dialogue_emotion_only": " | ".join(brief["dialogue"])[:180],
+                    "characters": brief["speakers"], "canon": brief["canon_reference"][:420],
+                })
+            self.generation_queue.put(("image_prompt_plan_progress", start, total,
+                f"Preparando storyboard visual · {start}/{total} escenas"))
+            generated = {}
+            prompt = (
+                "You are a cinematic storyboard artist. Return only a valid JSON object. "
+                "Keys must be supplied scene ids; values are concise English prompts for one still image each. "
+                "No markdown, collage, panels, captions, logos or watermarks. One coherent moment per image. "
+                "Describe visible action, expression, wardrobe, environment, framing, lighting and mood. "
+                "Use relevant character canon and preserve visual identity across scenes. "
+                f"Visual style: {style_prompt}. Premise: {project_topic[:600]}. "
+                "Scene records: " + json.dumps(records, ensure_ascii=False)
+            )
+            try:
+                raw = self._ollama_request(prompt, max_tokens=min(1100, max(320, len(group) * 75)))
+                left, right = raw.find("{"), raw.rfind("}")
+                if left >= 0 and right > left:
+                    parsed = json.loads(raw[left:right + 1])
+                    if isinstance(parsed, dict):
+                        generated = {str(k): str(v).strip() for k,v in parsed.items()
+                                     if str(k) in briefs and isinstance(v, str) and v.strip()}
+            except Exception:
+                generated = {}
+            for scene_number, _scene in group:
+                key = str(scene_number)
+                brief = briefs[key]
+                results[key] = generated.get(key,
+                    f"{brief['title']}. {brief['narration'] or brief['excerpt']}. "
+                    f"Relevant characters: {', '.join(brief['speakers']) or 'as described in the scene'}. "
+                    "One coherent cinematic still, clear focal point, consistent costume and setting.")
+            done = min(total, start + len(group))
+            self.generation_queue.put(("image_prompt_plan_progress", done, total,
+                f"Storyboard preparado · {done}/{total} escenas"))
+        self.generation_queue.put(("image_prompts_ready", results))
+
     def generate_missing_scene_images(self, preconfirmed=False, preview_after=False):
         """Generate missing scene illustrations sequentially through the existing ComfyUI worker."""
         if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
@@ -3152,8 +3233,22 @@ Write-Output 'NARRATION_OK'
         self.batch_image_active = True
         self.preview_after_image_batch = bool(preview_after)
         self.studio_tabs.select(self.scenes_tab)
-        self.status_var.set(f"Preparando {len(missing)} ilustraciones locales con ComfyUI…")
-        self._start_next_missing_scene_image()
+        self.image_prompt_cache = {}
+        self.image_generation_running = True
+        self._set_image_state(True)
+        self.progressbar.configure(mode="indeterminate")
+        self.progressbar.start(12)
+        self.progress_label_var.set("Preparando storyboard visual")
+        self.progress_detail_var.set(f"0/{len(missing)} escenas · agrupando prompts antes de crear imágenes")
+        self.status_var.set(f"Preparando prompts para {len(missing)} ilustraciones; después se generarán en secuencia.")
+        row = self.conn.execute("SELECT topic, story_bible, continuity_state FROM projects WHERE id=?", (self.current_id,)).fetchone()
+        project_topic = str(row["topic"] or "") if row else str(self.topic_var.get() or "")
+        story_bible = str(row["story_bible"] or "") if row else str(self.story_bible or "")
+        continuity_state = str(row["continuity_state"] or "") if row else str(self.continuity_state or "")
+        scenes_to_plan = [(number, dict(self.scene_data[number - 1])) for number in missing]
+        threading.Thread(target=self._prepare_batch_image_prompts_worker,
+            args=(scenes_to_plan, self.drawing_style_var.get(), project_topic, story_bible, continuity_state),
+            daemon=True).start()
 
     def _start_next_missing_scene_image(self):
         if not self.batch_image_active:
@@ -3167,6 +3262,7 @@ Write-Output 'NARRATION_OK'
                 self.status_var.set(f"Ilustraciones listas ({total}). Iniciando vista previa del vídeo…")
                 self.after(250, lambda: self._start_video_render(preview=True))
             else:
+                self.image_prompt_cache = {}
                 self.status_var.set(f"Generación por lotes completada: {total} ilustraciones.")
                 if not getattr(self, "remote_image_batch_active", False):
                     messagebox.showinfo("Ilustraciones listas", f"Se generaron {total} ilustraciones y se asignaron a sus escenas.")
@@ -3478,6 +3574,9 @@ Write-Output 'NARRATION_OK'
                     f"Protagonista: {protagonist}. Conflicto: {conflict}. Narrador: {data['narrator']}. Desenlace: {data['ending']}. "
                     f"Estilo visual: {data['drawing_style']}. Animación: {data['animation_style']}. Plataforma: {data['platform']}. "
                     "Duración aproximada: 2 minutos. Prioriza ritmo y claridad; guion de aproximadamente 220-300 palabras.\n"
+                    f"STORYBOARD OBLIGATORIO: incluye al menos {visual_shot_count(120)} planos/escenas numerados, uno por cada máximo de 5 segundos. "
+                    "Usa encabezados [ESCENA 01 — título concreto], cada uno con un instante visual único, breve y fácil de ilustrar. "
+                    "No agrupes varias acciones ni saltos temporales en una escena. Cada plano debe hacer avanzar la historia.\n"
                     f"Biblia previa si existe: {str(data.get('continuity_state', ''))[:900]}"
                 )
                 fast_result = self._ollama_request(fast_prompt, max_tokens=950)
@@ -3488,7 +3587,7 @@ Write-Output 'NARRATION_OK'
                 if not chapter:
                     raise RuntimeError("Qwen no devolvió un guion. Vuelve a intentarlo.")
                 self.generation_queue.put(("story_bible", story_bible))
-                self.generation_queue.put(("chapter", "\\n\\n[CAPÍTULO 01 DE 01]\\n" + chapter + "\\n", 1, 1))
+                self.generation_queue.put(("chapter", format_short_chapter(chapter), 1, 1))
                 new_state = ("Final del corto: " + chapter[-1800:]).strip()
                 self.generation_queue.put(("done", 1, story_bible, new_state))
                 return
@@ -3540,6 +3639,8 @@ Write-Output 'NARRATION_OK'
             completed = 0
             total_words = target_word_count(data["duration"], data["video_mode"])
             words_per_chapter = max(150, round(total_words / chapter_count))
+            seconds_per_chapter = max(60, round(data["duration"] * 60 / chapter_count))
+            visual_shots_per_chapter = visual_shot_count(seconds_per_chapter)
             for index in range(1, chapter_count + 1):
                 if self.cancel_event.is_set():
                     self.generation_queue.put(("cancelled",))
@@ -3565,7 +3666,9 @@ Write-Output 'NARRATION_OK'
                     f"Narrador: {data['narrator']}. Protagonista: {data['protagonist'] or 'según la biblia'}. Conflicto: {data['conflict'] or 'según la biblia'}. "
                     f"Desenlace: {data['ending']}. Dirección visual: {data['drawing_style']}; animación: {data['animation_style']}. Plataforma: {data['platform']}. "
                     f"Duración: {data['duration']} minutos. Tipo: {previous_label}. Episodio {episode_number}; capítulo {index}/{chapter_count}. "
-                    f"Objetivo aproximado: {words_per_chapter} palabras; si el ritmo pide menos, prioriza calidad sobre relleno.\n\n"
+                    f"Objetivo aproximado: {words_per_chapter} palabras; si el ritmo pide menos, prioriza calidad sobre relleno.\n"
+                    f"STORYBOARD: crea al menos {visual_shots_per_chapter} planos numerados para este capítulo, con máximo de 5 segundos por plano. "
+                    "Usa [ESCENA 01 — título concreto] y describe un momento visual único, no una secuencia de acciones agrupadas.\n\n"
                     "BIBLIA / ESCALETA CANÓNICA:\n" + story_bible + "\n\nESCALETA DEL EPISODIO ACTUAL:\n" + plan +
                     ("\n\nESTADO AL FINAL DEL EPISODIO ANTERIOR (continúa después de estos hechos):\n" + previous_excerpt
                      if previous_excerpt else "\n\nINICIO: introduce al público directamente en el conflicto.")
@@ -3963,6 +4066,21 @@ Write-Output 'NARRATION_OK'
                             "Generador de imágenes no disponible",
                             "La IA de texto y el motor visual son componentes distintos. MARC necesita ComfyUI activo y al menos un checkpoint de imagen para generar ilustraciones.\n\n" + detail
                         )
+                elif kind == "image_prompt_plan_progress":
+                    completed, total, detail = event[1], event[2], event[3]
+                    self.progress_label_var.set(f"Preparando storyboard · {completed}/{total}")
+                    self.progress_detail_var.set(detail)
+                    self.status_var.set(detail)
+                elif kind == "image_prompts_ready":
+                    self.image_prompt_cache = dict(event[1] or {})
+                    self.image_generation_running = False
+                    self.progressbar.stop()
+                    self.progressbar.configure(mode="determinate", maximum=max(1, len(self.image_prompt_cache)), value=0)
+                    self._set_image_state(False)
+                    self.progress_label_var.set(f"Storyboard listo · {len(self.image_prompt_cache)} prompts")
+                    self.progress_detail_var.set("Prompts agrupados con IA; iniciando generación local de imágenes.")
+                    self.status_var.set("Prompts visuales preparados. ComfyUI generará las ilustraciones una por una.")
+                    self.after(180, self._start_next_missing_scene_image)
                 elif kind == "image_progress":
                     self.progress_label_var.set(f"Ilustración IA · escena {event[1]}")
                     self.progress_detail_var.set(event[2])
@@ -3997,6 +4115,9 @@ Write-Output 'NARRATION_OK'
                     self.batch_image_active = False
                     self.batch_image_queue = []
                     self.batch_image_total = 0
+                    self.image_prompt_cache = {}
+                    self.progressbar.stop()
+                    self.progressbar.configure(mode="determinate")
                     self.preview_after_image_batch = False
                     self._set_image_state(False)
                     self.progress_label_var.set(f"Ilustración fallida · escena {scene_number}")
@@ -4512,7 +4633,7 @@ Write-Output 'NARRATION_OK'
                     return
         target_seconds = max(60, int(row["duration_minutes"]) * 60)
         durations = allocate_scene_durations(scenes, target_seconds)
-        durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
+        durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value)))) for i, value in enumerate(durations)]
         audio_path = preview_audio_path
         music_path = self.music_track_path if self.music_track_path and Path(self.music_track_path).is_file() else ""
         loop_music = bool(self.loop_music_var.get()) if self.loop_music_var is not None else True

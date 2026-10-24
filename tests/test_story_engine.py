@@ -5,9 +5,11 @@ from story_engine import (
     build_series_context,
     continuity_review_check,
     export_dimensions,
+    format_short_chapter,
     extract_speaker_names,
     narration_segments,
     target_word_count,
+    visual_shot_count,
 )
 
 
@@ -21,6 +23,21 @@ class StoryEngineTests(unittest.TestCase):
 
     def test_two_minute_mode_targets_two_minutes(self):
         self.assertEqual(target_word_count(60, SHORT_VIDEO_MODE), 270)
+
+    def test_visual_shot_count_respects_five_second_cap(self):
+        self.assertEqual(visual_shot_count(120), 24)
+        self.assertEqual(visual_shot_count(300), 60)
+        self.assertEqual(visual_shot_count(301), 61)
+        with self.assertRaises(ValueError):
+            visual_shot_count(0)
+        with self.assertRaises(ValueError):
+            visual_shot_count(10, 0)
+
+    def test_short_chapter_uses_real_line_breaks(self):
+        formatted = format_short_chapter("[GANCHO]\\nUna puerta se cierra.")
+        self.assertIn("\n[CAPÍTULO 01 DE 01]\n", formatted)
+        self.assertIn("[GANCHO]\nUna puerta", formatted)
+        self.assertNotIn("\\n", formatted)
 
     def test_speaker_labels_are_unique_and_ordered(self):
         script = "[NARRADOR]: La puerta se abrió.\n\n[JUAN]: ¿Quién anda ahí?\n\n[JUAN]: ¡Contesta!"
