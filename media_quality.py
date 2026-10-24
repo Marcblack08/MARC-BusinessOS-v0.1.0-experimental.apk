@@ -214,10 +214,10 @@ def inspect_media_file(
 
 
 _SRT_BLOCK = re.compile(
-    r"(?m)^([0-9]+)\\s*\\n"
-    r"(\\d{2,}:\\d{2}:\\d{2},\\d{3})\\s+-->\\s+"
-    r"(\\d{2,}:\\d{2}:\\d{2},\\d{3})\\s*\\n"
-    r"(.+?)(?=\\n{2,}|\\Z)",
+    r"(?m)^([0-9]+)\s*\n"
+    r"(\d{2,}:\d{2}:\d{2},\d{3})\s+-->\s+"
+    r"(\d{2,}:\d{2}:\d{2},\d{3})\s*\n"
+    r"(.+?)(?=\n{2,}|\Z)",
     re.DOTALL,
 )
 
@@ -227,7 +227,7 @@ def validate_srt_text(text: str) -> dict[str, Any]:
     source = str(text or "").strip()
     if not source:
         return {"passed": False, "cue_count": 0, "errors": ["El archivo SRT está vacío."]}
-    blocks = re.split(r"\\n\\s*\\n", source)
+    blocks = re.split(r"\n\s*\n", source)
     errors: list[str] = []
     valid_count = 0
     previous_end = -1
@@ -245,7 +245,7 @@ def validate_srt_text(text: str) -> dict[str, Any]:
         if int(lines[0].strip()) != index:
             errors.append(f"Bloque {index}: numeración de subtítulos no consecutiva.")
         timing = re.fullmatch(
-            r"(\\d{2,}:\\d{2}:\\d{2},\\d{3})\\s+-->\\s+(\\d{2,}:\\d{2}:\\d{2},\\d{3})",
+            r"(\d{2,}:\d{2}:\d{2},\d{3})\s+-->\s+(\d{2,}:\d{2}:\d{2},\d{3})",
             lines[1].strip(),
         )
         if not timing:
