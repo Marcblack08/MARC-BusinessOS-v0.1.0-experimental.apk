@@ -3666,6 +3666,7 @@ Write-Output 'NARRATION_OK'
                     "revela información gradualmente, da consecuencias a decisiones anteriores y no resuelvas misterios abiertos sin preparación. "
                     "No cambies apariencia, parentesco, muertes, ubicación ni objetos canónicos. "
                     f"Serie: {data['title']}. Episodio nuevo: {episode_number}. Modo: {data['video_mode']}. "
+                    f"Dirección creativa: {creative_direction(data['genre'], data['platform'], data['video_mode'])}. "
                     f"Duración: {data['duration']} minutos. Escribe 3-6 beats concretos.\n\n" + continuity_context
                 )
                 plan = self._ollama_request(plan_prompt, max_tokens=550)
@@ -4363,7 +4364,14 @@ Write-Output 'NARRATION_OK'
             else:
                 messagebox.showwarning("Sin guion", "Genera o escribe un guion antes de aprobarlo.")
             return
-        warnings = continuity_review_check(script, self.continuity_state if self.episode_number > 1 else "")
+        mode = self.video_mode_var.get() if hasattr(self, "video_mode_var") else SERIES_VIDEO_MODE
+        target_seconds = 120 if mode == SHORT_VIDEO_MODE else max(60, int(self.duration_var.get()) * 60)
+        expected_scenes = visual_shot_count(target_seconds)
+        warnings = continuity_review_check(
+            script,
+            self.continuity_state if self.episode_number > 1 else "",
+            expected_scenes=expected_scenes,
+        )
         review_text = "¿Has revisado el guion y confirmas que está listo para renderizar?"
         if warnings:
             review_text = (
