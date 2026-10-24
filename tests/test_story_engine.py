@@ -2,6 +2,7 @@ import unittest
 
 from story_engine import (
     SHORT_VIDEO_MODE,
+    SERIES_VIDEO_MODE,
     build_series_context,
     continuity_review_check,
     creative_direction,
