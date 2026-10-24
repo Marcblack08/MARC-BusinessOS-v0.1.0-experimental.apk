@@ -3392,6 +3392,7 @@ Write-Output 'NARRATION_OK'
         })
         self.cancel_event.clear()
         self.generation_running = True
+        self.remote_generate_active = bool(remote)
         self._set_generation_state(True)
         self.set_configuration_visible(False)
         self.script_text.configure(state="normal")
@@ -3985,6 +3986,7 @@ Write-Output 'NARRATION_OK'
                     self.script_text.configure(state="disabled")
                     self.save_project(reset_approval=True, quiet=True)
                     self.generation_running = False
+                    self.remote_generate_active = False
                     self._set_generation_state(False)
                     self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
                     words = len(self.script_text.get("1.0", "end-1c").split())
@@ -4003,6 +4005,7 @@ Write-Output 'NARRATION_OK'
                     self.script_text.configure(state="normal")
                     self.save_project(reset_approval=True, quiet=True)
                     self.generation_running = False
+                    self.remote_generate_active = False
                     self._set_generation_state(False)
                     self.status_var.set("Generación cancelada. El borrador parcial se conservó sin aprobar.")
                 elif kind == "error":
@@ -4013,8 +4016,10 @@ Write-Output 'NARRATION_OK'
                     self.script_text.configure(state="normal")
                     self.save_project(reset_approval=True, quiet=True)
                     self.generation_running = False
+                    self.remote_generate_active = False
                     self._set_generation_state(False)
-                    messagebox.showerror("Error de generación", "La IA local no pudo completar el guion.\n\n" + event[1])
+                    if not getattr(self, "remote_generate_active", False):
+                        messagebox.showerror("Error de generación", "La IA local no pudo completar el guion.\n\n" + event[1])
                     self.status_var.set("La generación se detuvo. El borrador parcial se conserva sin aprobar.")
                 elif kind == "render_progress":
                     current, total, detail = event[1], event[2], event[3]
@@ -4085,17 +4090,21 @@ Write-Output 'NARRATION_OK'
                     messagebox.showerror("Error al mezclar audio", event[1])
                 elif kind == "render_cancelled":
                     self.render_running = False
+                    self.remote_render_active = False
                     self._set_render_state(False)
                     self.progress_label_var.set("Exportación cancelada")
                     self.progress_detail_var.set("El render se detuvo por petición del usuario. El MP4 parcial puede no reproducirse.")
                     self.status_var.set("Exportación cancelada.")
                 elif kind == "render_error":
                     self.render_running = False
+                    was_remote_render = bool(getattr(self, "remote_render_active", False))
+                    self.remote_render_active = False
                     self._set_render_state(False)
                     self.progress_label_var.set("Error durante la exportación")
                     self.progress_detail_var.set("Revisa el mensaje de FFmpeg y la disponibilidad de recursos.")
-                    self.status_var.set("No se pudo completar el MP4.")
-                    messagebox.showerror("Error de exportación", event[1])
+                    self.status_var.set("No se pudo completar el MP4: " + str(event[1])[-240:])
+                    if not was_remote_render:
+                        messagebox.showerror("Error de exportación", event[1])
         except queue.Empty:
             pass
         self.after(180, self._poll_generation_events)
