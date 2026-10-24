@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from scene_engine import (
-    allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief,
+    allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief, expand_scenes_to_shots,
     build_srt_subtitles, build_subtitle_drawtext_filter, ffmpeg_filter_path,
     parse_script_scenes, scene_motion_filter
 )
@@ -79,6 +79,27 @@ class SceneEngineTests(unittest.TestCase):
         self.assertLessEqual(len(brief["continuity_reference"]), 20)
         self.assertEqual(brief["title"], "Título largo")
 
+
+    def test_expand_scenes_to_target_shot_count_without_losing_text(self):
+        original_text = (
+            "[NARRADOR]: La puerta se abre lentamente. Marta entra en la habitación y descubre "
+            "una fotografía sobre la mesa. Nadie debería estar allí. Una sombra se mueve detrás "
+            "de la cortina. Marta retrocede y escucha tres golpes en la pared."
+        )
+        original = [{"index": 1, "title": "La habitación", "text": original_text, "word_count": len(original_text.split())}]
+        expanded = expand_scenes_to_shots(original, target_shots=4)
+        self.assertGreaterEqual(len(expanded), 4)
+        self.assertEqual([item["index"] for item in expanded], list(range(1, len(expanded) + 1)))
+        self.assertTrue(all(item["word_count"] == len(item["text"].split()) for item in expanded))
+        self.assertIn("Marta", " ".join(item["text"] for item in expanded))
+        self.assertTrue(all(item["text"].strip() for item in expanded))
+
+    def test_expand_scenes_keeps_short_scenes_and_respects_limit(self):
+        scenes = [{"title": "Corto", "text": "[JUAN]: Corre.", "word_count": 2}]
+        self.assertEqual(expand_scenes_to_shots(scenes, target_shots=20), scenes)
+        long_text = " ".join(["palabra"] * 80)
+        expanded = expand_scenes_to_shots([{"title": "Largo", "text": long_text}], target_shots=20, max_scenes=5)
+        self.assertEqual(len(expanded), 5)
 
     def test_scene_duration_sum_matches_target_when_feasible(self):
         scenes = [
