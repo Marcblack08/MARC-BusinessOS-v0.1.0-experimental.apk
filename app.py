@@ -486,6 +486,10 @@ class App(tk.Tk):
         self.preview_render_button = ttk.Button(
             toolrow, text="Vista previa MP4", command=self.preview_video_render)
         self.preview_render_button.pack(side="left", padx=(6, 0))
+        self.image_setup_button = ttk.Button(
+            toolrow, text="Configurar imágenes IA", command=self.open_image_setup
+        )
+        self.image_setup_button.pack(side="left", padx=(6, 0))
         self.cancel_render_button = ttk.Button(toolrow, text="Cancelar render",
                                                command=self.cancel_export, state="disabled")
         self.cancel_render_button.pack(side="left", padx=(6, 0))
@@ -2483,6 +2487,18 @@ Write-Output 'NARRATION_OK'
         ):
             webbrowser.open("https://docs.comfy.org/installation/comfyui_portable_windows")
 
+    def open_image_setup(self):
+        """Open the scenes tab and start checking the local image engine."""
+        try:
+            self.studio_tabs.select(self.scenes_tab)
+            self.image_ai_status_var.set("Comprobando el motor de imágenes…")
+            self.detect_image_models(quiet=False)
+        except Exception as exc:
+            messagebox.showerror(
+                "No se pudo abrir la configuración de imágenes",
+                f"Vuelve a abrir MARC e inténtalo de nuevo.\n\nDetalle: {exc}"
+            )
+
     def detect_image_models(self, quiet=False):
         if self.image_generation_running:
             return
@@ -2609,6 +2625,7 @@ Write-Output 'NARRATION_OK'
                        self.clear_image_button, self.refresh_scenes_button,
                        self.select_audio_button, self.clear_audio_button,
                        self.detect_models_button, self.start_comfyui_button, self.generate_image_button, self.generate_missing_images_button,
+                       self.image_setup_button,
                        self.detect_voice_button, self.generate_voice_button, self.inspector_assign_image_button,
                        self.inspector_generate_image_button, self.inspector_duration_button,
                        self.export_srt_button, self.select_music_button, self.clear_music_button):
