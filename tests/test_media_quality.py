@@ -59,8 +59,8 @@ class MediaQualityTests(unittest.TestCase):
 
     def test_srt_validator_accepts_sequential_non_overlapping_cues(self):
         text = (
-            "1\\n00:00:00,000 --> 00:00:02,000\\nLa puerta estaba abierta.\\n\\n"
-            "2\\n00:00:02,000 --> 00:00:04,500\\nNo debiste venir."
+            "1\n00:00:00,000 --> 00:00:02,000\nLa puerta estaba abierta.\n\n"
+            "2\n00:00:02,000 --> 00:00:04,500\nNo debiste venir."
         )
         result = validate_srt_text(text)
         self.assertTrue(result["passed"], result["errors"])
@@ -68,8 +68,8 @@ class MediaQualityTests(unittest.TestCase):
 
     def test_srt_validator_rejects_bad_timestamps_and_nonconsecutive_numbers(self):
         text = (
-            "1\\n00:00:03,000 --> 00:00:02,000\\nTexto uno.\\n\\n"
-            "3\\n00:00:01,000 --> 00:00:04,000\\nTexto dos."
+            "1\n00:00:03,000 --> 00:00:02,000\nTexto uno.\n\n"
+            "3\n00:00:01,000 --> 00:00:04,000\nTexto dos."
         )
         result = validate_srt_text(text)
         self.assertFalse(result["passed"])
