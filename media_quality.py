@@ -1,0 +1,126 @@
+"""Small, dependency-free media-output checks for MARC exports."""
+from __future__ import annotations
+
+import math
+import re
+from fractions import Fraction
+from typing import Any
+
+
+def _number(value: Any) -> float | None:
+    try:
+        result = float(value)
+        return result if math.isfinite(result) else None
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _rate(value: Any) -> float | None:
+    if value in (None, "", "0/0", "N/A"):
+        return None
+    try:
+        result = float(Fraction(str(value)))
+        return result if math.isfinite(result) and result > 0 else None
+    except (ValueError, ZeroDivisionError, TypeError, OverflowError):
+        return None
+
+
+def validate_media_info(
+    info: dict[str, Any],
+    expected_width: int | None = None,
+    expected_height: int | None = None,
+    expected_fps: float | None = None,
+    minimum_duration: float | None = None,
+    require_audio: bool = False,
+) -> dict[str, Any]:
+    """Return a structured pass/warning report from ffprobe-like metadata."""
+    streams = info.get("streams", []) if isinstance(info, dict) else []
+    streams = streams if isinstance(streams, list) else []
+    video = next((s for s in streams if isinstance(s, dict) and s.get("codec_type") == "video"), None)
+    audio_streams = [s for s in streams if isinstance(s, dict) and s.get("codec_type") == "audio"]
+    subtitle_streams = [s for s in streams if isinstance(s, dict) and s.get("codec_type") == "subtitle"]
+    fmt = info.get("format", {}) if isinstance(info, dict) else {}
+    fmt = fmt if isinstance(fmt, dict) else {}
+    duration = _number(fmt.get("duration"))
+    if duration is None and video:
+        duration = _number(video.get("duration"))
+
+    checks: list[dict[str, Any]] = []
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    def add(name: str, passed: bool, detail: str, severity: str = "error") -> None:
+        checks.append({"name": name, "passed": bool(passed), "detail": detail})
+        if not passed:
+            (errors if severity == "error" else warnings).append(detail)
+
+    add("video_stream", video is not None, "No se encontró una pista de vídeo." if video is None else "Pista de vídeo detectada.")
+    width = int(video.get("width") or 0) if video else 0
+    height = int(video.get("height") or 0) if video else 0
+    if video:
+        add("dimensions", width > 0 and height > 0, f"Resolución detectada: {width}x{height}." if width > 0 and height > 0 else "La resolución del vídeo no es válida.")
+        if expected_width and expected_height:
+            add(
+                "expected_dimensions", width == int(expected_width) and height == int(expected_height),
+                f"Resolución {width}x{height}; se esperaba {int(expected_width)}x{int(expected_height)}."
+            )
+        fps = _rate(video.get("avg_frame_rate")) or _rate(video.get("r_frame_rate"))
+        if expected_fps:
+            valid_fps = fps is not None and abs(fps - float(expected_fps)) <= max(0.75, float(expected_fps) * 0.03)
+            add(
+                "fps", valid_fps,
+                f"FPS detectados: {fps:.3f}; objetivo: {float(expected_fps):g}." if fps is not None else "No se pudo determinar el FPS del vídeo."
+            )
+    if duration is None or duration <= 0:
+        add("duration", False, "No se pudo verificar una duración positiva.")
+    else:
+        add("duration", True, f"Duración detectada: {duration:.2f} s.")
+        if minimum_duration is not None:
+            min_seconds = max(0.0, float(minimum_duration))
+            # A small tolerance accommodates MP4 time-base and encoder rounding.
+            add(
+                "minimum_duration", duration + 0.75 >= min_seconds,
+                f"Duración {duration:.2f} s; mínimo esperado {min_seconds:.2f} s."
+            )
+    add("audio", bool(audio_streams) or not require_audio,
+        "Pista de audio detectada." if audio_streams else (
+            "Se esperaba audio, pero el MP4 no contiene una pista de audio." if require_audio
+            else "Sin pista de audio externa; permitido para este proyecto."
+        ))
+    return {
+        "passed": not errors,
+        "checks": checks,
+        "errors": errors,
+        "warnings": warnings,
+        "duration": duration,
+        "width": width or None,
+        "height": height or None,
+        "fps": (_rate(video.get("avg_frame_rate")) or _rate(video.get("r_frame_rate"))) if video else None,
+        "audio_streams": len(audio_streams),
+        "subtitle_streams": len(subtitle_streams),
+    }
+
+
+def parse_ffmpeg_probe_text(text: str) -> dict[str, Any]:
+    """Extract conservative stream facts from FFmpeg stderr when ffprobe is unavailable."""
+    source = str(text or "")
+    duration_match = re.search(r"Duration:\\s*(\\d+):(\\d+):(\\d+(?:\\.\\d+)?)", source)
+    duration = None
+    if duration_match:
+        hours, minutes, seconds = duration_match.groups()
+        duration = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    video_match = re.search(
+        r"Stream #\\d+:\\d+.*?Video:.*?(?:,\\s*(\\d{2,5})x(\\d{2,5})(?:\\[[^]]+\\])?)",
+        source, re.IGNORECASE
+    )
+    fps_match = re.search(r"(?:,\\s*|\\s)(\\d+(?:\\.\\d+)?)\\s*fps", source, re.IGNORECASE)
+    has_audio = bool(re.search(r"Stream #\\d+:\\d+.*?Audio:", source, re.IGNORECASE))
+    streams = []
+    if video_match:
+        stream = {"codec_type": "video", "width": int(video_match.group(1)), "height": int(video_match.group(2))}
+        if fps_match:
+            stream["avg_frame_rate"] = fps_match.group(1)
+        streams.append(stream)
+    if has_audio:
+        streams.append({"codec_type": "audio"})
+    return {"format": {"duration": duration} if duration is not None else {}, "streams": streams}
