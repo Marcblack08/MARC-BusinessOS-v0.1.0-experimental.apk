@@ -190,6 +190,92 @@ def parse_script_scenes(script: str, max_scenes: int = 120) -> list[dict]:
     return scenes
 
 
+
+def expand_scenes_to_shots(
+    scenes: Iterable[dict],
+    target_shots: int,
+    max_scenes: int = 120,
+    min_words_to_split: int = 12,
+) -> list[dict]:
+    """Split overlong parsed scenes into smaller visual shots without inventing story text.
+
+    This only changes the visual storyboard records; narration is still synthesized
+    from the original script. A shot is split near its midpoint, preferring a
+    sentence/clause boundary, and speaker labels are carried into the second half
+    when the cut would otherwise detach dialogue from its speaker.
+    """
+    try:
+        target = max(0, int(target_shots))
+        limit = max(1, int(max_scenes))
+        minimum = max(4, int(min_words_to_split))
+    except (TypeError, ValueError):
+        raise ValueError("Shot counts and split limits must be integers.") from None
+
+    result = []
+    for original in scenes:
+        if len(result) >= limit:
+            break
+        item = dict(original)
+        item["text"] = str(item.get("text", "") or "").strip()
+        item["word_count"] = len(item["text"].split())
+        result.append(item)
+
+    def split_text(text: str) -> tuple[str, str] | None:
+        words = text.split()
+        if len(words) < minimum:
+            return None
+        midpoint = len(words) // 2
+        # Prefer a natural sentence or clause boundary near the middle.
+        candidates = []
+        for index in range(2, len(words) - 1):
+            if re.search(r"[.!?…;,]$", words[index - 1]):
+                candidates.append(index)
+        if candidates:
+            cut = min(candidates, key=lambda index: (abs(index - midpoint), index))
+        else:
+            cut = midpoint
+        cut = max(2, min(len(words) - 2, cut))
+        left = " ".join(words[:cut]).strip()
+        right = " ".join(words[cut:]).strip()
+        # Keep the most recent explicit speaker label with a continuation chunk.
+        labels = list(re.finditer(r"\[([^\]]{1,40})\]\s*:\s*", left))
+        if labels and not re.match(r"^\[[^\]]{1,40}\]\s*:", right):
+            label = labels[-1].group(1).strip()
+            right = f"[{label}]: {right}"
+        if not left or not right:
+            return None
+        return left, right
+
+    while len(result) < min(target, limit):
+        candidates = [
+            (len(str(item.get("text", "")).split()), index)
+            for index, item in enumerate(result)
+            if len(str(item.get("text", "")).split()) >= minimum
+        ]
+        if not candidates:
+            break
+        _, index = max(candidates, key=lambda pair: (pair[0], -pair[1]))
+        original = result[index]
+        halves = split_text(str(original.get("text", "")))
+        if not halves:
+            break
+        left_text, right_text = halves
+        base_title = str(original.get("title", f"Escena {index + 1}")).strip()
+        left = dict(original)
+        right = dict(original)
+        left["text"] = left_text
+        left["word_count"] = len(left_text.split())
+        left["title"] = f"{base_title} — plano A"
+        right["text"] = right_text
+        right["word_count"] = len(right_text.split())
+        right["title"] = f"{base_title} — plano B"
+        result[index:index + 1] = [left, right]
+
+    for index, item in enumerate(result, start=1):
+        item["index"] = index
+        item["word_count"] = len(str(item.get("text", "")).split())
+    return result
+
 def allocate_scene_durations(
     scenes: Iterable[dict], total_seconds: int, max_scene_seconds: int = 5
 ) -> list[int]:
@@ -317,7 +403,7 @@ def build_audio_filter_graph(
 
 
 def build_srt_subtitles(scenes: Iterable[dict], durations: Iterable[int], chars_per_line: int = 42) -> str:
-    """Build SRT captions from scene text and approximate scene-level durations."""
+    """Build readable scene-timed SRT cues, splitting long lines and distributing time by words."""
     items = list(scenes)
     times = list(durations)
     if len(items) != len(times):
@@ -332,21 +418,62 @@ def build_srt_subtitles(scenes: Iterable[dict], durations: Iterable[int], chars_
         seconds, millis = divmod(remainder, 1000)
         return f"{hours:02d}:{minutes:02d}:{seconds:02d},{millis:03d}"
 
+    def clean_caption(value: str) -> str:
+        # Speaker labels are useful to the voice engine, but usually clutter captions.
+        value = re.sub(r"(?i)\[(?:NARRADOR|NARRADORA|PERSONAJE|VOZ EN OFF)\]\s*:\s*", "", value)
+        value = re.sub(r"\[([^\]]{1,40})\]\s*:\s*", "", value)
+        return " ".join(value.split()).strip()
+
+    def caption_chunks(value: str) -> list[str]:
+        # Split at word boundaries and prefer punctuation when it is close to the limit.
+        words = value.split()
+        chunks: list[str] = []
+        current: list[str] = []
+        for word in words:
+            if current and len(" ".join(current + [word])) > chars_per_line:
+                punctuation_cut = next(
+                    (i + 1 for i in range(len(current) - 1, max(-1, len(current) - 5), -1)
+                     if re.search(r"[.!?…,:;]$", current[i])),
+                    None,
+                )
+                if punctuation_cut:
+                    chunks.append(" ".join(current[:punctuation_cut]))
+                    current = current[punctuation_cut:]
+                else:
+                    chunks.append(" ".join(current))
+                    current = []
+            current.append(word)
+        if current:
+            chunks.append(" ".join(current))
+        return chunks
+
     parts: list[str] = []
     elapsed_ms = 0
     cue_number = 0
     for scene, duration in zip(items, times):
-        body = " ".join(str(scene.get("text", "")).split()).strip()
-        if not body:
-            elapsed_ms += max(1, int(duration)) * 1000
-            continue
+        body = clean_caption(str(scene.get("text", "")))
         duration_ms = max(1, int(duration)) * 1000
-        wrapped = textwrap.wrap(body, width=chars_per_line, break_long_words=False) or [body]
-        cue_number += 1
-        parts.append(
-            f"{cue_number}\n{stamp(elapsed_ms)} --> {stamp(elapsed_ms + duration_ms)}\n"
-            + "\n".join(wrapped)
-        )
+        if not body:
+            elapsed_ms += duration_ms
+            continue
+        chunks = caption_chunks(body) or [body]
+        weights = [max(1, len(chunk.split())) for chunk in chunks]
+        total_weight = sum(weights)
+        consumed = 0
+        for index, (chunk, weight) in enumerate(zip(chunks, weights)):
+            cue_start = elapsed_ms + consumed
+            if index == len(chunks) - 1:
+                cue_end = elapsed_ms + duration_ms
+            else:
+                allocated = round(duration_ms * weight / total_weight)
+                # Reserve at least one millisecond for each remaining cue.
+                allocated = min(max(1, allocated), max(1, duration_ms - consumed - (len(chunks) - index - 1)))
+                cue_end = cue_start + allocated
+            cue_number += 1
+            parts.append(
+                f"{cue_number}\n{stamp(cue_start)} --> {stamp(cue_end)}\n{chunk}"
+            )
+            consumed = cue_end - elapsed_ms
         elapsed_ms += duration_ms
     return "\n\n".join(parts) + ("\n" if parts else "")
 
