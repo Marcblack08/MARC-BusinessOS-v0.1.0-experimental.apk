@@ -4608,14 +4608,20 @@ Write-Output 'NARRATION_OK'
             else:
                 messagebox.showerror("Aprobación obligatoria", "No se puede exportar: primero debes aprobar el guion.")
             return
-        scenes = parse_script_scenes(row["script"] or "")
-        if not scenes:
+        original_scenes = parse_script_scenes(row["script"] or "")
+        if not original_scenes:
             if remote:
                 self.status_var.set("El proyecto no contiene escenas; genera o guarda un guion antes de exportar.")
             else:
                 messagebox.showerror("Guion vacío", "El guion no contiene escenas renderizables. Genera o escribe el guion primero.")
             return
 
+        target_seconds = max(60, int(row["duration_minutes"]) * 60)
+        required_shots = min(120, visual_shot_count(target_seconds))
+        scenes = (
+            expand_scenes_to_shots(original_scenes, required_shots, max_scenes=120)
+            if getattr(self, "auto_expand_storyboard", True) else original_scenes
+        )
         asset_map = dict(self.scene_assets)
         for key, value in list(asset_map.items()):
             if not Path(value).is_file():
@@ -4748,7 +4754,6 @@ Write-Output 'NARRATION_OK'
                 )
                 if not output:
                     return
-        target_seconds = max(60, int(row["duration_minutes"]) * 60)
         durations = allocate_scene_durations(scenes, target_seconds)
         durations = [min(5, max(1, int(self.scene_duration_overrides.get(str(i + 1), value)))) for i, value in enumerate(durations)]
         audio_path = preview_audio_path
@@ -4771,8 +4776,11 @@ Write-Output 'NARRATION_OK'
                 f"0% · {width}×{height} · {fps} FPS · duración objetivo {self._format_eta(sum(durations))}"
             )
         voice_assignments_json = json.dumps(self.voice_assignments or {}, ensure_ascii=False)
+        # Keep spoken narration tied to the original script; visual shot splitting must not
+        # change narration wording or add artificial pauses between split storyboard shots.
         narration_text = "\n\n".join(
-            str(scene.get("text", "")).strip() for scene in scenes if str(scene.get("text", "")).strip()
+            str(scene.get("text", "")).strip()
+            for scene in original_scenes if str(scene.get("text", "")).strip()
         ).strip() if not audio_path and os.name == "nt" else ""
         self.remote_render_active = bool(remote)
         args = (
