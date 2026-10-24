@@ -5116,8 +5116,8 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                             capture_output=True, text=True, timeout=30, creationflags=creationflags,
                         )
                         duration_match = re.search(
-                            r"Duration:\\s*(\\d+):(\\d+):(\\d+(?:\\.\\d+)?)",
-                            (probe.stderr or "") + "\\n" + (probe.stdout or ""),
+                            r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)",
+                            (probe.stderr or "") + "\n" + (probe.stdout or ""),
                         )
                         if duration_match:
                             hours, minutes, seconds = duration_match.groups()
