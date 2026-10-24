@@ -4016,9 +4016,10 @@ Write-Output 'NARRATION_OK'
                     self.script_text.configure(state="normal")
                     self.save_project(reset_approval=True, quiet=True)
                     self.generation_running = False
+                    was_remote_generation = bool(getattr(self, "remote_generate_active", False))
                     self.remote_generate_active = False
                     self._set_generation_state(False)
-                    if not getattr(self, "remote_generate_active", False):
+                    if not was_remote_generation:
                         messagebox.showerror("Error de generación", "La IA local no pudo completar el guion.\n\n" + event[1])
                     self.status_var.set("La generación se detuvo. El borrador parcial se conserva sin aprobar.")
                 elif kind == "render_progress":
