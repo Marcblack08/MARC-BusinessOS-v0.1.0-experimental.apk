@@ -501,6 +501,89 @@ def build_srt_subtitles(
     return "\n\n".join(parts) + ("\n" if parts else "")
 
 
+
+def build_srt_from_timed_segments(
+    segments: Iterable[dict],
+    total_duration_seconds: float | None = None,
+    max_chars: int = 42,
+) -> str:
+    """Build SRT from measured speech-segment start/end timestamps.
+
+    Each segment must contain text, start_seconds, and end_seconds. These are
+    measured boundaries supplied by the speech engine or a forced aligner; unlike
+    the scene-duration fallback, this function does not distribute time by word count.
+    """
+    items = list(segments)
+    if max_chars < 10:
+        raise ValueError("max_chars must be at least 10.")
+    try:
+        target = None if total_duration_seconds is None else float(total_duration_seconds)
+    except (TypeError, ValueError):
+        raise ValueError("total_duration_seconds must be numeric.") from None
+    if target is not None and (not math.isfinite(target) or target <= 0):
+        raise ValueError("total_duration_seconds must be finite and greater than zero.")
+
+    def stamp(seconds: float) -> str:
+        milliseconds = max(0, round(seconds * 1000))
+        hours, remainder = divmod(milliseconds, 3_600_000)
+        minutes, remainder = divmod(remainder, 60_000)
+        whole_seconds, millis = divmod(remainder, 1000)
+        return f"{hours:02d}:{minutes:02d}:{whole_seconds:02d},{millis:03d}"
+
+    def split_caption(text: str) -> list[str]:
+        words = " ".join(text.split()).split()
+        chunks: list[str] = []
+        current: list[str] = []
+        for word in words:
+            if current and len(" ".join(current + [word])) > max_chars:
+                chunks.append(" ".join(current))
+                current = []
+            current.append(word)
+        if current:
+            chunks.append(" ".join(current))
+        return chunks
+
+    output: list[str] = []
+    last_end = 0.0
+    cue = 0
+    for item in items:
+        try:
+            start = float(item["start_seconds"])
+            end = float(item["end_seconds"])
+            text = str(item.get("text", "")).strip()
+        except (KeyError, TypeError, ValueError):
+            raise ValueError("Each timed segment requires numeric start_seconds and end_seconds.") from None
+        if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end <= start:
+            raise ValueError("Timed segments must have finite, non-negative, increasing boundaries.")
+        if start < last_end - 0.05:
+            raise ValueError("Timed segments must be ordered and must not overlap.")
+        if target is not None and start >= target:
+            continue
+        if target is not None:
+            end = min(end, target)
+        if end <= start:
+            continue
+        text = re.sub(r"(?i)^\[(?:NARRADOR|NARRADORA|PERSONAJE|VOZ EN OFF)\]\s*:\s*", "", text)
+        text = re.sub(r"^\[[^\]]{1,40}\]\s*:\s*", "", text)
+        chunks = split_caption(text)
+        if not chunks:
+            last_end = end
+            continue
+        weights = [max(1, len(chunk.split())) for chunk in chunks]
+        weight_total = sum(weights)
+        cursor = start
+        used_weight = 0
+        for index, (chunk, weight) in enumerate(zip(chunks, weights)):
+            next_weight = used_weight + weight
+            cue_start = cursor
+            cue_end = end if index == len(chunks) - 1 else start + (end - start) * next_weight / weight_total
+            cue += 1
+            output.append(f"{cue}\n{stamp(cue_start)} --> {stamp(cue_end)}\n{chunk}")
+            cursor = cue_end
+            used_weight = next_weight
+        last_end = end
+    return "\n\n".join(output) + ("\n" if output else "")
+
 def ffmpeg_filter_path(path: str | Path) -> str:
     """Escape a path inside an FFmpeg filter option (e.g. drawtext=textfile=...)."""
     value = Path(path).resolve().as_posix()
