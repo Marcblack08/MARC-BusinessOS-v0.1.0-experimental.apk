@@ -79,6 +79,9 @@ def db_connect():
             ending TEXT NOT NULL DEFAULT 'Justicia y superación',
             drawing_style TEXT NOT NULL DEFAULT 'Anime cinematográfico',
             animation_style TEXT NOT NULL DEFAULT '2D fluida',
+            animation_intensity TEXT NOT NULL DEFAULT 'Muy animado',
+            overlay_mode TEXT NOT NULL DEFAULT 'Título de escena',
+            transition_style TEXT NOT NULL DEFAULT 'Fundido suave',
             resolution TEXT NOT NULL DEFAULT '1080p (Full HD)',
             fps INTEGER NOT NULL DEFAULT 30,
             video_mode TEXT NOT NULL DEFAULT 'Novela / Serie',
@@ -99,6 +102,9 @@ def db_connect():
         "ending": "TEXT NOT NULL DEFAULT 'Justicia y superación'",
         "drawing_style": "TEXT NOT NULL DEFAULT 'Anime cinematográfico'",
         "animation_style": "TEXT NOT NULL DEFAULT '2D fluida'",
+        "animation_intensity": "TEXT NOT NULL DEFAULT 'Muy animado'",
+        "overlay_mode": "TEXT NOT NULL DEFAULT 'Título de escena'",
+        "transition_style": "TEXT NOT NULL DEFAULT 'Fundido suave'",
         "resolution": "TEXT NOT NULL DEFAULT '1080p (Full HD)'",
         "fps": "INTEGER NOT NULL DEFAULT 30",
         "video_mode": "TEXT NOT NULL DEFAULT 'Novela / Serie'",
@@ -647,6 +653,9 @@ class App(tk.Tk):
         self.ending_var = tk.StringVar(value="Justicia y superación")
         self.drawing_style_var = tk.StringVar(value="Anime cinematográfico")
         self.animation_style_var = tk.StringVar(value="2D fluida")
+        self.animation_intensity_var = tk.StringVar(value="Muy animado")
+        self.overlay_mode_var = tk.StringVar(value="Título de escena")
+        self.transition_style_var = tk.StringVar(value="Fundido suave")
         self.video_mode_var = tk.StringVar(value=SERIES_VIDEO_MODE)
         self.resolution_var = tk.StringVar(value="1080p (Full HD)")
         self.fps_var = tk.StringVar(value="30")
@@ -975,7 +984,13 @@ class App(tk.Tk):
                     values=list(RESOLUTION_PROFILES))
         self._field(visual_form, "Fotogramas por segundo", self.fps_var, 1, 1,
                     values=list(FPS_OPTIONS))
-        tk.Label(visual_tab, text="Estos ajustes determinan el estilo de las ilustraciones y la calidad del archivo exportado. Para crear imágenes con IA, configura ComfyUI en Escenas.",
+        self._field(visual_form, "Intensidad de movimiento", self.animation_intensity_var, 2, 0,
+                    values=["Suave", "Normal", "Muy animado"])
+        self._field(visual_form, "Texto sobre las imágenes", self.overlay_mode_var, 2, 1,
+                    values=["Título de escena", "Subtítulo narrativo", "Sin texto"])
+        self._field(visual_form, "Transición entre escenas", self.transition_style_var, 3, 0,
+                    values=["Corte directo", "Fundido suave"])
+        tk.Label(visual_tab, text="La intensidad modifica el movimiento de cámara sobre imágenes fijas. Los fundidos se aplican al inicio y final de cada plano. El texto puede mostrar el título, una frase narrativa o quedar oculto; las escenas sin ilustración conservan su tarjeta de texto.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1050, justify="left").grid(row=3, column=0, sticky="w", pady=(16, 0))
         canon_actions = tk.Frame(visual_tab, bg=self.colors["panel"])
@@ -3366,6 +3381,9 @@ Write-Output 'NARRATION_OK'
         self.ending_var.set("Justicia y superación")
         self.drawing_style_var.set("Anime cinematográfico")
         self.animation_style_var.set("2D fluida")
+        self.animation_intensity_var.set("Muy animado")
+        self.overlay_mode_var.set("Título de escena")
+        self.transition_style_var.set("Fundido suave")
         self.video_mode_var.set(SERIES_VIDEO_MODE)
         self.resolution_var.set("1080p (Full HD)")
         self.fps_var.set("30")
@@ -3420,6 +3438,9 @@ Write-Output 'NARRATION_OK'
             "ending": self.ending_var.get(),
             "drawing_style": self.drawing_style_var.get(),
             "animation_style": self.animation_style_var.get(),
+            "animation_intensity": self.animation_intensity_var.get(),
+            "overlay_mode": self.overlay_mode_var.get(),
+            "transition_style": self.transition_style_var.get(),
             "video_mode": mode,
             "resolution": self.resolution_var.get() if hasattr(self, "resolution_var") else "1080p (Full HD)",
             "fps": int(self.fps_var.get()) if hasattr(self, "fps_var") else 30,
@@ -3711,6 +3732,8 @@ Write-Output 'NARRATION_OK'
             "protagonist": data["protagonist"], "conflict": data["conflict"], "tone": data["tone"],
             "narrator": data["narrator"], "ending": data["ending"],
             "drawing_style": data["drawing_style"], "animation_style": data["animation_style"],
+            "animation_intensity": data["animation_intensity"], "overlay_mode": data["overlay_mode"],
+            "transition_style": data["transition_style"],
             "resolution": data["resolution"], "fps": data["fps"], "video_mode": data["video_mode"],
             "series_key": self.series_key, "episode_number": self.episode_number,
             "story_bible": self.story_bible or "", "continuity_state": self.continuity_state or "",
@@ -3725,13 +3748,14 @@ Write-Output 'NARRATION_OK'
         columns = (
             "title,topic,platform,duration_minutes,style,script,approved,created_at,"
             "protagonist,conflict,tone,narrator,ending,drawing_style,animation_style,"
-            "resolution,fps,video_mode,series_key,episode_number,story_bible,continuity_state,voice_assignments"
+            "animation_intensity,overlay_mode,transition_style,resolution,fps,video_mode,series_key,episode_number,story_bible,continuity_state,voice_assignments"
         )
         values = (
             record["title"], record["topic"], record["platform"], record["duration_minutes"],
             record["style"], record["script"], approved, now, record["protagonist"],
             record["conflict"], record["tone"], record["narrator"], record["ending"],
-            record["drawing_style"], record["animation_style"], record["resolution"],
+            record["drawing_style"], record["animation_style"], record["animation_intensity"],
+            record["overlay_mode"], record["transition_style"], record["resolution"],
             record["fps"], record["video_mode"], record["series_key"], record["episode_number"],
             record["story_bible"], record["continuity_state"], record["voice_assignments"]
         )
@@ -4347,6 +4371,9 @@ Write-Output 'NARRATION_OK'
         self.ending_var.set(project["ending"] or "Justicia y superación")
         self.drawing_style_var.set(project["drawing_style"] or "Anime cinematográfico")
         self.animation_style_var.set(project["animation_style"] or "2D fluida")
+        self.animation_intensity_var.set(project["animation_intensity"] or "Muy animado")
+        self.overlay_mode_var.set(project["overlay_mode"] or "Título de escena")
+        self.transition_style_var.set(project["transition_style"] or "Fundido suave")
         self.video_mode_var.set(project["video_mode"] or SERIES_VIDEO_MODE)
         self.resolution_var.set(project["resolution"] or "1080p (Full HD)")
         self.fps_var.set(str(project["fps"] or 30))
@@ -4661,6 +4688,8 @@ Write-Output 'NARRATION_OK'
         args = (
             ffmpeg, str(Path(output).resolve()), int(row["id"]), width, height,
             scenes, durations, asset_map, row["animation_style"] or "2D fluida",
+            row["animation_intensity"] or "Muy animado", row["overlay_mode"] or "Título de escena",
+            row["transition_style"] or "Fundido suave",
             audio_path, music_path, loop_music, narration_text, chosen_voice, fps,
             voice_assignments_json, bool(preview)
         )
@@ -4699,7 +4728,8 @@ Write-Output 'NARRATION_OK'
 
     def _render_video_worker(self, ffmpeg, output, project_id, width, height,
                              scenes, durations, asset_map, animation_style,
-                             audio_path="", music_path="", loop_music=True,
+                             animation_intensity="Muy animado", overlay_mode="Título de escena",
+                             transition_style="Fundido suave", audio_path="", music_path="", loop_music=True,
                              narration_text="", chosen_voice="(Automática)", fps=30,
                              voice_assignments_json="{}", is_preview=False):
         scene_dir = PROJECTS_DIR / str(project_id) / "render_work"
@@ -4832,8 +4862,10 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                     }
                 cache_payload = {
                     "scene": scene, "duration": seconds, "asset": asset_signature,
-                    "animation": animation_style, "width": width, "height": height,
-                     "fps": int(fps), "preset": "ultrafast", "crf": 25, "version": 3
+                    "animation": animation_style, "intensity": animation_intensity,
+                    "overlay": overlay_mode, "transition": transition_style,
+                    "width": width, "height": height,
+                    "fps": int(fps), "preset": "ultrafast", "crf": 25, "version": 4
                 }
                 cache_fingerprint = hashlib.sha256(
                     json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -4878,18 +4910,30 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                 if asset and Path(asset).is_file():
                     # Keep the generated illustration dominant. Spoken prose is carried by the audio track;
                     # only a small lower-third scene label is drawn over artwork.
-                    label_file = scene_dir / f"scene_label_{index + 1:03d}.txt"
-                    scene_label = re.sub(r"\\s+", " ", str(title or f"Escena {index + 1}")).strip()[:80]
-                    label_file.write_text(scene_label, encoding="utf-8")
-                    label_path = ffmpeg_filter_path(label_file)
-                    label_size = max(16, min(30, width // 52))
-                    label_filter = (
-                        f"drawtext=textfile='{label_path}':expansion=none:fontcolor=white:"
-                        f"fontsize={label_size}:x=(w-text_w)/2:y=h-text_h-h*0.045:"
-                        "box=1:boxcolor=0x06101d@0.68:boxborderw=14"
-                    )
-                    motion = scene_motion_filter(animation_style, width, height, seconds)
-                    video_filter = f"{motion},{label_filter}"
+                    label_filter = ""
+                    if overlay_mode != "Sin texto":
+                        label_file = scene_dir / f"scene_label_{index + 1:03d}.txt"
+                        scene_label = (" ".join(source_text.split())[:150]
+                                       if overlay_mode == "Subtítulo narrativo"
+                                       else str(title or f"Escena {index + 1}"))
+                        scene_label = re.sub(r"\\s+", " ", scene_label).strip()[:160]
+                        label_file.write_text(scene_label, encoding="utf-8")
+                        label_path = ffmpeg_filter_path(label_file)
+                        label_size = max(16, min(30, width // (58 if overlay_mode == "Subtítulo narrativo" else 52)))
+                        label_filter = (
+                            f"drawtext=textfile='{label_path}':expansion=none:fontcolor=white:"
+                            f"fontsize={label_size}:x=(w-text_w)/2:y=h-text_h-h*0.045:"
+                            "box=1:boxcolor=0x06101d@0.68:boxborderw=14"
+                        )
+                    motion = scene_motion_filter(animation_style, width, height, seconds, animation_intensity)
+                    filters = [motion]
+                    if label_filter:
+                        filters.append(label_filter)
+                    if transition_style == "Fundido suave":
+                        fade = min(0.25, max(0.08, seconds / 3.0))
+                        filters.extend([f"fade=t=in:st=0:d={fade:.3f}",
+                                        f"fade=t=out:st={max(0.0, seconds-fade):.3f}:d={fade:.3f}"])
+                    video_filter = ",".join(filters)
                     cmd = [
                         ffmpeg, "-y", "-loop", "1", "-framerate", str(fps), "-i", str(Path(asset).resolve()),
                         "-t", str(seconds), "-vf", video_filter, "-an", "-r", str(fps),
@@ -4901,6 +4945,9 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                         "drawbox=x=0:y=0:w=iw:h=8:color=0x168bff@0.90:t=fill,"
                         + draw_filter
                     )
+                    if transition_style == "Fundido suave":
+                        fade = min(0.25, max(0.08, seconds / 3.0))
+                        video_filter += f",fade=t=in:st=0:d={fade:.3f},fade=t=out:st={max(0.0, seconds-fade):.3f}:d={fade:.3f}"
                     cmd = [
                         ffmpeg, "-y", "-f", "lavfi", "-i",
                         f"color=c=0x0b1320:s={width}x{height}:r={fps}",
