@@ -23,7 +23,8 @@ class RemoteControlServerTests(unittest.TestCase):
         self.db_path = self.data_dir / "marc_video_studio.db"
         self.data_dir.mkdir(parents=True)
         self.projects_dir.mkdir(parents=True)
-        with sqlite3.connect(self.db_path) as db:
+        db = sqlite3.connect(self.db_path)
+        try:
             db.execute(
                 "CREATE TABLE projects (id INTEGER PRIMARY KEY, title TEXT, topic TEXT, "
                 "platform TEXT, duration_minutes INTEGER, approved INTEGER, created_at TEXT, "
@@ -34,6 +35,9 @@ class RemoteControlServerTests(unittest.TestCase):
                 "'YouTube 16:9', 2, 0, '2026-01-01T12:00:00', 'ESCENA 1: Prueba', "
                 "'Misterio y suspenso', 'Corto (2 minutos)')"
             )
+            db.commit()
+        finally:
+            db.close()
         output_dir = self.projects_dir / "1" / "exports"
         output_dir.mkdir(parents=True)
         (output_dir / "demo.mp4").write_bytes(b"fake-mp4-for-test")
