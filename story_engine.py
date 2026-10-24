@@ -170,7 +170,7 @@ def creative_direction(genre: str, platform: str = "", mode: str = SERIES_VIDEO_
         )
     return direction
 
-def continuity_review_check(script: str, previous_state: str = "") -> list[str]:
+def continuity_review_check(script: str, previous_state: str = "", expected_scenes: int = 0) -> list[str]:
     """Cheap deterministic flags to surface likely issues for human review.
 
     These are warnings, not proof of a contradiction and never block a draft.
@@ -192,6 +192,11 @@ def continuity_review_check(script: str, previous_state: str = "") -> list[str]:
         warnings.append("No se detectan encabezados [ESCENA 01 — título]; separa el guion en planos visuales concretos.")
     elif 0 < scene_count < 3:
         warnings.append("Hay muy pocas escenas visuales; divide las acciones en planos más breves y fáciles de ilustrar.")
+    if expected_scenes > 0 and scene_count < expected_scenes:
+        warnings.append(
+            f"El guion tiene {scene_count} escenas detectadas y se esperan al menos {expected_scenes} "
+            "para mantener planos de hasta 5 segundos; divide las escenas largas antes de aprobar."
+        )
     if previous_state.strip():
         old_names = set(extract_speaker_names(previous_state))
         new_names = set(extract_speaker_names(body))
