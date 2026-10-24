@@ -5085,9 +5085,42 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                     f"Bloque {chunk_number}/{chunk_total} · escena {index + 1}/{total}: {scene.get('title', 'Escena')}"
                 ))
 
+            # Never silently cut a narration that is longer than the planned montage.
+            # Reuse existing <=5-second shots in sequence until the video can cover the full voice track.
+            final_durations = list(durations)
+            concat_scene_indexes = list(range(total))
+            if has_voice:
+                ffprobe = shutil.which("ffprobe")
+                if not ffprobe:
+                    ffprobe_name = "ffprobe.exe" if os.name == "nt" else "ffprobe"
+                    sibling_probe = Path(ffmpeg).resolve().with_name(ffprobe_name)
+                    if sibling_probe.is_file():
+                        ffprobe = str(sibling_probe)
+                if ffprobe:
+                    try:
+                        probe = subprocess.run(
+                            [ffprobe, "-v", "error", "-show_entries", "format=duration",
+                             "-of", "default=noprint_wrappers=1:nokey=1", str(Path(audio_path).resolve())],
+                            capture_output=True, text=True, timeout=30,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+                        )
+                        voice_seconds = float((probe.stdout or "").strip()) if probe.returncode == 0 else 0.0
+                    except (OSError, ValueError, subprocess.TimeoutExpired):
+                        voice_seconds = 0.0
+                    if math.isfinite(voice_seconds) and voice_seconds > sum(final_durations) + 0.25:
+                        original_video_seconds = sum(final_durations)
+                        while sum(final_durations) < math.ceil(voice_seconds):
+                            concat_scene_indexes.extend(range(total))
+                            final_durations.extend(durations)
+                        self.generation_queue.put((
+                            "render_progress", total + 1, final_steps,
+                            f"Narración de {voice_seconds:.0f} s: ampliando el montaje de "
+                            f"{original_video_seconds} s a {sum(final_durations)} s para conservar toda la voz."
+                        ))
+
             concat_path = scene_dir / "concat.txt"
             concat_path.write_text(
-                "".join(f"file 'scene_{i + 1:03d}.mp4'\n" for i in range(total)),
+                "".join(f"file 'scene_{i + 1:03d}.mp4'\n" for i in concat_scene_indexes),
                 encoding="utf-8"
             )
             if self.render_cancel_event.is_set():
@@ -5125,7 +5158,7 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                 mux_cmd.extend(["-i", str(temp_output_path)])
                 filter_graph = build_audio_filter_graph(
                     has_voice, has_music, voice_input_index, music_input_index,
-                    duration_seconds=float(sum(durations)),
+                    duration_seconds=float(sum(final_durations)),
                 )
                 mux_cmd.extend([
                     "-filter_complex", filter_graph,
@@ -5141,7 +5174,7 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
             temp_output_path.replace(output_path)
             project_dir = PROJECTS_DIR / str(project_id)
             (project_dir / "last_export.txt").write_text(str(output_path), encoding="utf-8")
-            self.generation_queue.put(("render_done", str(output_path), total, sum(durations), bool(is_preview)))
+            self.generation_queue.put(("render_done", str(output_path), len(concat_scene_indexes), sum(final_durations), bool(is_preview)))
         except RuntimeError as exc:
             if "__MARC_RENDER_CANCELLED__" in str(exc):
                 self.generation_queue.put(("render_cancelled",))
