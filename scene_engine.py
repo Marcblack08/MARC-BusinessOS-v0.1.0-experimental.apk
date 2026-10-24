@@ -267,7 +267,8 @@ def build_audio_filter_graph(
         )
 
     if has_music:
-        music_chain = [f"[{music_input_index}:a:0]"]
+        music_source = f"[{music_input_index}:a:0]"
+        music_chain: list[str] = []
         if duration is not None:
             music_chain.extend([
                 f"atrim=duration={duration:.3f}",
@@ -283,7 +284,7 @@ def build_audio_filter_graph(
                 )
         music_label = "music" if has_voice else "aout"
         music_chain.append("apad")
-        parts.append(",".join(music_chain) + f"[{music_label}]")
+        parts.append(music_source + ",".join(music_chain) + f"[{music_label}]")
 
     if has_voice and has_music:
         mixed_music = "music"
