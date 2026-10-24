@@ -707,7 +707,7 @@ class App(tk.Tk):
         self.scene_outline.configure(yscrollcommand=scene_scroll.set)
         self.scene_outline.bind("<Double-1>", lambda _event: self.assign_scene_image())
         self.scene_outline.bind("<<TreeviewSelect>>", self._timeline_scene_selected)
-        tk.Label(scenes_tab, text="Para generar ilustraciones, inicia/configura ComfyUI con «Iniciar / instalar» y descarga un checkpoint compatible. Ollama/Qwen genera el guion, no las imágenes. No se requieren claves API ni servicios en la nube.",
+        tk.Label(scenes_tab, text="Flujo recomendado: revisa el guion y la dirección visual, pulsa «Aprobar» y luego genera imágenes. Inicia/configura ComfyUI con «Iniciar / instalar» y descarga un checkpoint compatible. Ollama/Qwen genera texto, no imágenes.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1000, justify="left").grid(row=7, column=0, sticky="w", pady=(8, 0))
 
@@ -2532,6 +2532,13 @@ Write-Output 'NARRATION_OK'
         if self.current_id is None:
             messagebox.showwarning("Guarda el proyecto", "Completa el título y la premisa antes de generar imágenes.")
             return
+        if not self._existing_approval():
+            messagebox.showwarning(
+                "Revisa el guion antes de generar imágenes",
+                "Primero revisa el guion y el estilo seleccionado en «Dirección visual». "
+                "Pulsa «Aprobar» cuando estés conforme; después podrás generar ilustraciones para esta versión."
+            )
+            return
         scene_number = self._scene_selection_number()
         if scene_number is None or not self.scene_data or scene_number > len(self.scene_data):
             messagebox.showinfo("Selecciona una escena", "Genera o abre un guion y selecciona la escena que quieras ilustrar.")
@@ -2734,6 +2741,13 @@ Write-Output 'NARRATION_OK'
             self.save_project(quiet=True)
         if self.current_id is None:
             messagebox.showwarning("Guarda el proyecto", "Guarda el proyecto antes de generar imágenes.")
+            return
+        if not self._existing_approval():
+            messagebox.showwarning(
+                "Revisa el guion antes de generar imágenes",
+                "Primero revisa el guion y la dirección visual y pulsa «Aprobar». "
+                "La generación por lotes comenzará después de aprobar esta versión del proyecto."
+            )
             return
         self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
         missing = [
@@ -3743,7 +3757,7 @@ Write-Output 'NARRATION_OK'
             self.conn.execute("UPDATE projects SET approved=1 WHERE id=?", (self.current_id,))
             self.conn.commit()
             self.refresh_projects()
-        self.status_var.set("Guion aprobado por el usuario. Ya puedes exportar el MP4.")
+        self.status_var.set("Guion aprobado por el usuario. Ya puedes generar ilustraciones y preparar el MP4.")
 
     def refresh_projects(self):
         rows = self.conn.execute("SELECT id,title,approved FROM projects ORDER BY id DESC").fetchall()
