@@ -5,7 +5,7 @@ from pathlib import Path
 
 from scene_engine import (
     allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief, expand_scenes_to_shots,
-    build_srt_subtitles, build_subtitle_drawtext_filter, ffmpeg_filter_path,
+    build_srt_subtitles, build_srt_from_timed_segments, build_subtitle_drawtext_filter, ffmpeg_filter_path,
     parse_script_scenes, scene_motion_filter
 )
 
@@ -189,6 +189,28 @@ class SceneEngineTests(unittest.TestCase):
             with self.subTest(total=total):
                 with self.assertRaises(ValueError):
                     build_srt_subtitles([{"text": "Texto"}], [1], total_duration_seconds=total)
+
+    def test_timed_srt_uses_measured_phrase_boundaries(self):
+        srt = build_srt_from_timed_segments([
+            {"text": "[NARRADOR]: No abras esa puerta.", "start_seconds": 0.42, "end_seconds": 1.68},
+            {"text": "[MARTA]: ¿Quién está ahí?", "start_seconds": 1.92, "end_seconds": 3.14},
+        ], total_duration_seconds=4.0)
+        cues = [item.splitlines() for item in srt.strip().split("\n\n")]
+        self.assertEqual(cues[0][1], "00:00:00,420 --> 00:00:01,680")
+        self.assertEqual(cues[1][1], "00:00:01,920 --> 00:00:03,140")
+        self.assertNotIn("[NARRADOR]", srt)
+        self.assertNotIn("[MARTA]", srt)
+
+    def test_timed_srt_rejects_unordered_or_invalid_segments(self):
+        with self.assertRaises(ValueError):
+            build_srt_from_timed_segments([
+                {"text": "Uno", "start_seconds": 2, "end_seconds": 3},
+                {"text": "Dos", "start_seconds": 1, "end_seconds": 2},
+            ])
+        with self.assertRaises(ValueError):
+            build_srt_from_timed_segments([
+                {"text": "Inválido", "start_seconds": 1, "end_seconds": 1}
+            ])
 
     def test_srt_rejects_mismatched_scene_durations(self):
         with self.assertRaises(ValueError):
