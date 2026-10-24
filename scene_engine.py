@@ -361,18 +361,31 @@ def ffmpeg_filter_path(path: str | Path) -> str:
     return value
 
 
-def scene_motion_filter(animation_style: str, width: int, height: int, seconds: int) -> str:
-    """Return a conservative motion filter for still artwork; no animation is claimed for text cards."""
+def scene_motion_filter(
+    animation_style: str, width: int, height: int, seconds: int, intensity: str = "Normal"
+) -> str:
+    """Return an FFmpeg motion filter for still artwork, scaled by the user's motion intensity."""
     style = (animation_style or "").lower()
+    level = (intensity or "Normal").strip().lower()
     if "pixel" in style:
         low_w, low_h = max(160, width // 5), max(90, height // 5)
         return f"scale={low_w}:{low_h}:flags=neighbor,scale={width}:{height}:flags=neighbor,fps=24"
     if "stop motion" in style:
         return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps=12, fps=24"
-    zoom = "1.10" if ("3d" in style or "cinematográfica" in style or "dinámicos" in style) else "1.06"
-    # Input must be looped; zoompan makes gentle Ken Burns-style motion from still art.
+    if level == "suave":
+        zoom, step = "1.025", "0.00035"
+    elif level == "muy animado":
+        zoom, step = "1.16", "0.0028"
+    else:
+        zoom, step = "1.07", "0.0012"
+    if "3d" in style or "cinematográfica" in style or "dinámicos" in style:
+        if level == "normal":
+            zoom, step = "1.10", "0.0018"
+        elif level == "suave":
+            zoom, step = "1.04", "0.0006"
+    # The still image is looped by the caller; zoompan creates camera movement, not character animation.
     return (
         f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{height},zoompan=z='min(zoom+0.0012,{zoom})':"
+        f"crop={width}:{height},zoompan=z='min(zoom+{step},{zoom})':"
         f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={width}x{height}:fps=24"
     )
