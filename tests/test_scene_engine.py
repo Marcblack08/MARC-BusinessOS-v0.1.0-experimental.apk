@@ -162,6 +162,34 @@ class SceneEngineTests(unittest.TestCase):
         self.assertTrue(cues[-1][1].endswith("00:00:05,000"))
         self.assertEqual(cues[-1][2], "Ya llegué.")
 
+    def test_srt_scales_scene_cues_to_actual_media_duration(self):
+        scenes = [{"text": "[NARRADOR]: Primera escena."}, {"text": "[MARTA]: Segunda escena."}]
+        srt = build_srt_subtitles(scenes, [5, 5], total_duration_seconds=14.25)
+        cues = [item.splitlines() for item in srt.strip().split("\n\n")]
+        self.assertEqual(cues[0][1], "00:00:00,000 --> 00:00:07,125")
+        self.assertEqual(cues[1][1], "00:00:07,125 --> 00:00:14,250")
+        self.assertNotIn("[NARRADOR]", srt)
+        self.assertNotIn("[MARTA]", srt)
+
+    def test_srt_duration_scaling_preserves_empty_scenes(self):
+        srt = build_srt_subtitles(
+            [{"text": "Primera."}, {"text": ""}, {"text": "Tercera."}],
+            [2, 2, 2], total_duration_seconds=9,
+        )
+        cues = [item.splitlines() for item in srt.strip().split("\n\n")]
+        self.assertEqual(cues[0][1], "00:00:00,000 --> 00:00:03,000")
+        self.assertEqual(cues[1][1], "00:00:06,000 --> 00:00:09,000")
+
+    def test_srt_rejects_non_positive_or_non_finite_timing(self):
+        for durations in ([0], [-1], [float("nan")], [float("inf")]):
+            with self.subTest(durations=durations):
+                with self.assertRaises(ValueError):
+                    build_srt_subtitles([{"text": "Texto"}], durations)
+        for total in (0, -1, float("nan"), float("inf")):
+            with self.subTest(total=total):
+                with self.assertRaises(ValueError):
+                    build_srt_subtitles([{"text": "Texto"}], [1], total_duration_seconds=total)
+
     def test_srt_rejects_mismatched_scene_durations(self):
         with self.assertRaises(ValueError):
             build_srt_subtitles([{"text": "Texto"}], [])
