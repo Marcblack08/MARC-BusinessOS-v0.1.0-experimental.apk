@@ -487,7 +487,7 @@ class App(tk.Tk):
             toolrow, text="Vista previa MP4", command=self.preview_video_render)
         self.preview_render_button.pack(side="left", padx=(6, 0))
         self.image_setup_button = ttk.Button(
-            toolrow, text="Configurar imágenes IA", command=self.open_image_setup
+            toolrow, text="✦ Configurar imágenes IA", style="Accent.TButton", command=self.open_image_setup
         )
         self.image_setup_button.pack(side="left", padx=(6, 0))
         self.cancel_render_button = ttk.Button(toolrow, text="Cancelar render",
