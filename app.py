@@ -18,6 +18,7 @@ import time
 import uuid
 import urllib.request
 import urllib.error
+import webbrowser
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from datetime import datetime
@@ -670,6 +671,10 @@ class App(tk.Tk):
         self.detect_models_button = ttk.Button(image_ai_bar, text="Detectar ComfyUI",
                                                 command=self.detect_image_models)
         self.detect_models_button.pack(side="left", padx=(6, 0))
+        self.start_comfyui_button = ttk.Button(
+            image_ai_bar, text="Iniciar / instalar", command=self.start_comfyui
+        )
+        self.start_comfyui_button.pack(side="left", padx=(6, 0))
         self.generate_image_button = ttk.Button(image_ai_bar, text="Generar ilustración IA",
                                                 style="Accent.TButton", command=self.generate_scene_image)
         self.generate_image_button.pack(side="left", padx=(6, 0))
@@ -1773,7 +1778,7 @@ Write-Output 'NARRATION_OK'
             self.generate_button, self.new_project_button, self.save_button, self.approve_button,
             self.export_button, self.preview_render_button, self.delete_button, self.assign_image_button, self.clear_image_button,
             self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
-            self.detect_models_button, self.generate_image_button, self.generate_missing_images_button, self.detect_voice_button,
+            self.detect_models_button, self.start_comfyui_button, self.generate_image_button, self.generate_missing_images_button, self.detect_voice_button,
             self.generate_voice_button, self.assign_character_voices_button, self.inspector_assign_image_button,
             self.inspector_generate_image_button, self.inspector_duration_button, self.export_srt_button,
             self.select_music_button, self.clear_music_button
@@ -2377,6 +2382,79 @@ Write-Output 'NARRATION_OK'
             return
         self.open_video_externally(path)
 
+    def _find_comfyui_launcher(self):
+        """Locate the official portable Windows launch scripts without scanning whole drives."""
+        home = Path.home()
+        roots = []
+        configured = os.environ.get("MARC_COMFYUI_DIR", "").strip()
+        if configured:
+            roots.append(Path(configured).expanduser())
+        roots.extend([
+            ROOT / "ComfyUI_windows_portable",
+            ROOT / "ComfyUI_windows_portable_nvidia",
+            home / "ComfyUI_windows_portable",
+            home / "ComfyUI_windows_portable_nvidia",
+            home / "Downloads" / "ComfyUI_windows_portable",
+            home / "Downloads" / "ComfyUI_windows_portable_nvidia",
+            home / "Desktop" / "ComfyUI_windows_portable",
+            home / "Desktop" / "ComfyUI_windows_portable_nvidia",
+        ])
+        seen = set()
+        for root in roots:
+            try:
+                root = root.resolve()
+            except OSError:
+                continue
+            candidate_roots = [root]
+            if root.name.casefold() == "comfyui":
+                candidate_roots.append(root.parent)
+            for folder in candidate_roots:
+                if str(folder).casefold() in seen:
+                    continue
+                seen.add(str(folder).casefold())
+                for filename in ("run_nvidia_gpu.bat", "run_cpu.bat"):
+                    launcher = folder / filename
+                    if launcher.is_file():
+                        return launcher
+        return None
+
+    def start_comfyui(self):
+        """Start a found ComfyUI portable instance or open the official setup guide."""
+        if self.comfy_available:
+            messagebox.showinfo(
+                "ComfyUI ya está conectado",
+                f"MARC ya detectó el motor visual en {self.comfy_url}. Selecciona un checkpoint y genera la ilustración."
+            )
+            return
+        launcher = self._find_comfyui_launcher() if os.name == "nt" else None
+        if launcher:
+            try:
+                subprocess.Popen(
+                    ["cmd.exe", "/c", str(launcher)],
+                    cwd=str(launcher.parent),
+                    creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+                )
+                self.status_var.set("ComfyUI está iniciando. Mantén abierta su ventana y espera a que indique la dirección local.")
+                self.image_ai_status_var.set("ComfyUI iniciándose · buscando el servidor…")
+                self.after(12000, lambda: self.detect_image_models(quiet=False))
+            except OSError as exc:
+                messagebox.showerror(
+                    "No se pudo iniciar ComfyUI",
+                    f"No fue posible ejecutar el lanzador encontrado:\n{launcher}\n\n{exc}"
+                )
+            return
+        message = (
+            "No encontré una instalación portable de ComfyUI en las ubicaciones habituales. "
+            "Ollama/Qwen sí puede generar el guion, pero no genera imágenes. "
+            "Instala ComfyUI para Windows, inicia una instancia local y descarga un checkpoint compatible; "
+            "después vuelve a MARC y pulsa «Detectar ComfyUI»."
+        )
+        if messagebox.askyesno(
+            "Configurar el motor de imágenes",
+            message + "\n\n¿Quieres abrir la guía oficial de instalación de ComfyUI para Windows?"
+        ):
+            webbrowser.open("https://docs.comfy.org/installation/desktop/windows")
+
     def detect_image_models(self, quiet=False):
         if self.image_generation_running:
             return
@@ -2494,7 +2572,7 @@ Write-Output 'NARRATION_OK'
                        self.export_button, self.preview_render_button, self.delete_button, self.assign_image_button,
                        self.clear_image_button, self.refresh_scenes_button,
                        self.select_audio_button, self.clear_audio_button,
-                       self.detect_models_button, self.generate_image_button, self.generate_missing_images_button,
+                       self.detect_models_button, self.start_comfyui_button, self.generate_image_button, self.generate_missing_images_button,
                        self.detect_voice_button, self.generate_voice_button, self.inspector_assign_image_button,
                        self.inspector_generate_image_button, self.inspector_duration_button,
                        self.export_srt_button, self.select_music_button, self.clear_music_button):
@@ -2966,7 +3044,7 @@ Write-Output 'NARRATION_OK'
         self.script_text.configure(state="disabled" if active else "normal")
         for button in (self.new_project_button, self.assign_image_button, self.clear_image_button,
                        self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
-                       self.detect_models_button, self.generate_image_button, self.generate_missing_images_button, self.detect_voice_button,
+                       self.detect_models_button, self.start_comfyui_button, self.generate_image_button, self.generate_missing_images_button, self.detect_voice_button,
                        self.generate_voice_button, self.inspector_assign_image_button,
                        self.inspector_generate_image_button, self.inspector_duration_button,
                        self.export_srt_button, self.select_music_button, self.clear_music_button):
