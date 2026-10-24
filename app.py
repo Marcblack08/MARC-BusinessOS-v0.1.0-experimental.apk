@@ -34,6 +34,7 @@ from story_engine import (
     build_series_context, continuity_review_check, export_dimensions,
     extract_speaker_names, target_word_count
 )
+from remote_server import RemoteControlServer
 
 APP_NAME = "MARC Video Studio AI Desktop"
 ROOT = Path(__file__).resolve().parent
@@ -163,13 +164,238 @@ class App(tk.Tk):
         self._style()
         self._build()
         self.refresh_projects()
+        self.remote_command_queue = queue.Queue()
+        self.remote_snapshot = {}
+        self.remote_server = None
+        self.remote_server_error = ""
+        self.remote_last_command = {}
+        self.remote_render_active = False
+        try:
+            self.remote_server = RemoteControlServer(
+                data_dir=DATA_DIR, db_path=DB_PATH, projects_dir=PROJECTS_DIR,
+                command_queue=self.remote_command_queue,
+                snapshot_provider=lambda: self.remote_snapshot,
+                host="127.0.0.1", port=8765,
+            )
+            self.remote_server.start()
+        except OSError as exc:
+            self.remote_server_error = str(exc)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.timeline_playhead_seconds = 0
         self.timeline_selected_scene = 1
         self.after(700, self.detect_pc_async)
         self.check_tools()
         self.after(180, self._poll_generation_events)
+        self.after(250, self._poll_remote_commands)
+        self.after(500, self._publish_remote_snapshot)
         self.after(1100, lambda: self.detect_image_models(quiet=True))
         self.after(1300, lambda: self.detect_local_voices(quiet=True))
+
+    def show_remote_access(self):
+        """Display the private access token and Tailscale Serve instructions."""
+        if not self.remote_server:
+            messagebox.showerror("Panel remoto no iniciado",
+                                 "El servidor no pudo abrir el puerto 8765. Cierra otra instancia de MARC y vuelve a intentarlo.")
+            return
+        window = tk.Toplevel(self)
+        window.title("Acceso remoto a MARC")
+        window.transient(self)
+        window.resizable(False, False)
+        window.configure(bg=self.colors["panel"])
+        body = tk.Frame(window, bg=self.colors["panel"], padx=18, pady=16)
+        body.pack(fill="both", expand=True)
+        tk.Label(body, text="MARC · ACCESO REMOTO", bg=self.colors["panel"],
+                 fg=self.colors["text"], font=("Segoe UI", 13, "bold")).pack(anchor="w")
+        tk.Label(body, text="Código privado para iniciar sesión desde el teléfono.",
+                 bg=self.colors["panel"], fg=self.colors["muted"]).pack(anchor="w", pady=(6, 10))
+        tk.Label(body, text="Código de acceso", bg=self.colors["panel"], fg=self.colors["text"]).pack(anchor="w")
+        token_var = tk.StringVar(value=self.remote_server.token)
+        token_entry = ttk.Entry(body, textvariable=token_var, width=58)
+        token_entry.pack(fill="x", pady=(4, 7))
+        token_entry.configure(state="readonly")
+        actions = tk.Frame(body, bg=self.colors["panel"])
+        actions.pack(fill="x", pady=(0, 10))
+        def copy_token():
+            self.clipboard_clear()
+            self.clipboard_append(self.remote_server.token)
+            self.update()
+            messagebox.showinfo("Código copiado", "Código copiado al portapapeles.", parent=window)
+        ttk.Button(actions, text="Copiar código", command=copy_token).pack(side="left")
+        ttk.Button(actions, text="Abrir panel local",
+                   command=lambda: webbrowser.open(self.remote_server.local_url)).pack(side="left", padx=(8, 0))
+        instructions = (
+            "Para acceder desde fuera de casa, ejecuta en CMD o PowerShell de esta computadora:\n\n"
+            "   tailscale serve --bg 8765\n\n"
+            "Abre en el teléfono la URL HTTPS que Tailscale muestre y pega el código de arriba.\n\n"
+            "Usa Serve, no Funnel. No compartas el código. Mantén MARC abierto."
+        )
+        tk.Label(body, text=instructions, bg=self.colors["panel"], fg=self.colors["text"],
+                 justify="left", wraplength=420).pack(anchor="w")
+        ttk.Button(body, text="Cerrar", command=window.destroy).pack(anchor="e", pady=(12, 0))
+        window.update_idletasks()
+        window.geometry(f"+{self.winfo_rootx()+80}+{self.winfo_rooty()+80}")
+
+    def _on_close(self):
+        try:
+            if self.remote_server:
+                self.remote_server.stop()
+        except Exception:
+            pass
+        try:
+            self.conn.close()
+        except Exception:
+            pass
+        self.destroy()
+
+    def _publish_remote_snapshot(self):
+        try:
+            running = bool(self.generation_running or self.render_running or
+                           self.image_generation_running or self.voice_generation_running or
+                           getattr(self, "audio_mux_running", False))
+            maximum = max(1.0, float(self.progressbar.cget("maximum")))
+            value = max(0.0, float(self.progressbar.cget("value")))
+            self.remote_snapshot = {
+                "label": "MARC trabajando" if running else "MARC listo",
+                "detail": self.status_var.get(),
+                "running": running,
+                "progress": max(0, min(100, round(value / maximum * 100))),
+                "current_id": self.current_id,
+                "current_title": self.title_var.get(),
+                "ollama": bool(self.ai_available),
+                "comfyui": bool(self.comfy_available),
+                "server_error": self.remote_server_error,
+                "last_command": self.remote_last_command,
+            }
+        except (tk.TclError, AttributeError, ValueError):
+            pass
+        self.after(800, self._publish_remote_snapshot)
+
+    def _remote_load_project(self, project_id):
+        try:
+            project_id = int(project_id)
+        except (TypeError, ValueError):
+            raise ValueError("ID de proyecto no válido.")
+        self.refresh_projects()
+        for index, row in enumerate(self.project_rows):
+            if int(row["id"]) == project_id:
+                self.project_list.selection_clear(0, "end")
+                self.project_list.selection_set(index)
+                self.project_list.activate(index)
+                self.load_selected()
+                return
+        raise ValueError("No se encontró el proyecto.")
+
+    def _poll_remote_commands(self):
+        try:
+            while True:
+                command = self.remote_command_queue.get_nowait()
+                action = command.get("action", "")
+                payload = command.get("payload") or {}
+                try:
+                    if action == "generate_script":
+                        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+                            raise RuntimeError("MARC ya tiene un trabajo en curso.")
+                        title = str(payload.get("title", "")).strip()[:100]
+                        topic = str(payload.get("topic", "")).strip()
+                        if not title or not topic:
+                            raise ValueError("Completa el nombre del proyecto y la premisa.")
+                        if len(topic) > 3000:
+                            raise ValueError("La premisa no puede superar 3000 caracteres.")
+                        duration = int(payload.get("duration", 2))
+                        if duration < 1 or duration > 30:
+                            raise ValueError("La duración remota permitida inicialmente es de 1 a 30 minutos.")
+                        platform_name = str(payload.get("platform", "YouTube 16:9"))
+                        if platform_name not in PLATFORMS:
+                            platform_name = "YouTube 16:9"
+                        genres = {"Novela dramática", "Reencarnación y venganza", "Superación personal", "Romance",
+                                  "Fantasía", "Misterio y suspenso", "Terror", "Acción y aventura", "Ciencia ficción",
+                                  "Drama familiar", "Educativo y directo", "Documental", "Promocional"}
+                        genre = str(payload.get("genre", "Misterio y suspenso"))
+                        if genre not in genres:
+                            genre = "Misterio y suspenso"
+                        mode = str(payload.get("video_mode", SHORT_VIDEO_MODE))
+                        if mode not in (SHORT_VIDEO_MODE, SERIES_VIDEO_MODE):
+                            mode = SHORT_VIDEO_MODE
+                        if self.current_id is not None:
+                            self.save_project(quiet=True)
+                        self.current_id = None
+                        self.series_key = ""
+                        self.episode_number = 1
+                        self.story_bible = ""
+                        self.continuity_state = ""
+                        self.voice_assignments = {}
+                        self.title_var.set(title)
+                        self.topic_var.set(topic)
+                        self.platform_var.set(platform_name)
+                        self.duration_var.set(str(duration))
+                        self.style_var.set(genre)
+                        self.video_mode_var.set(mode)
+                        self.protagonist_var.set(str(payload.get("protagonist", ""))[:160])
+                        self.conflict_var.set(str(payload.get("conflict", ""))[:300])
+                        self._load_scene_assets(None)
+                        self.script_text.configure(state="normal")
+                        self.script_text.delete("1.0", "end")
+                        self.script_text.configure(state="disabled")
+                        self._refresh_scene_outline("")
+                        self.set_configuration_visible(True)
+                        self.generate_script(remote=True)
+                    elif action == "open_project":
+                        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+                            raise RuntimeError("Espera a que termine el trabajo actual antes de cambiar de proyecto.")
+                        self._remote_load_project(payload.get("project_id"))
+                    elif action == "save_script":
+                        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+                            raise RuntimeError("No se puede editar el guion mientras hay un trabajo en curso.")
+                        self._remote_load_project(payload.get("project_id"))
+                        script = str(payload.get("script", ""))
+                        if len(script) > 200000:
+                            raise ValueError("El guion excede 200 000 caracteres.")
+                        self.script_text.configure(state="normal")
+                        self.script_text.delete("1.0", "end")
+                        self.script_text.insert("1.0", script)
+                        self._refresh_scene_outline(script)
+                        self.save_project(reset_approval=True, quiet=True)
+                        self.status_var.set("Guion guardado desde el teléfono; vuelve a aprobarlo antes de exportar.")
+                    elif action == "approve_script":
+                        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+                            raise RuntimeError("Espera a que termine el trabajo actual antes de aprobar el guion.")
+                        self._remote_load_project(payload.get("project_id"))
+                        self.approve_script(remote=True)
+                    elif action == "generate_images":
+                        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+                            raise RuntimeError("MARC ya tiene un trabajo en curso.")
+                        self._remote_load_project(payload.get("project_id"))
+                        if not self._existing_approval():
+                            raise RuntimeError("Revisa y aprueba el guion antes de generar imágenes.")
+                        if not self.comfy_available or not self.image_model_var.get().strip():
+                            self.detect_image_models(quiet=True)
+                            raise RuntimeError("ComfyUI o el checkpoint no están listos. Abre ComfyUI, selecciona/detecta un modelo y vuelve a intentarlo.")
+                        self.remote_image_batch_active = True
+                        self.generate_missing_scene_images(preconfirmed=True, preview_after=False)
+                        if not self.batch_image_active and not self.image_generation_running:
+                            self.remote_image_batch_active = False
+                    elif action == "render_video":
+                        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+                            raise RuntimeError("MARC ya tiene un trabajo en curso.")
+                        self._remote_load_project(payload.get("project_id"))
+                        self._start_video_render(preview=False, remote=True)
+                    elif action in ("cancel", "cancel_generation", "cancel_render"):
+                        if action in ("cancel", "cancel_generation") and self.generation_running:
+                            self.cancel_event.set()
+                        if action in ("cancel", "cancel_render") and self.render_running:
+                            self.render_cancel_event.set()
+                        if not self.generation_running and not self.render_running:
+                            raise RuntimeError("No hay un guion ni un render que cancelar.")
+                        self.status_var.set("Cancelación remota solicitada.")
+                    else:
+                        raise ValueError("Acción no reconocida.")
+                    self.remote_last_command = {"id": command.get("id"), "ok": True, "message": "Solicitud procesada: " + action}
+                except Exception as exc:
+                    self.remote_last_command = {"id": command.get("id"), "ok": False, "message": str(exc)[:500]}
+                    self.status_var.set("Error en la solicitud remota: " + str(exc)[:220])
+        except queue.Empty:
+            pass
+        self.after(250, self._poll_remote_commands)
 
     def detect_pc_async(self):
         self.pc_summary_var.set("Detectando procesador, memoria, gráficos y herramientas…")
@@ -1021,6 +1247,9 @@ class App(tk.Tk):
         )
         self.more_menu.add_command(
             label="Herramientas instaladas", command=self.check_tools
+        )
+        self.more_menu.add_command(
+            label="Acceso remoto desde el teléfono", command=self.show_remote_access
         )
         self.more_menu.add_command(
             label="Continuar historia", command=self.create_continuation
@@ -2935,7 +3164,9 @@ Write-Output 'NARRATION_OK'
                 self.after(250, lambda: self._start_video_render(preview=True))
             else:
                 self.status_var.set(f"Generación por lotes completada: {total} ilustraciones.")
-                messagebox.showinfo("Ilustraciones listas", f"Se generaron {total} ilustraciones y se asignaron a sus escenas.")
+                if not getattr(self, "remote_image_batch_active", False):
+                    messagebox.showinfo("Ilustraciones listas", f"Se generaron {total} ilustraciones y se asignaron a sus escenas.")
+                self.remote_image_batch_active = False
             return
         scene_number = self.batch_image_queue.pop(0)
         item = f"scene_{scene_number}"
@@ -3120,7 +3351,7 @@ Write-Output 'NARRATION_OK'
             raise RuntimeError("Ollama respondió sin texto. Comprueba que Qwen esté instalado.")
         return answer
 
-    def generate_script(self):
+    def generate_script(self, remote=False):
         data = self.get_form()
         if not data:
             return
@@ -3136,7 +3367,7 @@ Write-Output 'NARRATION_OK'
             "MARC generará una novela/serie por capítulos, conservando los personajes y los acontecimientos establecidos. "
             "La generación del guion no crea imágenes ni exporta el MP4 automáticamente.\n\n"
         )
-        if not messagebox.askyesno(
+        if not remote and not messagebox.askyesno(
             "Antes de generar el guion",
             preflight_text + f"Duración objetivo: {minutes} minuto(s). Modo: {data['video_mode']}. "
             "El proceso puede tardar con Qwen 2.5 3B local. ¿Comenzar?"
@@ -3151,7 +3382,7 @@ Write-Output 'NARRATION_OK'
         label = "corto de 2 minutos" if is_short else f"{chapter_count} capítulo(s)"
         self.progress_label_var.set(f"Plan: {label} · objetivo ~{self.planned_words:,} palabras")
         self.progress_detail_var.set("0% · Preparando la estructura narrativa")
-        if not is_short and minutes >= 45:
+        if not remote and not is_short and minutes >= 45:
             confirm = messagebox.askyesno(
                 "Novela larga",
                 f"El proyecto tendrá {chapter_count} capítulos, generados uno por uno en tu equipo. ¿Deseas continuar?"
@@ -3168,6 +3399,7 @@ Write-Output 'NARRATION_OK'
         })
         self.cancel_event.clear()
         self.generation_running = True
+        self.remote_generate_active = bool(remote)
         self._set_generation_state(True)
         self.set_configuration_visible(False)
         self.script_text.configure(state="normal")
@@ -3732,7 +3964,9 @@ Write-Output 'NARRATION_OK'
                     self.progress_label_var.set(f"Ilustración fallida · escena {scene_number}")
                     self.progress_detail_var.set("Comprueba ComfyUI, el checkpoint y su consola.")
                     self.status_var.set("No se pudo generar la ilustración local.")
-                    messagebox.showerror("Error de ilustración IA", detail)
+                    if not getattr(self, "remote_image_batch_active", False):
+                        messagebox.showerror("Error de ilustración IA", detail)
+                    self.remote_image_batch_active = False
                 elif kind == "chapter":
                     self.completed_chapters = event[2]
                     percent = round((self.completed_chapters / max(1, event[3])) * 100)
@@ -3759,6 +3993,7 @@ Write-Output 'NARRATION_OK'
                     self.script_text.configure(state="disabled")
                     self.save_project(reset_approval=True, quiet=True)
                     self.generation_running = False
+                    self.remote_generate_active = False
                     self._set_generation_state(False)
                     self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
                     words = len(self.script_text.get("1.0", "end-1c").split())
@@ -3777,6 +4012,7 @@ Write-Output 'NARRATION_OK'
                     self.script_text.configure(state="normal")
                     self.save_project(reset_approval=True, quiet=True)
                     self.generation_running = False
+                    self.remote_generate_active = False
                     self._set_generation_state(False)
                     self.status_var.set("Generación cancelada. El borrador parcial se conservó sin aprobar.")
                 elif kind == "error":
@@ -3787,8 +4023,11 @@ Write-Output 'NARRATION_OK'
                     self.script_text.configure(state="normal")
                     self.save_project(reset_approval=True, quiet=True)
                     self.generation_running = False
+                    was_remote_generation = bool(getattr(self, "remote_generate_active", False))
+                    self.remote_generate_active = False
                     self._set_generation_state(False)
-                    messagebox.showerror("Error de generación", "La IA local no pudo completar el guion.\n\n" + event[1])
+                    if not was_remote_generation:
+                        messagebox.showerror("Error de generación", "La IA local no pudo completar el guion.\n\n" + event[1])
                     self.status_var.set("La generación se detuvo. El borrador parcial se conserva sin aprobar.")
                 elif kind == "render_progress":
                     current, total, detail = event[1], event[2], event[3]
@@ -3827,10 +4066,12 @@ Write-Output 'NARRATION_OK'
                             f"100% · {event[2]} escenas · duración aproximada {self._format_eta(event[3])}"
                         )
                         self.status_var.set(f"MP4 creado: {self.last_export_path}")
-                        messagebox.showinfo(
-                            "Exportación terminada",
-                            f"Vídeo MP4 creado en:\n{self.last_export_path}\n\nPuedes abrirlo desde la pestaña VISTA PREVIA."
-                        )
+                        if not getattr(self, "remote_render_active", False):
+                            messagebox.showinfo(
+                                "Exportación terminada",
+                                f"Vídeo MP4 creado en:\n{self.last_export_path}\n\nPuedes abrirlo desde la pestaña VISTA PREVIA."
+                            )
+                        self.remote_render_active = False
                 elif kind == "audio_mux_done":
                     self.audio_mux_running = False
                     self.last_export_path = event[1]
@@ -3857,17 +4098,21 @@ Write-Output 'NARRATION_OK'
                     messagebox.showerror("Error al mezclar audio", event[1])
                 elif kind == "render_cancelled":
                     self.render_running = False
+                    self.remote_render_active = False
                     self._set_render_state(False)
                     self.progress_label_var.set("Exportación cancelada")
                     self.progress_detail_var.set("El render se detuvo por petición del usuario. El MP4 parcial puede no reproducirse.")
                     self.status_var.set("Exportación cancelada.")
                 elif kind == "render_error":
                     self.render_running = False
+                    was_remote_render = bool(getattr(self, "remote_render_active", False))
+                    self.remote_render_active = False
                     self._set_render_state(False)
                     self.progress_label_var.set("Error durante la exportación")
                     self.progress_detail_var.set("Revisa el mensaje de FFmpeg y la disponibilidad de recursos.")
-                    self.status_var.set("No se pudo completar el MP4.")
-                    messagebox.showerror("Error de exportación", event[1])
+                    self.status_var.set("No se pudo completar el MP4: " + str(event[1])[-240:])
+                    if not was_remote_render:
+                        messagebox.showerror("Error de exportación", event[1])
         except queue.Empty:
             pass
         self.after(180, self._poll_generation_events)
@@ -3878,10 +4123,13 @@ Write-Output 'NARRATION_OK'
         row = self.conn.execute("SELECT approved FROM projects WHERE id=?", (self.current_id,)).fetchone()
         return int(row["approved"]) if row else 0
 
-    def approve_script(self):
+    def approve_script(self, remote=False):
         script = self.script_text.get("1.0", "end-1c").strip()
         if not script:
-            messagebox.showwarning("Sin guion", "Genera o escribe un guion antes de aprobarlo.")
+            if remote:
+                self.status_var.set("No hay guion para aprobar. Espera a que termine o genera uno primero.")
+            else:
+                messagebox.showwarning("Sin guion", "Genera o escribe un guion antes de aprobarlo.")
             return
         warnings = continuity_review_check(script, self.continuity_state if self.episode_number > 1 else "")
         review_text = "¿Has revisado el guion y confirmas que está listo para renderizar?"
@@ -3891,7 +4139,7 @@ Write-Output 'NARRATION_OK'
                 + "\n".join("• " + warning for warning in warnings)
                 + "\n\n¿Has revisado el guion y deseas aprobarlo de todas formas?"
             )
-        if not messagebox.askyesno("Revisión narrativa", review_text):
+        if not remote and not messagebox.askyesno("Revisión narrativa", review_text):
             return
         self.save_project(quiet=True)
         if self.current_id is not None:
@@ -3974,9 +4222,9 @@ Write-Output 'NARRATION_OK'
         """Render a 720p draft into the project and open it inside MARC for review."""
         self._start_video_render(preview=True)
 
-    def export_video(self):
+    def export_video(self, remote=False):
         """Render the approved project at its selected delivery settings."""
-        self._start_video_render(preview=False)
+        self._start_video_render(preview=False, remote=remote)
 
     def _current_preview_signature(self):
         """Fingerprint the editable timeline so stale previews are never mistaken for current work."""
@@ -4055,26 +4303,41 @@ Write-Output 'NARRATION_OK'
                 self.save_project(quiet=True)
         return assigned
 
-    def _start_video_render(self, preview=False):
+    def _start_video_render(self, preview=False, remote=False):
         if self.render_running or self.generation_running or self.image_generation_running or self.voice_generation_running:
-            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            if remote:
+                self.status_var.set("No se pudo iniciar el render remoto: ya hay otro trabajo en curso.")
+            else:
+                messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
             return
         if self.current_id is None:
             self.save_project(quiet=True)
         if self.current_id is None:
-            messagebox.showwarning("Guarda primero", "Completa el título y la premisa y guarda el proyecto antes de renderizar.")
+            if remote:
+                self.status_var.set("Selecciona y guarda un proyecto antes de renderizar.")
+            else:
+                messagebox.showwarning("Guarda primero", "Completa el título y la premisa y guarda el proyecto antes de renderizar.")
             return
         self.save_project(quiet=True)
         row = self.conn.execute("SELECT * FROM projects WHERE id=?", (self.current_id,)).fetchone()
         if not row:
-            messagebox.showerror("Proyecto no encontrado", "Vuelve a abrir o guardar el proyecto e inténtalo otra vez.")
+            if remote:
+                self.status_var.set("Proyecto no encontrado al iniciar el render remoto.")
+            else:
+                messagebox.showerror("Proyecto no encontrado", "Vuelve a abrir o guardar el proyecto e inténtalo otra vez.")
             return
         if not preview and not row["approved"]:
-            messagebox.showerror("Aprobación obligatoria", "No se puede exportar: primero debes aprobar el guion.")
+            if remote:
+                self.status_var.set("No se puede exportar: primero revisa y aprueba el guion desde el teléfono.")
+            else:
+                messagebox.showerror("Aprobación obligatoria", "No se puede exportar: primero debes aprobar el guion.")
             return
         scenes = parse_script_scenes(row["script"] or "")
         if not scenes:
-            messagebox.showerror("Guion vacío", "El guion no contiene escenas renderizables. Genera o escribe el guion primero.")
+            if remote:
+                self.status_var.set("El proyecto no contiene escenas; genera o guarda un guion antes de exportar.")
+            else:
+                messagebox.showerror("Guion vacío", "El guion no contiene escenas renderizables. Genera o escribe el guion primero.")
             return
 
         asset_map = dict(self.scene_assets)
@@ -4085,7 +4348,7 @@ Write-Output 'NARRATION_OK'
             index + 1 for index in range(len(scenes))
             if not asset_map.get(str(index + 1))
         ]
-        if missing_images:
+        if missing_images and not remote:
             model_ready = bool(self.image_model_var.get().strip())
             if preview and model_ready:
                 generate_images = messagebox.askyesno(
@@ -4147,6 +4410,9 @@ Write-Output 'NARRATION_OK'
             preview_path = None
 
         ffmpeg = self._find_ffmpeg()
+        if not ffmpeg and remote:
+            self.status_var.set("No se encontró FFmpeg. Instálalo o configúralo antes de exportar remotamente.")
+            return
         if not ffmpeg:
             selected = filedialog.askopenfilename(
                 title="Selecciona ffmpeg.exe",
@@ -4175,7 +4441,7 @@ Write-Output 'NARRATION_OK'
             ram_gb = float(pc_info.get("ram_gb") or 8)
         except (TypeError, ValueError):
             logical_cores, ram_gb = os.cpu_count() or 2, 8.0
-        if not preview and (resolution == "2K / 1440p" or fps >= 60) and (logical_cores <= 4 or ram_gb < 12):
+        if not remote and not preview and (resolution == "2K / 1440p" or fps >= 60) and (logical_cores <= 4 or ram_gb < 12):
             warning = (
                 f"Has elegido {resolution}, {width}×{height} a {fps} FPS. "
                 "Este perfil puede tardar considerablemente en este equipo. MARC conservará la resolución seleccionada; "
@@ -4192,13 +4458,20 @@ Write-Output 'NARRATION_OK'
             self.studio_tabs.select(self.preview_tab)
         else:
             self.status_var.set(f"Salida configurada: {width}×{height} · {fps} FPS · {resolution}.")
-            output = filedialog.asksaveasfilename(
-                title="Guardar vídeo MP4", defaultextension=".mp4",
-                filetypes=[("Vídeo MP4", "*.mp4")],
-                initialfile=f"{row['title'][:36]}-{resolution.split()[0]}.mp4"
-            )
-            if not output:
-                return
+            if remote:
+                safe_title = re.sub(r"[^A-Za-z0-9._-]+", "_", str(row["title"])).strip("._")[:60]
+                safe_title = safe_title or f"proyecto-{row['id']}"
+                export_dir = PROJECTS_DIR / str(row["id"]) / "exports"
+                export_dir.mkdir(parents=True, exist_ok=True)
+                output = str((export_dir / f"{safe_title}.mp4").resolve())
+            else:
+                output = filedialog.asksaveasfilename(
+                    title="Guardar vídeo MP4", defaultextension=".mp4",
+                    filetypes=[("Vídeo MP4", "*.mp4")],
+                    initialfile=f"{row['title'][:36]}-{resolution.split()[0]}.mp4"
+                )
+                if not output:
+                    return
         target_seconds = max(60, int(row["duration_minutes"]) * 60)
         durations = allocate_scene_durations(scenes, target_seconds)
         durations = [self.scene_duration_overrides.get(str(i + 1), value) for i, value in enumerate(durations)]
@@ -4225,6 +4498,7 @@ Write-Output 'NARRATION_OK'
         narration_text = "\n\n".join(
             str(scene.get("text", "")).strip() for scene in scenes if str(scene.get("text", "")).strip()
         ).strip() if not audio_path and os.name == "nt" else ""
+        self.remote_render_active = bool(remote)
         args = (
             ffmpeg, str(Path(output).resolve()), int(row["id"]), width, height,
             scenes, durations, asset_map, row["animation_style"] or "2D fluida",
