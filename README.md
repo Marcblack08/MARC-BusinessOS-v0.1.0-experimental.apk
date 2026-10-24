@@ -29,7 +29,7 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 - Persistencia local en SQLite con migraciones para bases existentes.
 - Tabla de escenas con título, palabras, duración asignada y recurso visual.
 - Asignación de imágenes propias a las escenas.
-- Integración con ComfyUI local para generar una imagen fija por escena. MARC detecta el puerto predeterminado y varios puertos alternativos, muestra la URL conectada y diferencia un servicio apagado de la ausencia de checkpoints. El botón **Iniciar / instalar** intenta abrir una instalación portable conocida o lleva a la guía oficial de ComfyUI para Windows. Ollama/Qwen se usa para texto; no genera imágenes por sí solo. El endpoint se puede fijar con `MARC_COMFYUI_URL` y la carpeta portable con `MARC_COMFYUI_DIR`.
+- Integración con ComfyUI local para generar una imagen fija por escena. Los lotes preparan prompts con solicitudes agrupadas de Ollama antes de generar imágenes, reduciendo llamadas secuenciales; si falla el modelo de texto, se usa una descripción de respaldo. MARC detecta el puerto predeterminado y varios puertos alternativos, muestra la URL conectada y diferencia un servicio apagado de la ausencia de checkpoints. El botón **Iniciar / instalar** intenta abrir una instalación portable conocida o lleva a la guía oficial de ComfyUI para Windows. Ollama/Qwen se usa para texto; no genera imágenes por sí solo. El endpoint se puede fijar con `MARC_COMFYUI_URL` y la carpeta portable con `MARC_COMFYUI_DIR`.
 - Render MP4 en segundo plano, con barra de progreso y cancelación. Las escenas terminadas se guardan como puntos de recuperación y se reutilizan si el contenido, la duración, la imagen o la resolución no han cambiado. El progreso informa de bloques aproximados de 5 minutos. Los perfiles exigentes pueden tardar considerablemente en equipos antiguos; MARC avisa antes de exportar y respeta la resolución elegida. Imágenes asignadas reciben movimiento sencillo de cámara; las escenas sin imágenes se renderizan como tarjetas de texto.
 - Pestaña de audio con pistas separadas de narración y música; generación de voz offline con Windows System.Speech, mezcla de ambas pistas con volumen de música reducido y repetición opcional de la música. Incluye la acción «Añadir audio al último vídeo» para aplicar narración y/o música a un MP4 ya exportado sin volver a renderizar las escenas.
 - Aprobación humana obligatoria antes de exportar; modificar el guion invalida la aprobación.
@@ -52,6 +52,10 @@ El código fuente está en desarrollo. La validación automatizada comprueba la 
 
 La detección de servicios no instala ComfyUI ni descarga checkpoints automáticamente; esos componentes requieren instalación y espacio/recursos locales.
 - Equipo objetivo: Intel Core i5 de 4.ª generación, 16 GB RAM, SSD y NVIDIA GTX 750. Las historias largas tardarán más; la GTX 750 tiene recursos limitados para modelos de imagen modernos.
+
+## Instalación en un PC Windows nuevo
+
+Consulta [docs/INSTALACION_WINDOWS.md](docs/INSTALACION_WINDOWS.md) para requisitos, enlaces oficiales, Ollama/Qwen, FFmpeg, ComfyUI opcional y una prueba completa del primer vídeo. El instalador de MARC no incluye esos motores externos.
 
 ## Instalación desde el código
 1. Descarga o clona el repositorio.
