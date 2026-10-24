@@ -84,6 +84,14 @@ class StoryEngineTests(unittest.TestCase):
         warnings = continuity_review_check(script)
         self.assertTrue(any("encabezados [ESCENA" in warning for warning in warnings))
 
+    def test_continuity_review_checks_expected_scene_count(self):
+        script = "\\n".join(
+            f"[ESCENA {i:02d} — Plano {i}]\\n[NARRADOR]: Ocurre algo importante."
+            for i in range(1, 4)
+        )
+        warnings = continuity_review_check(script, expected_scenes=24)
+        self.assertTrue(any("se esperan al menos 24" in warning for warning in warnings))
+
     def test_continuity_review_flags_generic_opening(self):
         warnings = continuity_review_check("Había una vez un reino muy lejano " + "palabra " * 110)
         self.assertTrue(any("genérico" in warning for warning in warnings))
