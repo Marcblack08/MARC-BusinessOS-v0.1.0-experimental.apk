@@ -180,6 +180,7 @@ class App(tk.Tk):
             self.remote_server.start()
         except OSError as exc:
             self.remote_server_error = str(exc)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.timeline_playhead_seconds = 0
         self.timeline_selected_scene = 1
         self.after(700, self.detect_pc_async)
