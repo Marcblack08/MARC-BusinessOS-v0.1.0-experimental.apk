@@ -33,7 +33,8 @@ from scene_engine import (
 from story_engine import (
     FPS_OPTIONS, RESOLUTION_PROFILES, SERIES_VIDEO_MODE, SHORT_VIDEO_MODE,
     build_series_context, continuity_review_check, export_dimensions,
-    extract_speaker_names, target_word_count, format_short_chapter, visual_shot_count
+    extract_speaker_names, target_word_count, format_short_chapter, visual_shot_count,
+    creative_direction
 )
 from remote_server import RemoteControlServer
 
@@ -3633,6 +3634,7 @@ Write-Output 'NARRATION_OK'
                     f"Título: {data['title']}. Género: {data['genre']}. Premisa: {data['topic']}. Tono: {data['tone']}. "
                     f"Protagonista: {protagonist}. Conflicto: {conflict}. Narrador: {data['narrator']}. Desenlace: {data['ending']}. "
                     f"Estilo visual: {data['drawing_style']}. Animación: {data['animation_style']}. Plataforma: {data['platform']}. "
+                    f"Dirección creativa: {creative_direction(data['genre'], data['platform'], data['video_mode'])}\n"
                     "Duración aproximada: 2 minutos. Prioriza ritmo y claridad; guion de aproximadamente 220-300 palabras.\n"
                     f"STORYBOARD OBLIGATORIO: incluye al menos {visual_shot_count(120)} planos/escenas numerados, uno por cada máximo de 5 segundos. "
                     "Usa encabezados [ESCENA 01 — título concreto], cada uno con un instante visual único, breve y fácil de ilustrar. "
@@ -3664,6 +3666,7 @@ Write-Output 'NARRATION_OK'
                     "revela información gradualmente, da consecuencias a decisiones anteriores y no resuelvas misterios abiertos sin preparación. "
                     "No cambies apariencia, parentesco, muertes, ubicación ni objetos canónicos. "
                     f"Serie: {data['title']}. Episodio nuevo: {episode_number}. Modo: {data['video_mode']}. "
+                    f"Dirección creativa: {creative_direction(data['genre'], data['platform'], data['video_mode'])}. "
                     f"Duración: {data['duration']} minutos. Escribe 3-6 beats concretos.\n\n" + continuity_context
                 )
                 plan = self._ollama_request(plan_prompt, max_tokens=550)
@@ -3680,6 +3683,7 @@ Write-Output 'NARRATION_OK'
                     f"{chapter_count} capítulo(s) concretos. No escribas todavía el guion final.\nGénero: {data['genre']}. Premisa: {data['topic']}. "
                     f"Protagonista: {protagonist}. Conflicto: {conflict}. Tono: {data['tone']}. Narrador: {data['narrator']}. "
                     f"Desenlace: {data['ending']}. Dirección visual: {data['drawing_style']}; animación: {data['animation_style']}. "
+                    f"Dirección creativa: {creative_direction(data['genre'], data['platform'], data['video_mode'])}. "
                     f"Duración: {data['duration']} min. Modo: {data['video_mode']}. Evita aperturas cliché, coincidencias gratuitas y personajes expositivos."
                 )
                 plan = self._ollama_request(plan_prompt, max_tokens=min(1500, 550 + chapter_count * 28))
@@ -3725,6 +3729,7 @@ Write-Output 'NARRATION_OK'
                     f"Modo: {data['video_mode']}. Género: {data['genre']}. Premisa: {data['topic']}. Tono: {data['tone']}. "
                     f"Narrador: {data['narrator']}. Protagonista: {data['protagonist'] or 'según la biblia'}. Conflicto: {data['conflict'] or 'según la biblia'}. "
                     f"Desenlace: {data['ending']}. Dirección visual: {data['drawing_style']}; animación: {data['animation_style']}. Plataforma: {data['platform']}. "
+                    f"Dirección creativa: {creative_direction(data['genre'], data['platform'], data['video_mode'])}. "
                     f"Duración: {data['duration']} minutos. Tipo: {previous_label}. Episodio {episode_number}; capítulo {index}/{chapter_count}. "
                     f"Objetivo aproximado: {words_per_chapter} palabras; si el ritmo pide menos, prioriza calidad sobre relleno.\n"
                     f"STORYBOARD: crea al menos {visual_shots_per_chapter} planos numerados para este capítulo, con máximo de 5 segundos por plano. "
@@ -4359,7 +4364,14 @@ Write-Output 'NARRATION_OK'
             else:
                 messagebox.showwarning("Sin guion", "Genera o escribe un guion antes de aprobarlo.")
             return
-        warnings = continuity_review_check(script, self.continuity_state if self.episode_number > 1 else "")
+        mode = self.video_mode_var.get() if hasattr(self, "video_mode_var") else SERIES_VIDEO_MODE
+        target_seconds = 120 if mode == SHORT_VIDEO_MODE else max(60, int(self.duration_var.get()) * 60)
+        expected_scenes = visual_shot_count(target_seconds)
+        warnings = continuity_review_check(
+            script,
+            self.continuity_state if self.episode_number > 1 else "",
+            expected_scenes=expected_scenes,
+        )
         review_text = "¿Has revisado el guion y confirmas que está listo para renderizar?"
         if warnings:
             review_text = (

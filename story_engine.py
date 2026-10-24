@@ -109,7 +109,68 @@ def format_short_chapter(chapter: str) -> str:
     return "\n\n[CAPÍTULO 01 DE 01]\n" + body + "\n"
 
 
-def continuity_review_check(script: str, previous_state: str = "") -> list[str]:
+
+def creative_direction(genre: str, platform: str = "", mode: str = SERIES_VIDEO_MODE) -> str:
+    """Return concise genre-aware writing rules for a faster, more specific script prompt."""
+    normalized = (genre or "").casefold()
+    if any(term in normalized for term in ("terror", "horror", "suspenso", "misterio")):
+        direction = (
+            "TERROR / MISTERIO: abre con una anomalía concreta y visible; construye inquietud mediante pistas "
+            "y consecuencias, no solo adjetivos. Revela una capa de información por escena, evita explicar el misterio "
+            "demasiado pronto y cierra cada bloque con una amenaza, descubrimiento o duda específica."
+        )
+    elif any(term in normalized for term in ("promocional", "publicidad", "anuncio")):
+        direction = (
+            "PROMOCIONAL: presenta el problema y el beneficio principal de inmediato; desarrolla problema → solución → "
+            "prueba verificable → llamada a la acción. Mantén frases breves y persuasivas. No inventes precios, garantías, "
+            "testimonios, cifras ni características que no estén en la premisa."
+        )
+    elif any(term in normalized for term in ("educativo", "documental")):
+        direction = (
+            "EDUCATIVO / DOCUMENTAL: empieza con una pregunta, sorpresa o error común; explica una idea por escena, "
+            "usa ejemplos concretos y una conclusión útil. Separa hechos aportados de hipótesis; no inventes estadísticas, "
+            "citas, fechas ni fuentes."
+        )
+    elif "romance" in normalized:
+        direction = (
+            "ROMANCE: crea química mediante acciones, contradicciones y subtexto; cada encuentro debe cambiar la confianza "
+            "o el riesgo emocional. Evita enamoramiento instantáneo y diálogos que expliquen sentimientos que la escena ya muestra."
+        )
+    elif any(term in normalized for term in ("acción", "aventura", "ciencia ficción", "fantasía")):
+        direction = (
+            "ACCIÓN / AVENTURA: fija un objetivo visible, una regla del mundo y un obstáculo con coste. Cada escena debe "
+            "cambiar la ventaja, revelar una regla o forzar una decisión; limita la exposición y muestra las consecuencias."
+        )
+    elif any(term in normalized for term in ("drama", "novela", "familia", "reencarnación", "venganza")):
+        direction = (
+            "DRAMA SERIAL: comienza dentro del conflicto, da a cada personaje un deseo y una contradicción, y usa diálogo "
+            "con intención oculta. Cada escena debe cambiar una relación, una sospecha o el poder; las decisiones tienen coste."
+        )
+    else:
+        direction = (
+            "NARRATIVA: abre con una acción, decisión o revelación concreta; evita introducciones genéricas. Cada escena "
+            "debe aportar información nueva, tensión o una consecuencia, y los personajes deben hablar con voces diferenciadas."
+        )
+
+    platform_key = (platform or "").casefold()
+    if any(term in platform_key for term in ("tiktok", "reels", "shorts", "9:16")):
+        direction += (
+            " FORMATO VERTICAL: prioriza un sujeto y una acción legibles en móvil, gancho visual inmediato y cambios de plano "
+            "claros; evita depender de detalles pequeños en los bordes."
+        )
+    if mode == SHORT_VIDEO_MODE:
+        direction += (
+            " FORMATO CORTO: elimina subtramas y personajes prescindibles; presenta gancho, conflicto, giro o recompensa "
+            "y cierre emocional sin prólogos ni relleno."
+        )
+    else:
+        direction += (
+            " FORMATO SERIE: planta preguntas que puedan desarrollarse, paga al menos una promesa narrativa por episodio "
+            "y deja una consecuencia concreta que impulse el siguiente."
+        )
+    return direction
+
+def continuity_review_check(script: str, previous_state: str = "", expected_scenes: int = 0) -> list[str]:
     """Cheap deterministic flags to surface likely issues for human review.
 
     These are warnings, not proof of a contradiction and never block a draft.
@@ -126,6 +187,16 @@ def continuity_review_check(script: str, previous_state: str = "") -> list[str]:
     )
     if any(body.casefold().startswith(prefix) for prefix in repetitive_openings):
         warnings.append("El inicio puede resultar genérico; valora abrir con una acción, conflicto o revelación.")
+    scene_count = len(re.findall(r"(?im)^\s*\[ESCENA\s+\d+", body))
+    if scene_count == 0 and len(body.split()) >= 100:
+        warnings.append("No se detectan encabezados [ESCENA 01 — título]; separa el guion en planos visuales concretos.")
+    elif 0 < scene_count < 3:
+        warnings.append("Hay muy pocas escenas visuales; divide las acciones en planos más breves y fáciles de ilustrar.")
+    if expected_scenes > 0 and scene_count < expected_scenes:
+        warnings.append(
+            f"El guion tiene {scene_count} escenas detectadas y se esperan al menos {expected_scenes} "
+            "para mantener planos de hasta 5 segundos; divide las escenas largas antes de aprobar."
+        )
     if previous_state.strip():
         old_names = set(extract_speaker_names(previous_state))
         new_names = set(extract_speaker_names(body))
