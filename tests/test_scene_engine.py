@@ -137,6 +137,29 @@ class SceneEngineTests(unittest.TestCase):
         self.assertIn("2\n00:00:07,000 --> 00:00:12,000", srt)
         self.assertIn("Lucía cerró la puerta.", srt)
 
+    def test_srt_long_scene_is_split_into_readable_cues(self):
+        text = (
+            "[NARRADOR]: La puerta se abre lentamente y Marta entra en la habitación. "
+            "Una fotografía cae al suelo. Desde el pasillo, alguien susurra su nombre."
+        )
+        srt = build_srt_subtitles([{"text": text}], [5], chars_per_line=34)
+        cues = srt.strip().split("\\n\\n")
+        self.assertGreater(len(cues), 1)
+        self.assertTrue(all(len("\\n".join(cue.splitlines()[2:])) <= 34 for cue in cues))
+        self.assertNotIn("[NARRADOR]", srt)
+        self.assertIn("00:00:05,000", cues[-1])
+
+    def test_srt_cues_remain_contiguous_across_scenes(self):
+        srt = build_srt_subtitles(
+            [{"text": "Primera escena con bastante texto para dividir."}, {"text": "[MARTA]: Ya llegué."}],
+            [3, 2],
+            chars_per_line=20,
+        )
+        cues = [cue.splitlines() for cue in srt.strip().split("\\n\\n")]
+        self.assertTrue(cues[0][1].startswith("00:00:00,000 -->"))
+        self.assertTrue(cues[-1][1].endswith("00:00:05,000"))
+        self.assertEqual(cues[-1][2], "Ya llegué.")
+
     def test_srt_rejects_mismatched_scene_durations(self):
         with self.assertRaises(ValueError):
             build_srt_subtitles([{"text": "Texto"}], [])
