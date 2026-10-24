@@ -3460,6 +3460,40 @@ Write-Output 'NARRATION_OK'
                 self.generation_queue.put(("cancelled",))
                 return
             is_continuation = bool(data.get("story_bible"))
+            # Fast path for standalone short videos: one Ollama call instead of
+            # separate planning, screenplay, and continuity-summary calls.
+            if data.get("video_mode") == SHORT_VIDEO_MODE and not is_continuation:
+                self.generation_queue.put(("status", "Escribiendo el guion corto en una sola pasada…"))
+                protagonist = data["protagonist"] or "inventa un protagonista distintivo con un deseo urgente"
+                conflict = data["conflict"] or "inventa un conflicto concreto con consecuencias"
+                fast_prompt = (
+                    "Eres guionista profesional de ficción audiovisual en español. Crea una historia breve, específica y lista para narrarse; "
+                    "no expliques tu proceso ni escribas consejos. Abre con un gancho en la primera frase; cada escena debe cambiar el riesgo "
+                    "o revelar algo; usa diálogo natural con subtexto y termina con un giro o una consecuencia emocional. Evita clichés, relleno "
+                    "y descripciones imposibles de representar visualmente. Mantén pocos personajes y escenarios reutilizables.\n"
+                    "Devuelve exactamente dos secciones: [BIBLIA CANONICA] con 3-5 líneas que fijen personajes, apariencia y escenario; "
+                    "y [GUION] con escenas breves encabezadas [ESCENA 01 — título]. Dentro de cada escena, usa [NARRADOR]: para acción "
+                    "y [PERSONAJE]: para cada diálogo, una intervención por línea. No incluyas instrucciones técnicas como diálogo.\n"
+                    f"Título: {data['title']}. Género: {data['genre']}. Premisa: {data['topic']}. Tono: {data['tone']}. "
+                    f"Protagonista: {protagonist}. Conflicto: {conflict}. Narrador: {data['narrator']}. Desenlace: {data['ending']}. "
+                    f"Estilo visual: {data['drawing_style']}. Animación: {data['animation_style']}. Plataforma: {data['platform']}. "
+                    "Duración aproximada: 2 minutos. Prioriza ritmo y claridad; guion de aproximadamente 220-300 palabras.\n"
+                    f"Biblia previa si existe: {str(data.get('continuity_state', ''))[:900]}"
+                )
+                fast_result = self._ollama_request(fast_prompt, max_tokens=950)
+                bible_match = re.search(r"(?is)\[BIBLIA CANONICA\](.*?)(?=\[GUION\]|$)", fast_result)
+                script_match = re.search(r"(?is)\[GUION\](.*)$", fast_result)
+                story_bible = bible_match.group(1).strip() if bible_match else "Canon breve derivado del guion; conservar nombres, apariencia y escenario."
+                chapter = script_match.group(1).strip() if script_match else fast_result.strip()
+                if not chapter:
+                    raise RuntimeError("Qwen no devolvió un guion. Vuelve a intentarlo.")
+                self.generation_queue.put(("story_bible", story_bible))
+                self.generation_queue.put(("chapter", "\\n\\n[CAPÍTULO 01 DE 01]\\n" + chapter + "\\n", 1, 1))
+                new_state = ("Final del corto: " + chapter[-1800:]).strip()
+                self.generation_queue.put(("done", 1, story_bible, new_state))
+                return
+            episode_number = max(1, int(data.get("episode_number", 1) or 1))
+
             episode_number = max(1, int(data.get("episode_number", 1) or 1))
             if is_continuation:
                 story_bible = data["story_bible"]
