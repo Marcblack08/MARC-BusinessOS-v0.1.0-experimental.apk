@@ -4,9 +4,10 @@ import unittest
 from pathlib import Path
 
 from scene_engine import (
-    allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief, expand_scenes_to_shots,
-    build_srt_subtitles, build_srt_from_timed_segments, build_subtitle_drawtext_filter, ffmpeg_filter_path,
-    parse_script_scenes, scene_motion_filter
+    allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief,
+    build_cinematic_image_prompt, build_video_transition_filter_graph, camera_direction_for_shot,
+    expand_scenes_to_shots, build_srt_subtitles, build_srt_from_timed_segments,
+    build_subtitle_drawtext_filter, ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
 )
 
 
@@ -287,6 +288,43 @@ class SceneEngineTests(unittest.TestCase):
         pixel = scene_motion_filter("Pixel animation", 720, 1280, 5)
         self.assertIn("flags=neighbor", pixel)
 
+    def test_adjacent_shots_use_different_camera_moves(self):
+        moves = [
+            scene_motion_filter("2D fluida", 720, 1280, 5, "Normal", shot_index=index)
+            for index in range(5)
+        ]
+        self.assertEqual(len(set(moves)), 5)
+        self.assertIn("zoompan", moves[0])
+        self.assertIn("on/", moves[2])
+
+    def test_cinematic_image_prompts_change_camera_and_keep_emotion_specific(self):
+        first = camera_direction_for_shot(1)
+        second = camera_direction_for_shot(2)
+        self.assertNotEqual(first, second)
+        prompt = build_cinematic_image_prompt(
+            "cinematic anime frame", "Mateo sees a figure inside the elevator",
+            3, title="El ascensor", canon_reference="Mateo has short black hair and a navy uniform",
+        )
+        self.assertIn("tight emotional close-up", prompt)
+        self.assertIn("Mateo sees a figure", prompt)
+        self.assertIn("short black hair", prompt)
+        self.assertIn("one coherent moment", prompt)
+
+    def test_transition_graph_contains_real_crossfades_and_exact_timeline_trim(self):
+        graph = build_video_transition_filter_graph([5, 4, 3], transition_seconds=0.4)
+        self.assertIn("xfade=transition=fade:duration=0.400:offset=5.000", graph)
+        self.assertIn("xfade=transition=fade:duration=0.400:offset=9.000", graph)
+        self.assertIn("trim=duration=12.000", graph)
+        self.assertTrue(graph.endswith("[vout]"))
+
+    def test_transition_graph_rejects_invalid_durations(self):
+        with self.assertRaises(ValueError):
+            build_video_transition_filter_graph([])
+        with self.assertRaises(ValueError):
+            build_video_transition_filter_graph([5, 0])
+        with self.assertRaises(ValueError):
+            build_video_transition_filter_graph([5], transition_seconds=2)
+
     def test_subtitle_filter_supports_font_color_position_and_outline(self):
         with tempfile.TemporaryDirectory() as tmp:
             subtitle = Path(tmp) / "Marc's subtitles:01.txt"
@@ -309,9 +347,17 @@ class SceneEngineTests(unittest.TestCase):
     def test_motion_intensity_changes_zoom_amount(self):
         subtle = scene_motion_filter("2D fluida", 1280, 720, 5, "Suave")
         energetic = scene_motion_filter("2D fluida", 1280, 720, 5, "Muy animado")
-        self.assertIn("1.025", subtle)
-        self.assertIn("1.16", energetic)
+        self.assertIn("1.035", subtle)
+        self.assertIn("1.19", energetic)
         self.assertNotEqual(subtle, energetic)
+
+    def test_visual_brief_does_not_pass_emotion_tags_to_image_prompt(self):
+        brief = build_scene_visual_brief({
+            "title": "La advertencia",
+            "text": "[MATEO]: [EMOCION=miedo] ¡No abras el ascensor!"
+        })
+        self.assertNotIn("EMOCION", brief["excerpt"])
+        self.assertNotIn("EMOCION", " ".join(brief["dialogue"]))
 
 
 if __name__ == "__main__":
