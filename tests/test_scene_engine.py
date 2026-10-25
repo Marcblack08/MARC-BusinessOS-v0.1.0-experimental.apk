@@ -319,6 +319,20 @@ class SceneEngineTests(unittest.TestCase):
         self.assertIn("trim=duration=12.000", graph)
         self.assertTrue(graph.endswith("[vout]"))
 
+    def test_transition_graph_supports_multiple_real_effects(self):
+        cases = {
+            "Fundido suave": "transition=fade",
+            "Deslizar izquierda": "transition=slideleft",
+            "Deslizar derecha": "transition=slideright",
+            "Barrido izquierda": "transition=wipeleft",
+            "Barrido derecha": "transition=wiperight",
+            "Zoom cinematográfico": "transition=zoomin",
+        }
+        for style, expected in cases.items():
+            with self.subTest(style=style):
+                graph = build_video_transition_filter_graph([5, 4], transition_style=style)
+                self.assertIn(expected, graph)
+
     def test_transition_graph_rejects_invalid_durations(self):
         with self.assertRaises(ValueError):
             build_video_transition_filter_graph([])
