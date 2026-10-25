@@ -153,6 +153,8 @@ class RemoteControlServerTests(unittest.TestCase):
         self.assertFalse(uploads.exists() and any(uploads.iterdir()))
 
     def test_full_command_queue_returns_service_unavailable(self):
+        self.commands = queue.Queue(maxsize=1)
+        self.server.command_queue = self.commands
         self.commands.put_nowait({"id": "busy", "action": "generate_script", "payload": {}})
         payload = json.dumps({"action": "cancel", "payload": {}}).encode("utf-8")
         with self.assertRaises(HTTPError) as caught:
