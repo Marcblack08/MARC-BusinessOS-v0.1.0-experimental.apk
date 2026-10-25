@@ -1509,7 +1509,7 @@ class App(tk.Tk):
         self.workflow_next_button.configure(text=label)
 
     def go_to_next_step(self):
-        """Move one tab forward without starting expensive generation automatically."""
+        """Guide novices through the workflow without silently launching expensive jobs."""
         tabs = getattr(self, "studio_tabs", None)
         if tabs is None:
             return
@@ -1517,9 +1517,29 @@ class App(tk.Tk):
             current = tabs.index(tabs.select())
         except (tk.TclError, ValueError):
             current = 0
+
+        # Do not send a beginner to an empty scenes page or let them skip approval.
+        if current == 0:
+            script = self.script_text.get("1.0", "end-1c").strip()
+            if not script:
+                messagebox.showinfo(
+                    "Primero crea el guion",
+                    "Completa el nombre del proyecto y la premisa, pulsa «Crear guion» y espera a que aparezca el texto."
+                )
+                return
+            if not self._existing_approval():
+                messagebox.showinfo(
+                    "Revisa y aprueba el guion",
+                    "Lee el guion y pulsa «Aprobar guion» en el encabezado del editor antes de continuar a Escenas."
+                )
+                return
+
         last = len(getattr(self, "workflow_steps", ())) - 1
         if current < last:
             tabs.select(current + 1)
+        else:
+            # The final guide button promises to return to the beginning.
+            tabs.select(0)
         self.update_workflow_guide()
 
     def _set_responsive_initial_sashes(self):
