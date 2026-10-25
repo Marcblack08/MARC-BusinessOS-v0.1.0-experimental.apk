@@ -295,6 +295,8 @@ class SceneEngineTests(unittest.TestCase):
         ]
         self.assertEqual(len(set(moves)), 5)
         self.assertIn("zoompan", moves[0])
+        self.assertNotIn("0.0015*on", moves[0])
+        self.assertIn("if(eq(on,0)", moves[1])
         self.assertIn("on/", moves[2])
 
     def test_cinematic_image_prompts_change_camera_and_keep_emotion_specific(self):
