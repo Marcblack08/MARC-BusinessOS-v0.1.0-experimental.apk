@@ -37,9 +37,9 @@ def _upload_signature_ok(filename: str, header: bytes) -> bool:
     """Reject obvious extension/content mismatches before storing untrusted media."""
     ext = Path(filename).suffix.lower()
     if ext == ".png":
-        return header.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+        return header.startswith(b"\x89PNG\r\n\x1a\n")
     if ext in {".jpg", ".jpeg"}:
-        return header.startswith(b"\\xff\\xd8\\xff")
+        return header.startswith(b"\xff\xd8\xff")
     if ext == ".gif":
         return header.startswith((b"GIF87a", b"GIF89a"))
     if ext == ".webp":
@@ -47,19 +47,19 @@ def _upload_signature_ok(filename: str, header: bytes) -> bool:
     if ext in {".mp4", ".mov", ".m4v", ".m4a"}:
         return len(header) >= 8 and header[4:8] == b"ftyp"
     if ext == ".webm":
-        return header.startswith(b"\\x1a\\x45\\xdf\\xa3")
+        return header.startswith(b"\x1a\x45\xdf\xa3")
     if ext == ".wav":
         return len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WAVE"
     if ext in {".mp3", ".aac"}:
         return header.startswith(b"ID3") or (len(header) >= 2 and header[0] == 0xFF and (header[1] & 0xE0) == 0xE0)
     if ext in {".txt", ".srt"}:
-        return b"\\x00" not in header and _is_text_header(header)
+        return b"\x00" not in header and _is_text_header(header)
     return False
 
 
 def _is_text_header(header: bytes) -> bool:
     try:
-        header.decode("utf-8-sig")
+        header.decode("utf-8-sig", errors="ignore")
         return True
     except UnicodeDecodeError:
         return False
@@ -78,7 +78,7 @@ class _BoundedThreadingHTTPServer(ThreadingHTTPServer):
     def process_request(self, request, client_address):
         if not self._worker_slots.acquire(blocking=False):
             try:
-                request.sendall(b"HTTP/1.1 503 Service Unavailable\\r\\nConnection: close\\r\\nContent-Length: 0\\r\\n\\r\\n")
+                request.sendall(b"HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")
             except OSError:
                 pass
             self.shutdown_request(request)
