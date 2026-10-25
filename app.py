@@ -186,7 +186,7 @@ class App(tk.Tk):
         self._style()
         self._build()
         self.refresh_projects()
-        self.remote_command_queue = queue.Queue()
+        self.remote_command_queue = queue.Queue(maxsize=64)
         self.remote_snapshot = {}
         self.remote_server = None
         self.remote_server_error = ""
