@@ -1219,7 +1219,9 @@ class App(tk.Tk):
         self._field(visual_form, "Texto sobre las imágenes", self.overlay_mode_var, 2, 1,
                     values=["Título de escena", "Subtítulo narrativo", "Sin texto"])
         self._field(visual_form, "Transición entre escenas", self.transition_style_var, 3, 0,
-                    values=["Corte directo", "Fundido suave"])
+                    values=["Corte directo", "Fundido suave", "Deslizar izquierda",
+                            "Deslizar derecha", "Barrido izquierda", "Barrido derecha",
+                            "Zoom cinematográfico"])
         self._field(visual_form, "Fuente de subtítulos", self.subtitle_font_var, 4, 0,
                     values=["Arial", "Segoe UI", "Verdana", "Georgia", "Impact"])
         self._field(visual_form, "Tamaño de subtítulos", self.subtitle_size_var, 4, 1,
@@ -5844,7 +5846,7 @@ Write-Output 'NARRATION_OK'
         output_path = Path(output)
         temp_output_path = output_path.with_name(output_path.stem + ".marc_rendering.mp4")
         # Each source clip carries a small tail so the next shot can cross-dissolve over it.
-        crossfade_seconds = 0.4 if transition_style == "Fundido suave" else 0.0
+        crossfade_seconds = 0.4 if transition_style != "Corte directo" else 0.0
 
         def run_ffmpeg(cmd, log_name, cwd=None):
             log_path = scene_dir / log_name
@@ -6187,14 +6189,16 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
             if self.render_cancel_event.is_set():
                 raise RuntimeError("__MARC_RENDER_CANCELLED__")
             self.generation_queue.put(("render_progress", total + 1, final_steps, "Uniendo escenas y aplicando transiciones…"))
-            if transition_style == "Fundido suave":
+            if transition_style != "Corte directo":
                 # Use FFmpeg xfade between clips. The individual clips were rendered with
                 # a short extra tail, so the transition overlaps motion instead of flashing black.
                 concat_cmd = [ffmpeg, "-y", "-filter_complex_threads", "1"]
                 for scene_index in concat_scene_indexes:
                     concat_cmd.extend(["-i", str(scene_dir / f"scene_{scene_index + 1:03d}.mp4")])
                 filter_graph = build_video_transition_filter_graph(
-                    final_durations, transition_seconds=max(0.08, min(0.4, crossfade_seconds or 0.4))
+                    final_durations,
+                    transition_seconds=max(0.08, min(0.4, crossfade_seconds or 0.4)),
+                    transition_style=transition_style,
                 )
                 concat_cmd.extend([
                     "-filter_complex", filter_graph, "-map", "[vout]", "-an",
