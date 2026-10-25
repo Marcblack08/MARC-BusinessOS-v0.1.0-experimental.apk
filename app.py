@@ -785,10 +785,6 @@ class App(tk.Tk):
         )
         self.story_options_button.grid(row=8, column=0, columnspan=2, sticky="ew", padx=4, pady=(8, 2))
         self._set_story_options_expanded(False)
-        tk.Label(form, text="El modo corto prepara una historia breve; Novela / Serie conserva la estructura por episodios.",
-                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8),
-                 justify="left", wraplength=280).grid(row=7, column=0, columnspan=2,
-                                                        sticky="w", padx=5, pady=(5, 2))
 
         lower = tk.Frame(vertical, bg=self.colors["bg"])
         self.lower_panel = lower
