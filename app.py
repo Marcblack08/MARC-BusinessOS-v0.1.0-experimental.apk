@@ -1342,6 +1342,15 @@ class App(tk.Tk):
         )
         self.toolbar_export_button.pack(side="left", padx=(0, 6))
 
+        # Redirect state updates to the visible controls. The original widgets
+        # remain hidden in their legacy frame, but progress callbacks must affect
+        # the buttons the user can actually click.
+        self.config_toggle_button = self.toolbar_config_button
+        self.generate_button = self.toolbar_generate_button
+        self.save_button = self.toolbar_save_button
+        self.approve_button = self.toolbar_approve_button
+        self.export_button = self.toolbar_export_button
+
         self.more_button = ttk.Menubutton(self.compact_toolbar, text="Más  ▾")
         self.more_menu = tk.Menu(
             self.more_button, tearoff=0,
