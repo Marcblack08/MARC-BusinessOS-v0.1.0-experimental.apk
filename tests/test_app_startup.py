@@ -38,6 +38,8 @@ class AppStartupSmokeTests(unittest.TestCase):
             self.assertEqual(root.preview_dock.winfo_parent(), str(root.script_tab))
             self.assertEqual(root.mini_timeline_panel.winfo_parent(), str(root.script_tab))
             self.assertEqual(root.script_text.winfo_parent(), str(root.script_text_frame))
+            self.assertTrue(hasattr(root, "header_tools_menu"))
+            self.assertTrue(hasattr(root, "_set_responsive_initial_sashes"))
             self.assertTrue(root.brand_gradient_canvas.winfo_manager())
             root._draw_brand_gradient()
             self.assertGreater(len(root.brand_gradient_canvas.find_all()), 0)
