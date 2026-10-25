@@ -623,7 +623,7 @@ class App(tk.Tk):
         self.ffmpeg_badge.pack(side="left", padx=(0, 12))
         self.header_diagnose_button = ttk.Button(head_right, text="Diagnóstico PC", command=self.detect_pc_async)
         self.header_diagnose_button.pack(side="left", padx=(0, 6))
-        self.header_tools_button = ttk.Menubutton(head_right, text="Herramientas  ▾")
+        self.header_tools_button = ttk.Menubutton(head_right, text="Ayuda y herramientas  ▾")
         self.header_tools_menu = tk.Menu(
             self.header_tools_button, tearoff=0,
             bg=self.colors["panel"], fg=self.colors["text"],
@@ -717,7 +717,7 @@ class App(tk.Tk):
         self.config_canvas.bind("<Configure>", lambda event: self.config_canvas.itemconfigure(self.config_canvas_window, width=event.width))
         tk.Label(card, text="Crea tu historia", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 15, "bold")).pack(anchor="w")
-        tk.Label(card, text="Define la historia y su estructura. El estilo visual y la calidad de salida están en «Visual».",
+        tk.Label(card, text="Completa lo básico. Después podrás revisar el guion, las escenas y el vídeo.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).pack(anchor="w", pady=(5, 10))
 
         self.title_var = tk.StringVar()
@@ -747,6 +747,7 @@ class App(tk.Tk):
         form = tk.Frame(card, bg=self.colors["panel"])
         form.pack(fill="x", expand=True)
         self.form_widgets = []
+        self.field_cells = {}
         form.columnconfigure(0, weight=1, uniform="fields")
         form.columnconfigure(1, weight=1, uniform="fields")
         self._field(form, "Nombre del proyecto", self.title_var, 0, 0, span=2)
@@ -772,6 +773,18 @@ class App(tk.Tk):
         self.video_mode_field = self._field(form, "Modo de producción", self.video_mode_var, 6, 0, span=2,
                     values=[SHORT_VIDEO_MODE, SERIES_VIDEO_MODE])
         self.video_mode_field.bind("<<ComboboxSelected>>", lambda _event: self._on_video_mode_changed())
+        self.advanced_help_label = tk.Label(
+            form, text="Las opciones avanzadas permiten afinar el tono, el narrador y la estructura.",
+            bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8),
+            justify="left", wraplength=280,
+        )
+        self.advanced_help_label.grid(row=7, column=0, columnspan=2, sticky="w", padx=5, pady=(5, 2))
+        self.story_options_expanded = False
+        self.story_options_button = ttk.Button(
+            form, text="＋ Más opciones (opcional)", command=self.toggle_story_options
+        )
+        self.story_options_button.grid(row=8, column=0, columnspan=2, sticky="ew", padx=4, pady=(8, 2))
+        self._set_story_options_expanded(False)
         tk.Label(form, text="El modo corto prepara una historia breve; Novela / Serie conserva la estructura por episodios.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8),
                  justify="left", wraplength=280).grid(row=7, column=0, columnspan=2,
@@ -874,7 +887,7 @@ class App(tk.Tk):
 
         script_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=8, pady=8)
         self.script_tab = script_tab
-        studio_tabs.add(script_tab, text="  ✎  GUION  ")
+        studio_tabs.add(script_tab, text="1. Guion")
         script_tab.grid_columnconfigure(0, weight=4, uniform="scriptworkspace")
         script_tab.grid_columnconfigure(1, weight=3, uniform="scriptworkspace")
         script_tab.grid_rowconfigure(0, weight=3)
@@ -998,7 +1011,7 @@ class App(tk.Tk):
 
         scenes_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=14, pady=12)
         self.scenes_tab = scenes_tab
-        studio_tabs.add(scenes_tab, text="  ▤  ESCENAS  ")
+        studio_tabs.add(scenes_tab, text="2. Escenas")
         scenes_tab.grid_columnconfigure(0, weight=1)
         scenes_tab.grid_rowconfigure(6, weight=1)
         tk.Label(scenes_tab, text="PLAN DE MONTAJE", bg=self.colors["panel"], fg=self.colors["text"],
@@ -1080,7 +1093,7 @@ class App(tk.Tk):
                  wraplength=1000, justify="left").grid(row=7, column=0, sticky="w", pady=(8, 0))
 
         visual_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=18, pady=16)
-        studio_tabs.add(visual_tab, text="  ✧  VISUAL / SALIDA  ")
+        studio_tabs.add(visual_tab, text="3. Imágenes")
         visual_tab.grid_columnconfigure(0, weight=1)
         tk.Label(visual_tab, text="DIRECCIÓN VISUAL DEL PROYECTO",
                  bg=self.colors["panel"], fg=self.colors["text"],
@@ -1137,7 +1150,7 @@ class App(tk.Tk):
                  wraplength=760, justify="left").pack(side="left", padx=(12, 0))
 
         timeline_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=12, pady=10)
-        studio_tabs.add(timeline_tab, text="  ▰  MONTAJE  ")
+        studio_tabs.add(timeline_tab, text="4. Montaje")
         timeline_tab.grid_columnconfigure(0, weight=1)
         timeline_tab.grid_rowconfigure(2, weight=1)
         timeline_head = tk.Frame(timeline_tab, bg=self.colors["panel"])
@@ -1186,7 +1199,7 @@ class App(tk.Tk):
 
         preview_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=18, pady=16)
         self.preview_tab = preview_tab
-        studio_tabs.add(preview_tab, text="  ▣  VISTA PREVIA  ")
+        studio_tabs.add(preview_tab, text="5. Vista previa")
         preview_tab.grid_columnconfigure(0, weight=1)
         preview_tab.grid_rowconfigure(1, weight=1)
         preview_head = tk.Frame(preview_tab, bg=self.colors["panel"])
@@ -1219,7 +1232,7 @@ class App(tk.Tk):
                  fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1100, justify="left").grid(row=3, column=0, sticky="ew", pady=(10, 0))
         audio_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=16, pady=14)
-        studio_tabs.add(audio_tab, text="  ♪  AUDIO  ")
+        studio_tabs.add(audio_tab, text="6. Audio")
         audio_tab.grid_columnconfigure(0, weight=1)
         audio_tab.grid_rowconfigure(6, weight=1)
         tk.Label(audio_tab, text="NARRACIÓN Y SONIDO", bg=self.colors["panel"], fg=self.colors["text"],
@@ -1391,7 +1404,9 @@ class App(tk.Tk):
         ):
             widget.pack_forget()
         self.header_diagnose_button.pack_forget()
-        self.header_tools_button.pack_forget()
+        self.ai_badge.pack_forget()
+        self.ffmpeg_badge.pack_forget()
+        self.header_tools_button.pack(side="left")
 
         if hasattr(self, "compact_toolbar"):
             self.compact_toolbar.destroy()
@@ -1411,7 +1426,7 @@ class App(tk.Tk):
         )
         self.toolbar_config_button.pack(side="left", padx=(0, 6))
         self.toolbar_generate_button = ttk.Button(
-            self.compact_toolbar, text="✦ Generar guion", style="Accent.TButton",
+            self.compact_toolbar, text="1 · Crear guion", style="Accent.TButton",
             command=self.generate_script
         )
         self.toolbar_generate_button.pack(side="left", padx=(0, 6))
@@ -1420,11 +1435,11 @@ class App(tk.Tk):
         )
         self.toolbar_save_button.pack(side="left", padx=(0, 6))
         self.toolbar_approve_button = ttk.Button(
-            self.compact_toolbar, text="✓ Aprobar", command=self.approve_script
+            self.compact_toolbar, text="2 · Aprobar guion", command=self.approve_script
         )
         self.toolbar_approve_button.pack(side="left", padx=(0, 6))
         self.toolbar_export_button = ttk.Button(
-            self.compact_toolbar, text="Exportar MP4", command=self.export_video
+            self.compact_toolbar, text="5 · Crear vídeo", command=self.export_video
         )
         self.toolbar_export_button.pack(side="left", padx=(0, 6))
 
@@ -1437,7 +1452,7 @@ class App(tk.Tk):
         self.approve_button = self.toolbar_approve_button
         self.export_button = self.toolbar_export_button
 
-        self.more_button = ttk.Menubutton(self.compact_toolbar, text="Más  ▾")
+        self.more_button = ttk.Menubutton(self.compact_toolbar, text="Más opciones  ▾")
         self.more_menu = tk.Menu(
             self.more_button, tearoff=0,
             bg=self.colors["panel"], fg=self.colors["text"],
@@ -3545,8 +3560,29 @@ Write-Output 'NARRATION_OK'
             self.details_button.configure(text="− Ocultar detalles")
             self.details_visible = True
 
+    def _set_story_options_expanded(self, expanded):
+        """Show only essential fields by default; expose optional controls on request."""
+        self.story_options_expanded = bool(expanded)
+        advanced_labels = ("Tono", "Narrador", "Desenlace", "Protagonista",
+                           "Conflicto central", "Modo de producción")
+        for label in advanced_labels:
+            cell = self.field_cells.get(label)
+            if cell is not None:
+                cell.grid() if self.story_options_expanded else cell.grid_remove()
+        if hasattr(self, "advanced_help_label"):
+            self.advanced_help_label.grid() if self.story_options_expanded else self.advanced_help_label.grid_remove()
+        if hasattr(self, "story_options_button"):
+            self.story_options_button.configure(
+                text="− Ocultar opciones avanzadas" if self.story_options_expanded
+                else "＋ Más opciones (opcional)"
+            )
+
+    def toggle_story_options(self):
+        self._set_story_options_expanded(not self.story_options_expanded)
+
     def _field(self, parent, label, variable, row, col, values=None, span=1):
         cell = tk.Frame(parent, bg=self.colors["panel"])
+        self.field_cells[label] = cell
         cell.grid(row=row, column=col, columnspan=span, sticky="ew", padx=4, pady=4)
         tk.Label(cell, text=label.upper(), bg=self.colors["panel"], fg=self.colors["muted"],
                  font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 4))
