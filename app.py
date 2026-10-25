@@ -138,8 +138,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_NAME)
-        self.geometry("1440x900")
-        self.minsize(1024, 680)
+        self.geometry("1536x864")
+        self.minsize(1180, 720)
         self.state("zoomed")
         self.conn = db_connect()
         self.current_id = None
@@ -498,11 +498,13 @@ class App(tk.Tk):
     def _style(self):
         """Apply the unified MARC dark-cinematic design system to native Tk/ttk widgets."""
         self.colors = {
-            "bg": "#0b1120", "panel": "#111b2e", "panel2": "#18263d",
-            "input": "#0c1526", "accent": "#3478f6", "accent_hover": "#4b8bff",
-            "text": "#eaf1fc", "muted": "#a2b1c7", "border": "#263650",
-            "success": "#35d6a4", "warning": "#f5c451", "danger": "#ff718b",
-            "glow": "#1b3762", "surface": "#142239",
+            # Premium midnight palette: ink background, layered navy surfaces,
+            # electric-blue primary actions and restrained cyan highlights.
+            "bg": "#080e1b", "panel": "#111a2b", "panel2": "#1a2941",
+            "input": "#0b1322", "accent": "#2878ff", "accent_hover": "#4a91ff",
+            "text": "#f1f5ff", "muted": "#9eacc2", "border": "#2b3a54",
+            "success": "#71e0b3", "warning": "#ffd071", "danger": "#ff7894",
+            "glow": "#173b6b", "surface": "#14233a",
         }
         self.configure(bg=self.colors["bg"])
         style = ttk.Style(self)
@@ -516,14 +518,14 @@ class App(tk.Tk):
         style.configure("Surface.TFrame", background=self.colors["surface"])
         style.configure("TLabel", background=self.colors["bg"], foreground=self.colors["text"], font=("Segoe UI", 10))
         style.configure("Muted.TLabel", background=self.colors["bg"], foreground=self.colors["muted"], font=("Segoe UI", 9))
-        style.configure("Title.TLabel", background=self.colors["bg"], foreground="#70a7ff", font=("Segoe UI", 24, "bold"))
+        style.configure("Title.TLabel", background=self.colors["bg"], foreground="#70a7ff", font=("Segoe UI", 26, "bold"))
         style.configure("Section.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 11, "bold"))
         style.configure("KPI.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 18, "bold"))
         style.configure("TLabelFrame", background=self.colors["panel"], foreground=self.colors["text"], bordercolor=self.colors["border"], relief="solid", borderwidth=1)
         style.configure("TLabelFrame.Label", background=self.colors["panel"], foreground=self.colors["muted"], font=("Segoe UI", 9, "bold"))
-        style.configure("TButton", padding=(13, 9), font=("Segoe UI", 9, "bold"), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=1, bordercolor=self.colors["border"], focusthickness=2, focuscolor=self.colors["accent"], relief="flat")
+        style.configure("TButton", padding=(14, 10), font=("Segoe UI", 9, "bold"), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=1, bordercolor=self.colors["border"], focusthickness=2, focuscolor=self.colors["accent"], relief="flat")
         style.map("TButton", background=[("disabled", self.colors["panel"]), ("pressed", self.colors["accent"]), ("active", "#243a5c")], foreground=[("disabled", "#64758e"), ("active", self.colors["text"])], bordercolor=[("focus", self.colors["accent"]), ("active", "#35547d")])
-        style.configure("Accent.TButton", padding=(15, 10), font=("Segoe UI", 9, "bold"), background=self.colors["accent"], foreground="#ffffff", borderwidth=0, bordercolor=self.colors["accent"], focusthickness=2, focuscolor=self.colors["accent"], relief="flat")
+        style.configure("Accent.TButton", padding=(16, 11), font=("Segoe UI", 9, "bold"), background=self.colors["accent"], foreground="#ffffff", borderwidth=0, bordercolor=self.colors["accent"], focusthickness=2, focuscolor=self.colors["accent"], relief="flat")
         style.map("Accent.TButton", background=[("disabled", "#263a5c"), ("pressed", "#255edb"), ("active", self.colors["accent_hover"])], foreground=[("disabled", "#93a4bd"), ("active", "#ffffff")])
         style.configure("Quiet.TButton", padding=(10, 7), background=self.colors["panel"], foreground=self.colors["muted"], borderwidth=0, relief="flat")
         style.map("Quiet.TButton", background=[("active", self.colors["panel2"])], foreground=[("active", self.colors["text"])])
@@ -541,7 +543,7 @@ class App(tk.Tk):
         style.configure("Horizontal.TScrollbar", background=self.colors["panel2"], troughcolor=self.colors["bg"], arrowcolor=self.colors["muted"], bordercolor=self.colors["bg"], relief="flat", arrowsize=12)
         style.map("Horizontal.TScrollbar", background=[("active", self.colors["accent"])])
         style.configure("TNotebook", background=self.colors["bg"], borderwidth=0, tabmargins=(3, 5, 3, 0))
-        style.configure("TNotebook.Tab", background=self.colors["panel"], foreground=self.colors["muted"], padding=(17, 11), font=("Segoe UI", 9, "bold"), borderwidth=0)
+        style.configure("TNotebook.Tab", background=self.colors["panel"], foreground=self.colors["muted"], padding=(19, 12), font=("Segoe UI", 9, "bold"), borderwidth=0)
         style.map("TNotebook.Tab", background=[("selected", self.colors["accent"]), ("active", self.colors["panel2"])], foreground=[("selected", "#ffffff"), ("active", self.colors["text"])])
         style.configure("Treeview", background=self.colors["input"], fieldbackground=self.colors["input"], foreground=self.colors["text"], rowheight=36, borderwidth=0, font=("Segoe UI", 9))
         style.configure("Treeview.Heading", background=self.colors["panel2"], foreground="#a9caff", font=("Segoe UI", 9, "bold"), relief="flat", padding=(10, 9))
@@ -568,7 +570,7 @@ class App(tk.Tk):
         brand = tk.Frame(top, bg="#0b1424")
         brand.grid(row=0, column=0, sticky="w")
         tk.Label(brand, text="MARC", bg="#0b1424", fg="#eaf1fc",
-                 font=("Segoe UI", 20, "bold")).pack(side="left")
+                 font=("Segoe UI", 22, "bold")).pack(side="left")
         tk.Label(brand, text=" / VIDEO STUDIO", bg="#0b1424", fg="#3478f6",
                  font=("Segoe UI", 20, "bold")).pack(side="left")
         tk.Label(brand, text="   ESTUDIO CREATIVO IA", bg="#0b1424", fg=self.colors["muted"],
