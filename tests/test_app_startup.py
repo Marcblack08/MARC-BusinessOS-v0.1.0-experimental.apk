@@ -29,7 +29,7 @@ class AppStartupSmokeTests(unittest.TestCase):
             self.assertEqual(root.generate_button.winfo_parent(), str(root.primary_actions))
             self.assertEqual(root.export_button.winfo_parent(), str(root.primary_actions))
             self.assertEqual(root.preview_render_button.winfo_parent(), str(root.secondary_actions))
-            self.assertFalse(root.secondary_actions.winfo_manager())
+            self.assertFalse(root.secondary_actions.winfo_ismapped())
         finally:
             root._on_close()
 
