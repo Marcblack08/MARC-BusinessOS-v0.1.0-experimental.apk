@@ -5744,19 +5744,36 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                             f"{original_video_seconds} s a {sum(final_durations)} s para conservar toda la voz."
                         ))
 
-            concat_path = scene_dir / "concat.txt"
-            concat_path.write_text(
-                "".join(f"file 'scene_{i + 1:03d}.mp4'\n" for i in concat_scene_indexes),
-                encoding="utf-8"
-            )
             if self.render_cancel_event.is_set():
                 raise RuntimeError("__MARC_RENDER_CANCELLED__")
-            self.generation_queue.put(("render_progress", total + 1, final_steps, "Uniendo escenas y finalizando MP4…"))
-            concat_cmd = [
-                ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", "concat.txt",
-                "-c", "copy", "-movflags", "+faststart", str(temp_output_path)
-            ]
-            run_ffmpeg(concat_cmd, "concat.log", cwd=scene_dir)
+            self.generation_queue.put(("render_progress", total + 1, final_steps, "Uniendo escenas y aplicando transiciones…"))
+            if transition_style == "Fundido suave":
+                # Use FFmpeg xfade between clips. The individual clips were rendered with
+                # a short extra tail, so the transition overlaps motion instead of flashing black.
+                concat_cmd = [ffmpeg, "-y", "-filter_complex_threads", "1"]
+                for scene_index in concat_scene_indexes:
+                    concat_cmd.extend(["-i", str(scene_dir / f"scene_{scene_index + 1:03d}.mp4")])
+                filter_graph = build_video_transition_filter_graph(
+                    final_durations, transition_seconds=max(0.08, min(0.4, crossfade_seconds or 0.4))
+                )
+                concat_cmd.extend([
+                    "-filter_complex", filter_graph, "-map", "[vout]", "-an",
+                    "-t", f"{sum(final_durations):.3f}", "-r", str(fps),
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
+                    "-crf", "25", "-movflags", "+faststart", str(temp_output_path)
+                ])
+                run_ffmpeg(concat_cmd, "crossfade.log", cwd=scene_dir)
+            else:
+                concat_path = scene_dir / "concat.txt"
+                concat_path.write_text(
+                    "".join(f"file 'scene_{i + 1:03d}.mp4'\n" for i in concat_scene_indexes),
+                    encoding="utf-8"
+                )
+                concat_cmd = [
+                    ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", "concat.txt",
+                    "-c", "copy", "-movflags", "+faststart", str(temp_output_path)
+                ]
+                run_ffmpeg(concat_cmd, "concat.log", cwd=scene_dir)
             if not temp_output_path.is_file() or temp_output_path.stat().st_size == 0:
                 raise RuntimeError("FFmpeg terminó, pero no se encontró un archivo MP4 válido.")
             if has_audio:
