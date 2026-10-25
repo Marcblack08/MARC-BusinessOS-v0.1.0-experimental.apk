@@ -38,6 +38,13 @@ class AppStartupSmokeTests(unittest.TestCase):
             self.assertEqual(root.preview_dock.winfo_parent(), str(root.script_tab))
             self.assertEqual(root.mini_timeline_panel.winfo_parent(), str(root.script_tab))
             self.assertEqual(root.script_text.winfo_parent(), str(root.script_text_frame))
+            self.assertTrue(root.brand_gradient_canvas.winfo_manager())
+            root._draw_brand_gradient()
+            self.assertGreater(len(root.brand_gradient_canvas.find_all()), 0)
+            self.assertEqual(root.project_search_var.get(), "Buscar proyectos...")
+            root.project_search_var.set("zz-no-such-project")
+            self.assertEqual(root.project_list.size(), 0)
+            root.project_search_var.set("Buscar proyectos...")
         finally:
             root._on_close()
 
