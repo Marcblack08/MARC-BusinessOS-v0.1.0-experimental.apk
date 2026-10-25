@@ -10,6 +10,7 @@ on:
       - "remote_server.py"
       - "requirements.txt"
       - "scene_engine.py"
+      - "voice_engine.py"
       - "story_engine.py"
       - "ollama_client.py"
       - "tests/**"
