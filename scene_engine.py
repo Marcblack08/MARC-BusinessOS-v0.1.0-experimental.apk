@@ -731,11 +731,22 @@ def build_cinematic_image_prompt(
     )
 
 
+_TRANSITION_FILTER_NAMES = {
+    "fundido suave": "fade",
+    "deslizar izquierda": "slideleft",
+    "deslizar derecha": "slideright",
+    "barrido izquierda": "wipeleft",
+    "barrido derecha": "wiperight",
+    "zoom cinematográfico": "zoomin",
+}
+
+
 def build_video_transition_filter_graph(
     durations: Iterable[float],
     transition_seconds: float = 0.4,
+    transition_style: str = "Fundido suave",
 ) -> str:
-    """Build a real cross-dissolve graph. Inputs last nominal duration + transition_seconds."""
+    """Build a real FFmpeg xfade graph. Inputs last nominal duration + transition_seconds."""
     try:
         values = [float(value) for value in durations]
         transition = float(transition_seconds)
@@ -746,6 +757,10 @@ def build_video_transition_filter_graph(
     if not math.isfinite(transition) or transition <= 0 or transition > 1.0:
         raise ValueError("Transition duration must be greater than zero and at most one second.")
     transition = min(transition, min(values) * 0.4)
+    transition_name = _TRANSITION_FILTER_NAMES.get(
+        " ".join(str(transition_style or "Fundido suave").casefold().split()),
+        "fade",
+    )
     total = sum(values)
     parts = [
         f"[{index}:v]settb=AVTB,setpts=PTS-STARTPTS,format=yuv420p[v{index}]"
@@ -757,7 +772,7 @@ def build_video_transition_filter_graph(
         elapsed += values[index - 1]
         next_label = f"xf{index}"
         parts.append(
-            f"{current}[v{index}]xfade=transition=fade:duration={transition:.3f}:"
+            f"{current}[v{index}]xfade=transition={transition_name}:duration={transition:.3f}:"
             f"offset={elapsed:.3f}[{next_label}]"
         )
         current = f"[{next_label}]"
