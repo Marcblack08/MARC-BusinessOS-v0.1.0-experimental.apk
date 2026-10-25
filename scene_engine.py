@@ -641,3 +641,97 @@ def scene_motion_filter(
         f"crop={width}:{height},zoompan=z='min(zoom+{step},{zoom})':"
         f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={width}x{height}:fps=24"
     )
+
+
+_CAMERA_DIRECTIONS = (
+    "wide establishing composition with the location clearly readable",
+    "medium action shot with readable full-body gesture and foreground depth",
+    "tight emotional close-up focused on the eyes and facial expression",
+    "over-the-shoulder composition that places the subject and their target in the same frame",
+    "cinematic detail insert focused on the important hand, object or clue",
+    "low-angle dramatic composition that makes the threat feel imposing",
+    "profile or three-quarter portrait with expressive silhouette and background separation",
+    "high-angle composition that makes the subject feel exposed or vulnerable",
+    "two-shot with clear spatial relationship and tension between characters",
+    "slightly canted suspense composition with controlled, readable lines",
+)
+
+
+def camera_direction_for_shot(scene_number: int) -> str:
+    """Return a deterministic camera-composition cue so successive AI images vary."""
+    try:
+        index = max(1, int(scene_number)) - 1
+    except (TypeError, ValueError):
+        index = 0
+    return _CAMERA_DIRECTIONS[index % len(_CAMERA_DIRECTIONS)]
+
+
+def build_cinematic_image_prompt(
+    style_prompt: str,
+    visual_description: str,
+    scene_number: int,
+    title: str = "",
+    canon_reference: str = "",
+    continuity_reference: str = "",
+) -> str:
+    """Turn an AI scene description into a specific, emotionally legible single-frame prompt."""
+    camera = camera_direction_for_shot(scene_number)
+    title = " ".join(str(title or "").split())[:120]
+    description = " ".join(str(visual_description or "").split())[:1600]
+    canon = " ".join(str(canon_reference or "").split())[:650]
+    continuity = " ".join(str(continuity_reference or "").split())[:350]
+    number = max(1, int(scene_number))
+    return (
+        f"{style_prompt}. Create one high-quality cinematic animation frame for scene {number}. "
+        f"Scene beat: {description}. "
+        f"Camera and composition: {camera}. Adapt the shot to the actual action; if no person is present, frame the relevant object or location. "
+        "Make the story readable at a glance: one dominant subject/action, clear foreground and background separation, "
+        "expressive face and body language when characters are visible, specific emotion rather than a generic smile, "
+        "purposeful dramatic lighting, believable anatomy, rich but controlled color, clean edges, detailed environment, "
+        "natural depth of field and a clear focal point. "
+        f"Scene title for context only: {title}. "
+        f"Character/prop continuity rules: {canon or 'Keep each described subject visually stable within this project.'} "
+        f"Previous continuity context: {continuity or 'No previous episode state.'} "
+        "Show exactly one coherent moment, not a collage, contact sheet, comic panels or montage. "
+        "Do not draw text, captions, subtitles, speech bubbles, UI, logos or watermarks. "
+        "Do not add unmentioned characters, swap clothing, duplicate faces, flatten the lighting, or reuse the same composition mechanically."
+    )
+
+
+def build_video_transition_filter_graph(
+    durations: Iterable[float],
+    transition_seconds: float = 0.4,
+) -> str:
+    """Build a real cross-dissolve graph. Inputs last nominal duration + transition_seconds."""
+    try:
+        values = [float(value) for value in durations]
+        transition = float(transition_seconds)
+    except (TypeError, ValueError):
+        raise ValueError("Durations and transition length must be numeric.") from None
+    if not values or any(not math.isfinite(value) or value <= 0 for value in values):
+        raise ValueError("At least one finite, positive clip duration is required.")
+    if not math.isfinite(transition) or transition <= 0 or transition > 1.0:
+        raise ValueError("Transition duration must be greater than zero and at most one second.")
+    transition = min(transition, min(values) * 0.4)
+    total = sum(values)
+    parts = [
+        f"[{index}:v]settb=AVTB,setpts=PTS-STARTPTS,format=yuv420p[v{index}]"
+        for index in range(len(values))
+    ]
+    current = "[v0]"
+    elapsed = 0.0
+    for index in range(1, len(values)):
+        elapsed += values[index - 1]
+        next_label = f"xf{index}"
+        parts.append(
+            f"{current}[v{index}]xfade=transition=fade:duration={transition:.3f}:"
+            f"offset={elapsed:.3f}[{next_label}]"
+        )
+        current = f"[{next_label}]"
+    fade = min(0.28, total / 10.0)
+    fade_out_start = max(0.0, total - fade)
+    parts.append(
+        f"{current}trim=duration={total:.3f},setpts=PTS-STARTPTS,"
+        f"fade=t=in:st=0:d={fade:.3f},fade=t=out:st={fade_out_start:.3f}:d={fade:.3f}[vout]"
+    )
+    return ";".join(parts)
