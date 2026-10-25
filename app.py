@@ -623,7 +623,18 @@ class App(tk.Tk):
         self.ffmpeg_badge.pack(side="left", padx=(0, 12))
         self.header_diagnose_button = ttk.Button(head_right, text="Diagnóstico PC", command=self.detect_pc_async)
         self.header_diagnose_button.pack(side="left", padx=(0, 6))
-        self.header_tools_button = ttk.Button(head_right, text="Herramientas", command=self.check_tools)
+        self.header_tools_button = ttk.Menubutton(head_right, text="Herramientas  ▾")
+        self.header_tools_menu = tk.Menu(
+            self.header_tools_button, tearoff=0,
+            bg=self.colors["panel"], fg=self.colors["text"],
+            activebackground=self.colors["accent"], activeforeground="#ffffff",
+            bd=0, relief="flat",
+        )
+        self.header_tools_menu.add_command(label="Diagnóstico del equipo", command=self.detect_pc_async)
+        self.header_tools_menu.add_command(label="Herramientas instaladas", command=self.check_tools)
+        self.header_tools_menu.add_command(label="Acceso remoto", command=self.show_remote_access)
+        self.header_tools_menu.add_command(label="Estado de producción", command=self.show_pipeline_status)
+        self.header_tools_button.configure(menu=self.header_tools_menu)
         self.header_tools_button.pack(side="left")
 
         self.brand_gradient_canvas = tk.Canvas(
@@ -1435,9 +1446,7 @@ class App(tk.Tk):
         )
         self.more_menu.add_command(label="Vista previa MP4", command=self.preview_video_render)
         self.more_menu.add_command(label="Configurar imágenes IA", command=self.open_image_setup)
-        self.more_menu.add_command(label="Diagnóstico del equipo", command=self.detect_pc_async)
-        self.more_menu.add_command(label="Herramientas instaladas", command=self.check_tools)
-        self.more_menu.add_command(label="Acceso remoto desde el teléfono", command=self.show_remote_access)
+        self.more_menu.add_command(label="Abrir menú Herramientas", command=lambda: self.header_tools_button.event_generate("<Button-1>"))
         self.more_menu.add_command(label="Continuar historia", command=self.create_continuation)
         self.more_menu.add_command(label="Estado / reanudar producción", command=self.show_pipeline_status)
         self.more_menu.add_separator()
