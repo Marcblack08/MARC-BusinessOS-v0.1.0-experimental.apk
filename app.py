@@ -715,8 +715,8 @@ class App(tk.Tk):
         self.config_canvas_window = self.config_canvas.create_window((0, 0), window=card, anchor="nw")
         card.bind("<Configure>", lambda _event: self.config_canvas.configure(scrollregion=self.config_canvas.bbox("all")))
         self.config_canvas.bind("<Configure>", lambda event: self.config_canvas.itemconfigure(self.config_canvas_window, width=event.width))
-        tk.Label(card, text="CONFIGURACIÓN DE HISTORIA", bg=self.colors["panel"], fg=self.colors["text"],
-                 font=("Segoe UI", 13, "bold")).pack(anchor="w")
+        tk.Label(card, text="Crea tu historia", bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 15, "bold")).pack(anchor="w")
         tk.Label(card, text="Define la historia y su estructura. El estilo visual y la calidad de salida están en «Visual».",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).pack(anchor="w", pady=(5, 10))
 
