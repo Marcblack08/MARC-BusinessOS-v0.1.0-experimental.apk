@@ -1368,7 +1368,8 @@ class App(tk.Tk):
         """Set useful initial panel proportions while keeping both dividers draggable."""
         try:
             self.update_idletasks()
-            self.workspace_panes.sash_place(0, 165, 0)
+            if str(self.project_library_pane) in tuple(self.workspace_panes.panes()):
+                self.workspace_panes.sash_place(0, 165, 0)
             editor_width = max(650, self.editor_pane.winfo_width())
             config_width = min(max(330, int(editor_width * 0.40)), max(330, editor_width - 520))
             self.vertical_panes.sash_place(0, config_width, 0)
@@ -1376,14 +1377,15 @@ class App(tk.Tk):
             return
 
     def _apply_compact_workspace(self):
-        """Build a clean premium toolbar and preserve the three-column studio."""
+        """Start with a focused two-panel workspace; reveal project library on demand."""
         # Restore the core panels in the intended order.
         if str(self.project_library_pane) not in tuple(self.workspace_panes.panes()):
             self.workspace_panes.add(
                 self.project_library_pane, before=self.editor_pane,
                 minsize=180, width=225, stretch="never"
             )
-        self.project_library_visible = True
+        self.workspace_panes.forget(self.project_library_pane)
+        self.project_library_visible = False
         self.set_configuration_visible(True)
         self.preview_dock.grid()
 
@@ -1464,6 +1466,7 @@ class App(tk.Tk):
         self.more_menu.add_command(label="Aprobar guion", command=self.approve_script)
         self.more_menu.add_command(label="Crear vídeo final", command=self.export_video)
         self.more_menu.add_command(label="Mostrar / ocultar ajustes", command=self.toggle_configuration)
+        self.more_menu.add_command(label="Mostrar / ocultar proyectos guardados", command=self.toggle_project_library)
         self.more_menu.add_separator()
         self.more_menu.add_command(label="Vista previa MP4", command=self.preview_video_render)
         self.more_menu.add_command(label="Configurar imágenes IA", command=self.open_image_setup)
