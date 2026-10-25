@@ -139,7 +139,7 @@ class App(tk.Tk):
         super().__init__()
         self.title(APP_NAME)
         self.geometry("1536x864")
-        self.minsize(1180, 720)
+        self.minsize(1040, 680)
         self.state("zoomed")
         self.conn = db_connect()
         self.current_id = None
@@ -712,14 +712,27 @@ class App(tk.Tk):
         self.config_canvas.configure(yscrollcommand=config_scroll.set)
         # Scroll the compact configuration rail with the mouse wheel.
         def _scroll_config(event):
+            # Route wheel movement only to the panel beneath the pointer.
             try:
-                self.config_canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
-            except (tk.TclError, AttributeError):
+                direction = -1 if getattr(event, "delta", 0) > 0 or getattr(event, "num", None) == 4 else 1
+                x, y = event.x_root, event.y_root
+                config = self.config_canvas
+                cx, cy = config.winfo_rootx(), config.winfo_rooty()
+                if config.winfo_ismapped() and cx <= x < cx + config.winfo_width() and cy <= y < cy + config.winfo_height():
+                    config.yview_scroll(direction, "units")
+                    return "break"
+                audio = getattr(self, "audio_canvas", None)
+                if audio is not None and audio.winfo_ismapped():
+                    ax, ay = audio.winfo_rootx(), audio.winfo_rooty()
+                    if ax <= x < ax + audio.winfo_width() and ay <= y < ay + audio.winfo_height():
+                        audio.yview_scroll(direction, "units")
+                        return "break"
+            except (tk.TclError, AttributeError, TypeError):
                 pass
-            return "break"
+            return None
         self.config_canvas.bind_all("<MouseWheel>", _scroll_config, add="+")
-        self.config_canvas.bind_all("<Button-4>", lambda _event: self.config_canvas.yview_scroll(-1, "units"), add="+")
-        self.config_canvas.bind_all("<Button-5>", lambda _event: self.config_canvas.yview_scroll(1, "units"), add="+")
+        self.config_canvas.bind_all("<Button-4>", _scroll_config, add="+")
+        self.config_canvas.bind_all("<Button-5>", _scroll_config, add="+")
         card = tk.Frame(self.config_canvas, bg=self.colors["panel"], padx=12, pady=12,
                         highlightthickness=1, highlightbackground=self.colors["border"])
         self.config_canvas_window = self.config_canvas.create_window((0, 0), window=card, anchor="nw")
@@ -758,42 +771,71 @@ class App(tk.Tk):
         form.pack(fill="x", expand=True)
         self.form_widgets = []
         self.field_cells = {}
-        form.columnconfigure(0, weight=1, uniform="fields")
-        form.columnconfigure(1, weight=1, uniform="fields")
-        self._field(form, "Nombre del proyecto", self.title_var, 0, 0, span=2)
+        form.columnconfigure(0, weight=1)
+
+        self.title_var = tk.StringVar()
+        self.topic_var = tk.StringVar()
+        self.platform_var = tk.StringVar(value=list(PLATFORMS)[0])
+        self.duration_var = tk.StringVar(value="10")
+        self.style_var = tk.StringVar(value="Reencarnación y venganza")
+        self.protagonist_var = tk.StringVar()
+        self.conflict_var = tk.StringVar()
+        self.tone_var = tk.StringVar(value="Dramático e intenso")
+        self.narrator_var = tk.StringVar(value="Tercera persona")
+        self.ending_var = tk.StringVar(value="Justicia y superación")
+        self.drawing_style_var = tk.StringVar(value="Anime cinematográfico")
+        self.animation_style_var = tk.StringVar(value="2D fluida")
+        self.animation_intensity_var = tk.StringVar(value="Muy animado")
+        self.overlay_mode_var = tk.StringVar(value="Título de escena")
+        self.transition_style_var = tk.StringVar(value="Fundido suave")
+        self.subtitle_font_var = tk.StringVar(value="Arial")
+        self.subtitle_size_var = tk.StringVar(value="Mediano")
+        self.subtitle_color_var = tk.StringVar(value="Blanco")
+        self.subtitle_position_var = tk.StringVar(value="Inferior")
+        self.subtitle_outline_var = tk.BooleanVar(value=True)
+        self.video_mode_var = tk.StringVar(value=SERIES_VIDEO_MODE)
+        self.resolution_var = tk.StringVar(value="1080p (Full HD)")
+        self.fps_var = tk.StringVar(value="30")
+
+        # Basic fields are full-width so their labels and selected values stay readable.
+        self._field(form, "Nombre del proyecto", self.title_var, 0, 0)
         self._field(form, "Género", self.style_var, 1, 0,
                     values=["Novela dramática", "Reencarnación y venganza", "Superación personal", "Romance",
                             "Fantasía", "Misterio y suspenso", "Terror", "Acción y aventura", "Ciencia ficción",
                             "Drama familiar", "Educativo y directo", "Documental", "Promocional"])
-        self._field(form, "Plataforma", self.platform_var, 1, 1, values=list(PLATFORMS))
-        self.duration_field = self._field(form, "Duración (min)", self.duration_var, 2, 0,
+        self._field(form, "Plataforma", self.platform_var, 2, 0, values=list(PLATFORMS))
+        self.duration_field = self._field(form, "Duración (min)", self.duration_var, 3, 0,
                     values=[str(i) for i in (1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120)])
-        self._field(form, "Tono", self.tone_var, 2, 1,
+        self._field(form, "Premisa / idea", self.topic_var, 4, 0)
+
+        advanced_form = tk.Frame(card, bg=self.colors["panel"])
+        advanced_form.pack(fill="x", expand=True, pady=(2, 0))
+        advanced_form.columnconfigure(0, weight=1)
+        self._field(advanced_form, "Tono", self.tone_var, 0, 0,
                     values=["Dramático e intenso", "Oscuro y misterioso", "Emotivo", "Inspirador",
                             "Épico", "Ligero y humorístico", "Realista"])
-        self._field(form, "Narrador", self.narrator_var, 3, 0,
+        self._field(advanced_form, "Narrador", self.narrator_var, 1, 0,
                     values=["Tercera persona", "Primera persona protagonista", "Primera persona retrospectiva",
                             "Narrador omnisciente"])
-        self._field(form, "Desenlace", self.ending_var, 3, 1,
+        self._field(advanced_form, "Desenlace", self.ending_var, 2, 0,
                     values=["Justicia y superación", "Final feliz", "Final trágico", "Giro inesperado",
                             "Abierto para continuación", "Agridulce"])
-        self._field(form, "Protagonista", self.protagonist_var, 4, 0)
-        self._field(form, "Conflicto central", self.conflict_var, 4, 1)
-        self._field(form, "Premisa / idea", self.topic_var, 5, 0, span=2)
-        self.video_mode_field = self._field(form, "Modo de producción", self.video_mode_var, 6, 0, span=2,
+        self._field(advanced_form, "Protagonista", self.protagonist_var, 3, 0)
+        self._field(advanced_form, "Conflicto central", self.conflict_var, 4, 0)
+        self.video_mode_field = self._field(advanced_form, "Modo de producción", self.video_mode_var, 5, 0,
                     values=[SHORT_VIDEO_MODE, SERIES_VIDEO_MODE])
         self.video_mode_field.bind("<<ComboboxSelected>>", lambda _event: self._on_video_mode_changed())
         self.advanced_help_label = tk.Label(
-            form, text="Las opciones avanzadas permiten afinar el tono, el narrador y la estructura.",
+            advanced_form, text="Las opciones avanzadas permiten afinar el tono, el narrador y la estructura.",
             bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8),
-            justify="left", wraplength=280,
+            justify="left", wraplength=250,
         )
-        self.advanced_help_label.grid(row=7, column=0, columnspan=2, sticky="w", padx=5, pady=(5, 2))
+        self.advanced_help_label.grid(row=6, column=0, sticky="w", padx=5, pady=(5, 2))
         self.story_options_expanded = False
         self.story_options_button = ttk.Button(
-            form, text="＋ Más opciones (opcional)", command=self.toggle_story_options
+            card, text="＋ Más opciones (opcional)", command=self.toggle_story_options
         )
-        self.story_options_button.grid(row=8, column=0, columnspan=2, sticky="ew", padx=4, pady=(8, 2))
+        self.story_options_button.pack(fill="x", padx=4, pady=(8, 2))
         self._set_story_options_expanded(False)
 
         lower = tk.Frame(vertical, bg=self.colors["bg"])
@@ -1021,7 +1063,11 @@ class App(tk.Tk):
         script_head.grid(row=0, column=0, sticky="ew", pady=(0, 7))
         tk.Label(script_head, text="EDITOR DE GUION", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 11, "bold")).pack(side="left")
-        tk.Label(script_head, text="Revisa el texto antes de aprobar y exportar", bg=self.colors["panel"],
+        self.script_approve_button = ttk.Button(
+            script_head, text="Aprobar guion", style="Accent.TButton", command=self.approve_script
+        )
+        self.script_approve_button.pack(side="right", padx=(8, 0))
+        tk.Label(script_head, text="Revisa el texto antes de continuar", bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 9)).pack(side="right")
         textframe = tk.Frame(script_editor_frame, bg=self.colors["input"])
         self.script_text_frame = textframe
@@ -1072,24 +1118,28 @@ class App(tk.Tk):
         self.refresh_scenes_button.pack(side="left", padx=(6, 0))
         image_ai_bar = tk.Frame(scenes_tab, bg=self.colors["panel"])
         image_ai_bar.grid(row=4, column=0, sticky="ew", pady=(0, 8))
-        tk.Label(image_ai_bar, text="MODELO LOCAL", bg=self.colors["panel"], fg=self.colors["muted"],
+        model_row = tk.Frame(image_ai_bar, bg=self.colors["panel"])
+        model_row.pack(fill="x", pady=(0, 6))
+        tk.Label(model_row, text="MODELO LOCAL", bg=self.colors["panel"], fg=self.colors["muted"],
                  font=("Segoe UI", 8, "bold")).pack(side="left", padx=(0, 7))
         self.image_model_var = tk.StringVar(value="")
-        self.image_model_combo = ttk.Combobox(image_ai_bar, textvariable=self.image_model_var,
-                                              values=[], state="readonly", width=27, font=("Segoe UI", 9))
+        self.image_model_combo = ttk.Combobox(model_row, textvariable=self.image_model_var,
+                                              values=[], state="readonly", width=32, font=("Segoe UI", 9))
         self.image_model_combo.pack(side="left")
-        self.detect_models_button = ttk.Button(image_ai_bar, text="Detectar ComfyUI",
+        self.detect_models_button = ttk.Button(model_row, text="Detectar motor",
                                                 command=self.detect_image_models)
         self.detect_models_button.pack(side="left", padx=(6, 0))
         self.start_comfyui_button = ttk.Button(
-            image_ai_bar, text="Iniciar / instalar", command=self.start_comfyui
+            model_row, text="Iniciar / instalar", command=self.start_comfyui
         )
         self.start_comfyui_button.pack(side="left", padx=(6, 0))
-        self.generate_image_button = ttk.Button(image_ai_bar, text="Generar ilustración IA",
+        image_action_row = tk.Frame(image_ai_bar, bg=self.colors["panel"])
+        image_action_row.pack(fill="x")
+        self.generate_image_button = ttk.Button(image_action_row, text="Generar imagen de esta escena",
                                                 style="Accent.TButton", command=self.generate_scene_image)
-        self.generate_image_button.pack(side="left", padx=(6, 0))
+        self.generate_image_button.pack(side="left")
         self.generate_missing_images_button = ttk.Button(
-            image_ai_bar, text="Generar imágenes faltantes", command=self.generate_missing_scene_images)
+            image_action_row, text="Generar imágenes que faltan", command=self.generate_missing_scene_images)
         self.generate_missing_images_button.pack(side="left", padx=(6, 0))
         self.image_ai_status_var = tk.StringVar(value="Motor visual local · comprobando ComfyUI y checkpoints…")
         tk.Label(scenes_tab, textvariable=self.image_ai_status_var, bg=self.colors["panel"],
@@ -1117,7 +1167,7 @@ class App(tk.Tk):
         self.scene_outline.configure(yscrollcommand=scene_scroll.set)
         self.scene_outline.bind("<Double-1>", lambda _event: self.assign_scene_image())
         self.scene_outline.bind("<<TreeviewSelect>>", self._timeline_scene_selected)
-        tk.Label(scenes_tab, text="Flujo recomendado: revisa el guion y la dirección visual, pulsa «Aprobar» y luego genera imágenes. Inicia/configura ComfyUI con «Iniciar / instalar» y descarga un checkpoint compatible. Ollama/Qwen genera texto, no imágenes.",
+        tk.Label(scenes_tab, text="Orden recomendado: aprueba el guion y genera las imágenes que falten. Ollama/Qwen crea texto; ComfyUI crea imágenes.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1000, justify="left").grid(row=7, column=0, sticky="w", pady=(8, 0))
 
@@ -1161,12 +1211,28 @@ class App(tk.Tk):
                     values=["Blanco", "Amarillo", "Cian"])
         self._field(visual_form, "Posición de subtítulos", self.subtitle_position_var, 5, 1,
                     values=["Inferior", "Centro"])
-        tk.Checkbutton(visual_form, text="Contorno negro y sombra para mejorar la lectura",
+        self.subtitle_outline_checkbutton = tk.Checkbutton(
+            visual_form, text="Contorno negro y sombra para mejorar la lectura",
             variable=self.subtitle_outline_var, bg=self.colors["panel"], fg=self.colors["text"],
             activebackground=self.colors["panel"], activeforeground=self.colors["text"],
             selectcolor=self.colors["input"], font=("Segoe UI", 9)
-        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(7, 0))
-        tk.Label(visual_tab, text="La intensidad modifica el movimiento de cámara sobre imágenes fijas. El estilo de subtítulos se aplica al texto sobre ilustraciones; la fuente se busca entre las instaladas en Windows.",
+        )
+        self.subtitle_outline_checkbutton.grid(row=6, column=0, columnspan=2, sticky="w", pady=(7, 0))
+        self.visual_advanced_labels = (
+            "Estilo de animación", "Fotogramas por segundo", "Intensidad de movimiento",
+            "Texto sobre las imágenes", "Transición entre escenas", "Fuente de subtítulos",
+            "Tamaño de subtítulos", "Color de subtítulos", "Posición de subtítulos",
+        )
+        self.visual_advanced_expanded = False
+        for field_label in self.visual_advanced_labels:
+            self.field_cells[field_label].grid_remove()
+        self.subtitle_outline_checkbutton.grid_remove()
+        self.visual_advanced_button = ttk.Button(
+            visual_tab, text="＋ Mostrar ajustes visuales avanzados",
+            command=self.toggle_visual_options
+        )
+        self.visual_advanced_button.grid(row=3, column=0, sticky="w", pady=(8, 2))
+        tk.Label(visual_tab, text="Los valores predeterminados sirven para empezar. Abre los ajustes avanzados cuando necesites personalizar la animación o los subtítulos.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1050, justify="left").grid(row=7, column=0, sticky="w", pady=(12, 0))
         canon_actions = tk.Frame(visual_tab, bg=self.colors["panel"])
@@ -1256,21 +1322,43 @@ class App(tk.Tk):
                    command=self.open_last_video).pack(side="right")
         ttk.Button(preview_transport, text="Elegir MP4",
                    command=self.choose_preview_video).pack(side="right", padx=(0, 6))
+        ttk.Button(preview_transport, text="Exportar MP4", style="Accent.TButton",
+                   command=self.export_video).pack(side="right", padx=(0, 6))
         self.preview_status_var = tk.StringVar(value="El monitor muestra el storyboard de la escena seleccionada. Exporta para crear el MP4 final.")
         tk.Label(preview_tab, textvariable=self.preview_status_var, bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1100, justify="left").grid(row=3, column=0, sticky="ew", pady=(10, 0))
-        audio_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=16, pady=14)
+        audio_tab = tk.Frame(studio_tabs, bg=self.colors["panel"])
         studio_tabs.add(audio_tab, text="6. Audio")
+        audio_tab.grid_rowconfigure(0, weight=1)
         audio_tab.grid_columnconfigure(0, weight=1)
-        audio_tab.grid_rowconfigure(6, weight=1)
-        tk.Label(audio_tab, text="NARRACIÓN Y SONIDO", bg=self.colors["panel"], fg=self.colors["text"],
+        self.audio_canvas = tk.Canvas(audio_tab, bg=self.colors["panel"], highlightthickness=0, bd=0)
+        self.audio_canvas.grid(row=0, column=0, sticky="nsew")
+        self.audio_scrollbar = ttk.Scrollbar(audio_tab, orient="vertical", command=self.audio_canvas.yview)
+        self.audio_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.audio_canvas.configure(yscrollcommand=self.audio_scrollbar.set)
+        audio_content = tk.Frame(self.audio_canvas, bg=self.colors["panel"], padx=16, pady=14)
+        self.audio_content = audio_content
+        audio_window = self.audio_canvas.create_window((0, 0), window=audio_content, anchor="nw")
+        audio_content.bind(
+            "<Configure>", lambda _event: self.audio_canvas.configure(scrollregion=self.audio_canvas.bbox("all"))
+        )
+        self.audio_canvas.bind(
+            "<Configure>", lambda event: self.audio_canvas.itemconfigure(audio_window, width=event.width)
+        )
+        self.audio_canvas.bind(
+            "<MouseWheel>",
+            lambda event: (self.audio_canvas.yview_scroll(-1 if event.delta > 0 else 1, "units"), "break")[1]
+        )
+        audio_content.grid_columnconfigure(0, weight=1)
+        audio_content.grid_rowconfigure(6, weight=1)
+        tk.Label(audio_content, text="NARRACIÓN Y SONIDO", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 13, "bold")).grid(row=0, column=0, sticky="w")
-        tk.Label(audio_tab, text="Importa una pista de voz/música o genera narración sin conexión usando las voces de Windows que ya estén instaladas.",
+        tk.Label(audio_content, text="Importa una pista de voz/música o genera narración sin conexión usando las voces de Windows que ya estén instaladas.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1050, justify="left").grid(row=1, column=0, sticky="w", pady=(4, 14))
 
-        track_card = tk.Frame(audio_tab, bg=self.colors["input"], padx=13, pady=12,
+        track_card = tk.Frame(audio_content, bg=self.colors["input"], padx=13, pady=12,
                               highlightthickness=1, highlightbackground=self.colors["border"])
         track_card.grid(row=2, column=0, sticky="ew", pady=(0, 10))
         tk.Label(track_card, text="NARRACIÓN / VOZ", bg=self.colors["input"], fg="#70a7ff",
@@ -1307,7 +1395,7 @@ class App(tk.Tk):
             selectcolor=self.colors["panel"], font=("Segoe UI", 9)
         ).pack(side="left", padx=(16, 0))
 
-        voice_card = tk.Frame(audio_tab, bg=self.colors["panel"], padx=13, pady=12,
+        voice_card = tk.Frame(audio_content, bg=self.colors["panel"], padx=13, pady=12,
                               highlightthickness=1, highlightbackground=self.colors["border"])
         voice_card.grid(row=3, column=0, sticky="ew", pady=(0, 10))
         tk.Label(voice_card, text="GENERAR NARRACIÓN LOCAL", bg=self.colors["panel"], fg=self.colors["text"],
@@ -1315,28 +1403,30 @@ class App(tk.Tk):
         tk.Label(voice_card, text="Usa las voces instaladas de Windows sin nube. Con etiquetas [NARRADOR]: y [PERSONAJE]:, MARC puede cambiar de voz entre hablantes; se requieren varias voces de Windows para oír timbres distintos.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1050, justify="left").pack(anchor="w", pady=(3, 10))
-        voice_controls = tk.Frame(voice_card, bg=self.colors["panel"])
-        voice_controls.pack(fill="x")
-        tk.Label(voice_controls, text="VOZ", bg=self.colors["panel"], fg=self.colors["muted"],
+        voice_select_row = tk.Frame(voice_card, bg=self.colors["panel"])
+        voice_select_row.pack(fill="x", pady=(0, 7))
+        tk.Label(voice_select_row, text="VOZ", bg=self.colors["panel"], fg=self.colors["muted"],
                  font=("Segoe UI", 8, "bold")).pack(side="left", padx=(0, 7))
         self.voice_var = tk.StringVar(value="(Automática)")
-        self.voice_combo = ttk.Combobox(voice_controls, textvariable=self.voice_var,
+        self.voice_combo = ttk.Combobox(voice_select_row, textvariable=self.voice_var,
                                         values=["(Automática)"], state="readonly", width=35, font=("Segoe UI", 9))
         self.voice_combo.pack(side="left")
-        self.detect_voice_button = ttk.Button(voice_controls, text="Detectar voces", command=self.detect_local_voices)
+        self.detect_voice_button = ttk.Button(voice_select_row, text="Detectar voces", command=self.detect_local_voices)
         self.detect_voice_button.pack(side="left", padx=(7, 0))
+        voice_action_row = tk.Frame(voice_card, bg=self.colors["panel"])
+        voice_action_row.pack(fill="x")
         self.assign_character_voices_button = ttk.Button(
-            voice_controls, text="Voces por personaje", command=self.edit_character_voices)
-        self.assign_character_voices_button.pack(side="left", padx=(7, 0))
-        self.generate_voice_button = ttk.Button(voice_controls, text="Generar narración", style="Accent.TButton",
+            voice_action_row, text="Voces por personaje", command=self.edit_character_voices)
+        self.assign_character_voices_button.pack(side="left")
+        self.generate_voice_button = ttk.Button(voice_action_row, text="Generar narración", style="Accent.TButton",
                                                 command=self.generate_local_voice)
         self.generate_voice_button.pack(side="left", padx=(7, 0))
-        self.cancel_voice_button = ttk.Button(voice_controls, text="Cancelar voz", command=self.cancel_local_voice, state="disabled")
+        self.cancel_voice_button = ttk.Button(voice_action_row, text="Cancelar voz", command=self.cancel_local_voice, state="disabled")
         self.cancel_voice_button.pack(side="left", padx=(7, 0))
         self.voice_status_var = tk.StringVar(value="Detectando voces locales de Windows…")
-        tk.Label(audio_tab, textvariable=self.voice_status_var, bg=self.colors["panel"], fg=self.colors["muted"],
+        tk.Label(audio_content, textvariable=self.voice_status_var, bg=self.colors["panel"], fg=self.colors["muted"],
                  font=("Segoe UI", 9), anchor="w", wraplength=1050, justify="left").grid(row=4, column=0, sticky="ew", pady=(0, 10))
-        subtitle_actions = tk.Frame(audio_tab, bg=self.colors["panel"])
+        subtitle_actions = tk.Frame(audio_content, bg=self.colors["panel"])
         subtitle_actions.grid(row=5, column=0, sticky="ew", pady=(4, 9))
         self.export_srt_button = ttk.Button(
             subtitle_actions, text="Exportar subtítulos SRT", style="Accent.TButton",
@@ -1345,11 +1435,11 @@ class App(tk.Tk):
         self.export_srt_button.pack(side="left")
         tk.Label(subtitle_actions, text="Ajusta los tiempos al MP4 final; la sincronía por palabra sigue siendo aproximada.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).pack(side="left", padx=(10, 0))
-        tk.Label(audio_tab, text="Para voces en español, instala un paquete de voz en Configuración de Windows → Hora e idioma → Voz. La voz disponible depende de Windows y del idioma instalado.",
+        tk.Label(audio_content, text="Para voces en español, instala un paquete de voz en Configuración de Windows → Hora e idioma → Voz. La voz disponible depende de Windows y del idioma instalado.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1050, justify="left").grid(row=6, column=0, sticky="nw", pady=(2, 0))
 
-        mux_actions = tk.Frame(audio_tab, bg=self.colors["panel"])
+        mux_actions = tk.Frame(audio_content, bg=self.colors["panel"])
         mux_actions.grid(row=7, column=0, sticky="ew", pady=(12, 0))
         ttk.Button(
             mux_actions, text="Añadir audio al último vídeo",
@@ -1411,9 +1501,12 @@ class App(tk.Tk):
         index = max(0, min(index, len(steps) - 1))
         _name, hint = steps[index]
         self.workflow_hint_var.set(f"Paso {index + 1} de {len(steps)} · {hint}")
-        self.workflow_next_button.configure(
-            text="Vídeo listo ✓" if index == len(steps) - 1 else "Ir al siguiente paso  →"
-        )
+        if index == len(steps) - 1:
+            label = "Volver al guion  ↶"
+        else:
+            next_name = steps[index + 1][0]
+            label = f"Siguiente: {next_name}  →"
+        self.workflow_next_button.configure(text=label)
 
     def go_to_next_step(self):
         """Move one tab forward without starting expensive generation automatically."""
@@ -1436,7 +1529,7 @@ class App(tk.Tk):
             if str(self.project_library_pane) in tuple(self.workspace_panes.panes()):
                 self.workspace_panes.sash_place(0, 165, 0)
             editor_width = max(650, self.editor_pane.winfo_width())
-            config_width = min(max(245, int(editor_width * 0.22)), max(245, editor_width - 600))
+            config_width = min(max(285, int(editor_width * 0.24)), max(285, editor_width - 700))
             self.vertical_panes.sash_place(0, config_width, 0)
         except (tk.TclError, AttributeError):
             return
@@ -1452,7 +1545,16 @@ class App(tk.Tk):
         self.workspace_panes.forget(self.project_library_pane)
         self.project_library_visible = False
         self.set_configuration_visible(True)
-        self.preview_dock.grid()
+        # The full monitor and timeline already have dedicated tabs. Hide their
+        # duplicates here so the script editor gets the entire workspace.
+        self.preview_dock.grid_remove()
+        if hasattr(self, "mini_timeline_panel"):
+            self.mini_timeline_panel.grid_remove()
+        self.script_tab.grid_columnconfigure(0, weight=1, uniform="scriptworkspace")
+        self.script_tab.grid_columnconfigure(1, weight=0, uniform="scriptworkspace")
+        self.script_tab.grid_rowconfigure(0, weight=1)
+        self.script_tab.grid_rowconfigure(1, weight=0)
+        self.script_editor_frame.grid_configure(row=0, column=0, rowspan=1, padx=0)
 
         # Keep the existing widgets and callbacks, but replace the crowded
         # legacy toolbar with a responsive container whose children all use pack.
@@ -1485,7 +1587,7 @@ class App(tk.Tk):
         )
         self.toolbar_new_button.pack(side="left", padx=(0, 6))
         self.toolbar_config_button = ttk.Button(
-            self.compact_toolbar, text="⚙ Ajustes", command=self.toggle_configuration
+            self.compact_toolbar, text="Ocultar formulario", command=self.toggle_configuration
         )
         self.toolbar_config_button.pack(side="left", padx=(0, 6))
         self.toolbar_generate_button = ttk.Button(
@@ -1506,9 +1608,9 @@ class App(tk.Tk):
         )
         self.toolbar_export_button.pack(side="left", padx=(0, 6))
 
-        # Keep only the two common actions visible; less-frequent actions live in Más opciones.
-        for button in (self.toolbar_config_button, self.toolbar_save_button,
-                       self.toolbar_approve_button, self.toolbar_export_button):
+        # Keep the form toggle visible alongside the primary action.
+        self.toolbar_config_button.pack(side="left", padx=(0, 6))
+        for button in (self.toolbar_save_button, self.toolbar_approve_button, self.toolbar_export_button):
             button.pack_forget()
 
         # Redirect state updates to the visible controls. The original widgets
@@ -1548,8 +1650,8 @@ class App(tk.Tk):
         # the preview rather than leaving a large empty gap under the editor.
         self.preview_dock.configure(padx=10, pady=9)
         self.mini_timeline_panel.configure(padx=9, pady=7)
-        self.script_tab.grid_columnconfigure(0, weight=4, uniform="scriptworkspace")
-        self.script_tab.grid_columnconfigure(1, weight=3, uniform="scriptworkspace")
+        self.script_tab.grid_columnconfigure(0, weight=1, uniform="scriptworkspace")
+        self.script_tab.grid_columnconfigure(1, weight=0, uniform="scriptworkspace")
 
     def toggle_project_library(self):
         """Show or hide the saved-project library without shrinking the editor all day."""
@@ -1557,9 +1659,10 @@ class App(tk.Tk):
             return
         panes = tuple(self.workspace_panes.panes())
         pane_name = str(self.project_library_pane)
-        is_visible = bool(self.project_library_visible) and pane_name in panes
-        if is_visible:
-            self.workspace_panes.forget(self.project_library_pane)
+        # Use explicit state as the source of truth when panes are briefly stale.
+        if bool(self.project_library_visible):
+            if pane_name in panes:
+                self.workspace_panes.forget(self.project_library_pane)
             self.project_library_visible = False
         else:
             if pane_name not in panes:
@@ -3606,7 +3709,7 @@ Write-Output 'NARRATION_OK'
         if visible and not is_visible:
             self.vertical_panes.add(
                 self.controls_area, before=self.lower_panel,
-                minsize=250, width=310, stretch="never"
+                minsize=285, width=320, stretch="never"
             )
             self.configuration_visible = True
         elif not visible and is_visible:
@@ -3616,7 +3719,7 @@ Write-Output 'NARRATION_OK'
             self.configuration_visible = is_visible
         if hasattr(self, "config_toggle_button"):
             self.config_toggle_button.configure(
-                text="⚙ Ajustes −" if self.configuration_visible else "⚙ Ajustes +"
+                text="Ocultar formulario" if self.configuration_visible else "Mostrar formulario"
             )
 
     def toggle_configuration(self):
@@ -3654,6 +3757,23 @@ Write-Output 'NARRATION_OK'
 
     def toggle_story_options(self):
         self._set_story_options_expanded(not self.story_options_expanded)
+
+    def toggle_visual_options(self):
+        """Reveal optional animation/subtitle controls only when requested."""
+        self.visual_advanced_expanded = not getattr(self, "visual_advanced_expanded", False)
+        for field_label in getattr(self, "visual_advanced_labels", ()):
+            cell = self.field_cells.get(field_label)
+            if cell is not None:
+                cell.grid() if self.visual_advanced_expanded else cell.grid_remove()
+        checkbutton = getattr(self, "subtitle_outline_checkbutton", None)
+        if checkbutton is not None:
+            checkbutton.grid() if self.visual_advanced_expanded else checkbutton.grid_remove()
+        button = getattr(self, "visual_advanced_button", None)
+        if button is not None:
+            button.configure(
+                text="− Ocultar ajustes visuales avanzados" if self.visual_advanced_expanded
+                else "＋ Mostrar ajustes visuales avanzados"
+            )
 
     def _field(self, parent, label, variable, row, col, values=None, span=1):
         cell = tk.Frame(parent, bg=self.colors["panel"])
