@@ -1546,15 +1546,16 @@ class App(tk.Tk):
             return
         panes = tuple(self.workspace_panes.panes())
         pane_name = str(self.project_library_pane)
-        is_visible = pane_name in panes
+        is_visible = bool(self.project_library_visible) and pane_name in panes
         if is_visible:
             self.workspace_panes.forget(self.project_library_pane)
             self.project_library_visible = False
         else:
-            self.workspace_panes.add(
-                self.project_library_pane, before=self.editor_pane,
-                minsize=205, width=250, stretch="never"
-            )
+            if pane_name not in panes:
+                self.workspace_panes.add(
+                    self.project_library_pane, before=self.editor_pane,
+                    minsize=205, width=250, stretch="never"
+                )
             self.project_library_visible = True
 
     def _timeline_duration_seconds(self):
