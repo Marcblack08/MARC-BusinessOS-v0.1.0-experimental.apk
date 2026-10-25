@@ -2353,10 +2353,13 @@ class App(tk.Tk):
         if engine.startswith("Kokoro"):
             messagebox.showinfo(
                 "Configurar voces neurales",
-                "Kokoro necesita un servidor local una sola vez. Instala Docker Desktop, inicia el servidor "
-                "siguiendo la guía oficial y vuelve a Audio → Detectar voces. Después, MARC podrá generar "
-                "WAVs localmente y cambiar de voz entre personajes.\n\n"
-                "Dirección esperada: " + self.kokoro_url
+                "Kokoro necesita un servidor local. Instala Docker Desktop y abre PowerShell.\n\n"
+                "PRIMERA VEZ — descargar e iniciar el motor (CPU):\n"
+                "docker run -d --name marc-kokoro -p 7860:7860 -v kokorotts_data:/app/persistent hangrylabs/kokorotts:v1.0\n\n"
+                "DESPUÉS — si el contenedor ya existe:\n"
+                "docker start marc-kokoro\n\n"
+                "Al terminar, vuelve a MARC → Audio → Detectar voces. Dirección local esperada: " + self.kokoro_url +
+                "\n\nLa primera instalación descarga el modelo y puede tardar. La narración se procesa localmente."
             )
             webbrowser.open("https://github.com/hangry-labs/kokoroTTS")
             return
@@ -2379,6 +2382,13 @@ class App(tk.Tk):
             with urllib.request.urlopen(request, timeout=8) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             voices = parse_kokoro_voice_ids(payload)
+            # Prefer Spanish voice families where available, so Spanish dialogue doesn't accidentally use English voices.
+            spanish_voices = [
+                voice for voice in voices
+                if voice.casefold().startswith(("ef_", "em_", "es_"))
+            ]
+            if spanish_voices:
+                voices = spanish_voices
             if not voices:
                 raise RuntimeError(
                     "El servidor respondió, pero no pude leer su lista de voces. "
