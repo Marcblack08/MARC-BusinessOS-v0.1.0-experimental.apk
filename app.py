@@ -3310,6 +3310,36 @@ Write-Output 'NARRATION_OK'
                 f"Vuelve a abrir MARC e inténtalo de nuevo.\n\nDetalle: {exc}"
             )
 
+    def _preferred_image_checkpoint(self, models):
+        """Prefer a style-tuned checkpoint when several are installed, not an arbitrary first item."""
+        names = [str(item).strip() for item in (models or []) if str(item).strip()]
+        if not names:
+            return ""
+        style = str(self.drawing_style_var.get() or "").casefold()
+        if "manga" in style:
+            preferences = ("manga", "anime", "animagine", "anything", "meina", "counterfeit")
+        elif "anime" in style:
+            preferences = ("animagine", "illustrious", "noobai", "anything", "meina", "counterfeit", "anime", "pony")
+        elif "cartoon" in style:
+            preferences = ("cartoon", "illustration", "animagine", "dreamshaper", "comic")
+        elif "acuarela" in style:
+            preferences = ("watercolor", "storybook", "illustration", "dreamshaper")
+        elif "pixel" in style:
+            preferences = ("pixel", "game-art", "sprites")
+        elif "3d" in style:
+            preferences = ("3d", "dreamshaper", "juggernaut", "sdxl")
+        elif "realista" in style:
+            preferences = ("juggernaut", "realvis", "epicrealism", "photoreal", "realistic", "sdxl")
+        elif "cómic" in style:
+            preferences = ("comic", "graphic", "illustration", "dreamshaper")
+        else:
+            preferences = ("illustration", "dreamshaper", "juggernaut")
+        for term in preferences:
+            candidate = next((name for name in names if term in name.casefold()), None)
+            if candidate:
+                return candidate
+        return names[0]
+
     def update_image_model_guidance(self):
         """Explain when a generic base checkpoint is likely to produce generic artwork."""
         selected = str(self.image_model_var.get() or "").strip()
@@ -4731,7 +4761,7 @@ Write-Output 'NARRATION_OK'
                     if current_model in models:
                         self.image_model_var.set(current_model)
                     elif models:
-                        self.image_model_var.set(models[0])
+                        self.image_model_var.set(self._preferred_image_checkpoint(models))
                     if models:
                         self.update_image_model_guidance()
                     else:
