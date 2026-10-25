@@ -31,6 +31,7 @@ from scene_engine import (
     build_srt_subtitles, build_srt_from_timed_segments, build_subtitle_drawtext_filter, expand_scenes_to_shots, ffmpeg_filter_path,
     parse_script_scenes, scene_motion_filter
 )
+from voice_engine import build_kokoro_ssml, parse_kokoro_voice_ids
 from story_engine import (
     FPS_OPTIONS, RESOLUTION_PROFILES, SERIES_VIDEO_MODE, SHORT_VIDEO_MODE,
     build_series_context, continuity_review_check, export_dimensions,
@@ -53,6 +54,7 @@ PROJECTS_DIR = APP_DATA_ROOT / "projects"
 DB_PATH = DATA_DIR / "marc_video_studio.db"
 
 COMFYUI_URL = os.environ.get("MARC_COMFYUI_URL", "http://127.0.0.1:8188").strip().rstrip("/")
+KOKORO_URL = os.environ.get("MARC_KOKORO_URL", "http://127.0.0.1:7860").strip().rstrip("/")
 # Probe common local ports; accept only a valid ComfyUI API endpoint.
 COMFYUI_FALLBACK_PORTS = (8188, 8189, 8190, 8180, 7860, 8000)
 
@@ -180,6 +182,8 @@ class App(tk.Tk):
         self.voice_generation_running = False
         self.voice_cancel_event = threading.Event()
         self.available_voice_names = []
+        self.kokoro_voice_names = []
+        self.kokoro_url = KOKORO_URL
         self.comfy_url = COMFYUI_URL
         self.comfy_available = False
         self.image_generation_running = False
@@ -1413,10 +1417,23 @@ class App(tk.Tk):
         voice_card.grid(row=3, column=0, sticky="ew", pady=(0, 10))
         tk.Label(voice_card, text="GENERAR NARRACIÓN LOCAL", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        tk.Label(voice_card, text="MARC adapta ritmo, tono y volumen si el guion marca emociones. El timbre depende de las voces compatibles instaladas; puedes asignar una voz distinta a cada personaje.",
+        tk.Label(voice_card, text="La opción Windows usa voces instaladas. Kokoro es un motor neuronal local opcional: permite más voces, diálogo por personaje y prosodia emocional si el servidor está conectado.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1050, justify="left").pack(anchor="w", pady=(3, 10))
-        voice_select_row = tk.Frame(voice_card, bg=self.colors["panel"])
+        voice_engine_row = tk.Frame(voice_card, bg=self.colors["panel"])
+        voice_engine_row.pack(fill="x", pady=(0, 7))
+        tk.Label(voice_engine_row, text="MOTOR", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 8, "bold")).pack(side="left", padx=(0, 7))
+        self.voice_engine_var = tk.StringVar(value="Windows (básica)")
+        self.voice_engine_combo = ttk.Combobox(
+            voice_engine_row, textvariable=self.voice_engine_var,
+            values=["Windows (básica)", "Kokoro (neuronal local)"],
+            state="readonly", width=25, font=("Segoe UI", 9)
+        )
+        self.voice_engine_combo.pack(side="left")
+        self.voice_engine_combo.bind("<<ComboboxSelected>>", self.on_voice_engine_changed)
+        self.voice_select_row = tk.Frame(voice_card, bg=self.colors["panel"])
+        voice_select_row = self.voice_select_row
         voice_select_row.pack(fill="x", pady=(0, 7))
         tk.Label(voice_select_row, text="VOZ", bg=self.colors["panel"], fg=self.colors["muted"],
                  font=("Segoe UI", 8, "bold")).pack(side="left", padx=(0, 7))
@@ -1426,7 +1443,7 @@ class App(tk.Tk):
         self.voice_combo.pack(side="left")
         self.detect_voice_button = ttk.Button(voice_select_row, text="Detectar voces", command=self.detect_local_voices)
         self.detect_voice_button.pack(side="left", padx=(7, 0))
-        self.add_voices_button = ttk.Button(voice_select_row, text="Añadir voces de Windows", command=self.open_windows_voice_settings)
+        self.add_voices_button = ttk.Button(voice_select_row, text="Añadir voces de Windows", command=self.configure_voice_engine)
         self.add_voices_button.pack(side="left", padx=(7, 0))
         voice_action_row = tk.Frame(voice_card, bg=self.colors["panel"])
         voice_action_row.pack(fill="x")
@@ -2297,6 +2314,80 @@ class App(tk.Tk):
                 self.music_track_label_var.set("Sin música de fondo.")
         self._draw_timeline()
 
+    def on_voice_engine_changed(self, _event=None):
+        """Switch between the built-in SAPI voices and an optional local neural Kokoro server."""
+        engine = str(self.voice_engine_var.get() or "Windows (básica)")
+        if engine.startswith("Kokoro"):
+            self.voice_combo.configure(values=self.kokoro_voice_names)
+            if self.voice_var.get() not in self.kokoro_voice_names:
+                preferred = next(
+                    (name for name in ("ef_dora", "em_alex", "em_santa") if name in self.kokoro_voice_names),
+                    self.kokoro_voice_names[0] if self.kokoro_voice_names else ""
+                )
+                self.voice_var.set(preferred)
+            self.add_voices_button.configure(text="Configurar Kokoro")
+            self.generate_voice_button.configure(text="Generar voz neural")
+            self.voice_status_var.set(
+                f"Kokoro local · {len(self.kokoro_voice_names)} voces detectadas"
+                if self.kokoro_voice_names else
+                "Buscando el motor neural local en http://127.0.0.1:7860…"
+            )
+            self.detect_kokoro_voices(quiet=True)
+        else:
+            self.voice_combo.configure(values=self.available_voice_names or ["(Automática)"])
+            if self.voice_var.get() not in self.available_voice_names and self.voice_var.get() != "(Automática)":
+                self.voice_var.set("(Automática)")
+            self.add_voices_button.configure(text="Añadir voces de Windows")
+            self.generate_voice_button.configure(text="Generar narración")
+            self.voice_status_var.set(
+                f"Windows SAPI · {len(self.available_voice_names)} voces detectadas"
+                if self.available_voice_names else
+                "Detecta o instala voces de Windows, o usa el motor neural Kokoro."
+            )
+            if os.name == "nt" and not self.available_voice_names:
+                self.detect_local_voices(quiet=True)
+
+    def configure_voice_engine(self):
+        """Open the setup instructions for the selected local voice engine."""
+        engine = str(self.voice_engine_var.get() or "")
+        if engine.startswith("Kokoro"):
+            messagebox.showinfo(
+                "Configurar voces neurales",
+                "Kokoro necesita un servidor local una sola vez. Instala Docker Desktop, inicia el servidor "
+                "siguiendo la guía oficial y vuelve a Audio → Detectar voces. Después, MARC podrá generar "
+                "WAVs localmente y cambiar de voz entre personajes.\n\n"
+                "Dirección esperada: " + self.kokoro_url
+            )
+            webbrowser.open("https://github.com/hangry-labs/kokoroTTS")
+            return
+        self.open_windows_voice_settings()
+
+    def detect_kokoro_voices(self, quiet=False):
+        """Discover voices from an optional local KokoroTTS HTTP service."""
+        if self.voice_generation_running:
+            return
+        self.voice_status_var.set("Buscando voces neurales locales…")
+        threading.Thread(target=self._detect_kokoro_voices_worker, args=(quiet,), daemon=True).start()
+
+    def _detect_kokoro_voices_worker(self, quiet=False):
+        try:
+            request = urllib.request.Request(
+                self.kokoro_url + "/tts/voices",
+                headers={"Accept": "application/json"},
+                method="GET",
+            )
+            with urllib.request.urlopen(request, timeout=8) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            voices = parse_kokoro_voice_ids(payload)
+            if not voices:
+                raise RuntimeError(
+                    "El servidor respondió, pero no pude leer su lista de voces. "
+                    "Comprueba que estás usando la API de KokoroTTS compatible."
+                )
+            self.generation_queue.put(("kokoro_voices", voices, quiet))
+        except Exception as exc:
+            self.generation_queue.put(("kokoro_voices_error", str(exc), quiet))
+
     def open_windows_voice_settings(self):
         """Open Windows speech settings and explain how to refresh the installed voice list."""
         if os.name != "nt":
@@ -2317,6 +2408,10 @@ class App(tk.Tk):
 
     def detect_local_voices(self, quiet=False):
         if self.voice_generation_running:
+            return
+        if str(getattr(self, "voice_engine_var", tk.StringVar(value="Windows (básica)").get()).get()
+               if hasattr(getattr(self, "voice_engine_var", None), "get") else "") .startswith("Kokoro"):
+            self.detect_kokoro_voices(quiet=quiet)
             return
         if os.name != "nt":
             self.voice_status_var.set("La narración de Windows solo está disponible en Windows.")
