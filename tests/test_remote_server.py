@@ -110,13 +110,13 @@ class RemoteControlServerTests(unittest.TestCase):
         query = urlencode({"project_id": "1", "filename": "scene.png"})
         with self.request(
             "/api/upload?" + query, method="POST", token=self.server.token,
-            content_type="application/octet-stream", body=b"\\x89PNG\\r\\n\\x1a\\nvalid-test-payload",
+            content_type="application/octet-stream", body=b"\x89PNG\r\n\x1a\nvalid-test-payload",
         ) as response:
             payload = json.loads(response.read())
         self.assertTrue(payload["uploaded"])
         uploaded = self.projects_dir / "1" / payload["path"]
         self.assertTrue(uploaded.is_file())
-        self.assertEqual(uploaded.read_bytes(), b"\\x89PNG\\r\\n\\x1a\\nvalid-test-payload")
+        self.assertEqual(uploaded.read_bytes(), b"\x89PNG\r\n\x1a\nvalid-test-payload")
 
         query = urlencode({"project_id": "1", "filename": "program.exe"})
         with self.assertRaises(HTTPError) as caught:
