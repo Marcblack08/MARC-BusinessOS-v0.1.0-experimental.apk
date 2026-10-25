@@ -650,21 +650,23 @@ def scene_motion_filter(
     centered_x = "iw/2-(iw/zoom/2)"
     centered_y = "ih/2-(ih/zoom/2)"
     if move == 0:
-        zoom_expr = f"min(zoom+{step}*on,{zoom})"
+        zoom_expr = f"min(zoom+{step},{zoom})"
         x_expr, y_expr = centered_x, centered_y
     elif move == 1:
-        zoom_expr = f"max(1.0,{zoom}-{step}*on)"
+        # zoompan starts at zoom=1, so explicitly initialize the first frame at
+        # the target magnification, then reduce by a fixed amount each frame.
+        zoom_expr = f"if(eq(on,0),{zoom},max(1.0,zoom-{step}))"
         x_expr, y_expr = centered_x, centered_y
     elif move == 2:
-        zoom_expr = f"min(zoom+{step}*on,{zoom})"
+        zoom_expr = f"min(zoom+{step},{zoom})"
         x_expr = f"(iw-iw/zoom)*min(on/{frames},1)"
         y_expr = centered_y
     elif move == 3:
-        zoom_expr = f"min(zoom+{step}*on,{zoom})"
+        zoom_expr = f"min(zoom+{step},{zoom})"
         x_expr = f"(iw-iw/zoom)*(1-min(on/{frames},1))"
         y_expr = centered_y
     else:
-        zoom_expr = f"min(zoom+{step}*on,{zoom})"
+        zoom_expr = f"min(zoom+{step},{zoom})"
         x_expr = centered_x
         y_expr = f"(ih-ih/zoom)*min(on/{frames},1)"
     return (
