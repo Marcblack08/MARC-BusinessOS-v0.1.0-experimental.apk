@@ -724,6 +724,7 @@ class App(tk.Tk):
             highlightthickness=1, highlightbackground=self.colors["border"]
         )
         primary_actions.grid(row=0, column=0, sticky="ew")
+        self.primary_actions = primary_actions
         primary_actions.grid_columnconfigure(4, weight=1)
         self.generate_button = ttk.Button(primary_actions, text="✦ Generar guion", style="Accent.TButton",
                                           command=self.generate_script)
