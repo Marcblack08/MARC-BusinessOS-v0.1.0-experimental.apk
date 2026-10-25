@@ -5626,6 +5626,16 @@ Write-Output 'NARRATION_OK'
 
         preview_audio_path = self.audio_track_path if self.audio_track_path and Path(self.audio_track_path).is_file() else ""
         chosen_voice = self.voice_var.get().strip() if hasattr(self, "voice_var") else "(Automática)"
+        if not preview_audio_path and str(self.voice_engine_var.get()).startswith("Kokoro"):
+            # Do not silently fall back to the flat Windows system voice when the user
+            # explicitly selected the neural engine. Generate it first; a second click
+            # starts rendering with the now-assigned WAV track.
+            self.studio_tabs.select(self.audio_tab)
+            self.voice_status_var.set(
+                "Kokoro seleccionado: primero genera la narración neural. Cuando termine, vuelve a Vista previa o Exportar MP4."
+            )
+            self.generate_kokoro_voice()
+            return
         if not preview_audio_path and os.name == "nt":
             voice_count = len(self.available_voice_names)
             speaker_count = len(extract_speaker_names(row["script"] or ""))
