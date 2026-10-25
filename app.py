@@ -2454,11 +2454,12 @@ class App(tk.Tk):
                 "Genera un guion con etiquetas de hablante o añádelas al texto."
             )
             return
-        voices = list(getattr(self, "available_voice_names", []))
+        is_kokoro = str(self.voice_engine_var.get()).startswith("Kokoro")
+        voices = list(self.kokoro_voice_names if is_kokoro else self.available_voice_names)
         if not voices:
             messagebox.showwarning(
                 "Primero detecta las voces",
-                "Pulsa «Detectar voces» en Audio para leer las voces SAPI que están instaladas en Windows."
+                "Pulsa «Detectar voces» en Audio para cargar las voces del motor seleccionado."
             )
             return
         dialog = tk.Toplevel(self)
@@ -2511,9 +2512,129 @@ class App(tk.Tk):
         ttk.Button(actions, text="Guardar asignaciones", style="Accent.TButton",
                    command=save_mapping).pack(side="right", padx=(0, 8))
 
+    def generate_kokoro_voice(self):
+        """Generate expressive multi-speaker narration through an optional local KokoroTTS server."""
+        if not self.kokoro_voice_names:
+            messagebox.showwarning(
+                "Primero conecta Kokoro",
+                "Pulsa «Detectar voces». Si no encuentra el servidor, pulsa «Configurar Kokoro» para ver cómo instalarlo."
+            )
+            self.detect_kokoro_voices(quiet=False)
+            return
+        raw_script = self.script_text.get("1.0", "end-1c")
+        if not parse_script_scenes(raw_script):
+            messagebox.showwarning("Sin guion", "Genera o escribe un guion antes de crear la narración.")
+            return
+        if self.current_id is None:
+            self.save_project(quiet=True)
+        if self.current_id is None:
+            messagebox.showwarning("Guarda el proyecto", "Completa el título y la premisa antes de generar la narración.")
+            return
+        chosen_voice = self.voice_var.get().strip()
+        if chosen_voice not in self.kokoro_voice_names:
+            messagebox.showwarning("Selecciona una voz", "Elige una voz Kokoro de la lista detectada.")
+            return
+        if self.audio_track_path and Path(self.audio_track_path).is_file():
+            if not messagebox.askyesno(
+                "Reemplazar pista de audio",
+                "Este proyecto ya tiene una pista de audio. La nueva narración será la pista actual, "
+                "y la pista anterior permanecerá como archivo en los recursos. ¿Continuar?"
+            ):
+                return
+        try:
+            ssml, speaker_map = build_kokoro_ssml(
+                raw_script, self.kokoro_voice_names, chosen_voice, self.voice_assignments
+            )
+        except (ValueError, TypeError) as exc:
+            messagebox.showwarning("No se pudo preparar el guion de voz", str(exc))
+            return
+        assets_dir = self._project_assets_dir()
+        if assets_dir is None:
+            return
+        try:
+            assets_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            messagebox.showerror("No se pudo preparar el audio", str(exc))
+            return
+        output_path = assets_dir / "narration_kokoro.pending.wav"
+        self._pipeline_checkpoint(
+            "narration", "running",
+            f"Kokoro local · voz principal {chosen_voice} · {len(set(speaker_map.values()))} timbres"
+        )
+        self.voice_generation_running = True
+        self.voice_cancel_event.clear()
+        self._set_voice_state(True)
+        self.progressbar.configure(mode="indeterminate")
+        self.progressbar.start(12)
+        self.progress_label_var.set("Generando narración neural")
+        self.progress_detail_var.set("Preparando diálogo, voces por personaje y prosodia emocional…")
+        self.voice_status_var.set(
+            "Kokoro está sintetizando la narración localmente. Puede tardar según el equipo y la duración del guion."
+        )
+        self.status_var.set("Generación de voz neural en curso.")
+        threading.Thread(
+            target=self._kokoro_voice_worker,
+            args=(int(self.current_id), ssml, str(output_path), chosen_voice, self.kokoro_url,
+                  len(set(speaker_map.values()))),
+            daemon=True,
+        ).start()
+
+    def _kokoro_voice_worker(self, project_id, ssml, output_path, voice_name, base_url, voice_count):
+        """Call the local Kokoro HTTP API; narration never leaves the local machine."""
+        temporary = Path(output_path)
+        try:
+            body = json.dumps({
+                "input_type": "ssml",
+                "text": ssml,
+                "voice": voice_name,
+                "output_format": "wav",
+            }, ensure_ascii=False).encode("utf-8")
+            request = urllib.request.Request(
+                str(base_url).rstrip("/") + "/tts/generate",
+                data=body,
+                headers={"Content-Type": "application/json", "Accept": "audio/wav"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=900) as response:
+                audio = response.read()
+                content_type = str(response.headers.get("Content-Type", "")).casefold()
+            if self.voice_cancel_event.is_set():
+                self.generation_queue.put(("voice_cancelled",))
+                return
+            if "json" in content_type:
+                try:
+                    payload = json.loads(audio.decode("utf-8", errors="replace"))
+                    detail = str(payload.get("error") or payload.get("detail") or payload)
+                except Exception:
+                    detail = audio.decode("utf-8", errors="replace")[:600]
+                raise RuntimeError("Kokoro devolvió un error de API: " + detail)
+            if len(audio) < 44 or not audio.startswith(b"RIFF"):
+                detail = audio[:300].decode("utf-8", errors="replace")
+                raise RuntimeError("Kokoro no devolvió un WAV válido. " + detail)
+            temporary.parent.mkdir(parents=True, exist_ok=True)
+            temporary.write_bytes(audio)
+            final_path = temporary.with_name("narration_kokoro.wav")
+            temporary.replace(final_path)
+            label = f"Kokoro neural · {voice_name} · {voice_count} timbres"
+            self.generation_queue.put(("voice_done", project_id, str(final_path.resolve()), label))
+        except Exception as exc:
+            if self.voice_cancel_event.is_set():
+                self.generation_queue.put(("voice_cancelled",))
+            else:
+                self.generation_queue.put(("voice_error", str(exc), "kokoro"))
+        finally:
+            if self.voice_cancel_event.is_set():
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
     def generate_local_voice(self):
         if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        if str(self.voice_engine_var.get()).startswith("Kokoro"):
+            self.generate_kokoro_voice()
             return
         if os.name != "nt":
             messagebox.showinfo("Solo Windows", "La narración local integrada utiliza las voces instaladas de Windows.")
@@ -2692,6 +2813,7 @@ Write-Output 'NARRATION_OK'
         self._set_scene_list_state(active)
         self.image_model_combo.configure(state="disabled" if active else "readonly")
         self.voice_combo.configure(state="disabled" if active else "readonly")
+        self.voice_engine_combo.configure(state="disabled" if active else "readonly")
         for widget, idle_state in self.form_widgets:
             widget.configure(state="disabled" if active else idle_state)
         self.script_text.configure(state="disabled" if active else "normal")
@@ -2703,7 +2825,12 @@ Write-Output 'NARRATION_OK'
         if self.voice_generation_running:
             self.voice_cancel_event.set()
             self.cancel_voice_button.configure(state="disabled")
-            self.voice_status_var.set("Cancelación solicitada; deteniendo la síntesis de voz…")
+            if str(self.voice_engine_var.get()).startswith("Kokoro"):
+                self.voice_status_var.set(
+                    "Cancelación solicitada; Kokoro descartará el audio cuando termine la petición activa."
+                )
+            else:
+                self.voice_status_var.set("Cancelación solicitada; deteniendo la síntesis de voz…")
 
     def _local_voice_worker(self, project_id, text_path, script_path, output_path, voice_name, voice_map_path=""):
         log_path = Path(text_path).with_name("synthesize_voice.log")
@@ -4835,17 +4962,59 @@ Write-Output 'NARRATION_OK'
                     self.voice_status_var.set("Cancelado.")
                     self.status_var.set("Se canceló la síntesis de voz local.")
                 elif kind == "voice_error":
-                    self._pipeline_checkpoint("narration", "failed", "No se pudo generar la narración", error=str(event[1]))
+                    engine_label = "Kokoro" if len(event) > 2 and event[2] == "kokoro" else "Windows"
+                    self._pipeline_checkpoint("narration", "failed", f"No se pudo generar la narración ({engine_label})", error=str(event[1]))
                     self.voice_generation_running = False
                     self._set_voice_state(False)
                     self.progress_label_var.set("Error al generar la voz")
-                    self.progress_detail_var.set("Comprueba que Windows tenga System.Speech y una voz instalada.")
-                    self.voice_status_var.set("Falló la generación de voz.")
-                    self.status_var.set("No se pudo completar la narración local.")
-                    messagebox.showerror(
-                        "Error de narración local",
-                        "Windows no pudo generar la narración. Revisa que haya una voz instalada y prueba otra vez.\n\n" + event[1]
-                    )
+                    if engine_label == "Kokoro":
+                        self.progress_detail_var.set("Comprueba que el servidor Kokoro esté activo y la voz seleccionada siga disponible.")
+                        self.voice_status_var.set("Falló la generación de voz neural.")
+                        self.status_var.set("No se pudo completar la narración neural.")
+                        message = "Kokoro no pudo generar la narración. Revisa el servidor local y la voz seleccionada.\n\n" + event[1]
+                    else:
+                        self.progress_detail_var.set("Comprueba que Windows tenga System.Speech y una voz instalada.")
+                        self.voice_status_var.set("Falló la generación de voz.")
+                        self.status_var.set("No se pudo completar la narración local.")
+                        message = "Windows no pudo generar la narración. Revisa que haya una voz instalada y prueba otra vez.\n\n" + event[1]
+                    messagebox.showerror("Error de narración local", message)
+                elif kind == "kokoro_voices":
+                    voices, quiet = event[1], event[2]
+                    self.kokoro_voice_names = list(voices)
+                    if str(self.voice_engine_var.get()).startswith("Kokoro"):
+                        self.voice_combo.configure(values=self.kokoro_voice_names)
+                        current = self.voice_var.get()
+                        if current not in self.kokoro_voice_names:
+                            preferred = next(
+                                (name for name in ("ef_dora", "em_alex", "em_santa")
+                                 if name in self.kokoro_voice_names),
+                                self.kokoro_voice_names[0] if self.kokoro_voice_names else ""
+                            )
+                            self.voice_var.set(preferred)
+                        self.voice_status_var.set(
+                            f"Kokoro conectado · {len(self.kokoro_voice_names)} voces disponibles. "
+                            "Las etiquetas emocionales ajustan la prosodia y los personajes pueden usar timbres distintos."
+                        )
+                        if not quiet:
+                            messagebox.showinfo(
+                                "Voces neurales detectadas",
+                                f"Kokoro está conectado y expone {len(self.kokoro_voice_names)} voces. "
+                                "MARC asignará voces diferentes por personaje cuando haya más de una disponible."
+                            )
+                elif kind == "kokoro_voices_error":
+                    detail, quiet = event[1], event[2]
+                    if str(self.voice_engine_var.get()).startswith("Kokoro"):
+                        self.voice_combo.configure(values=[])
+                        self.voice_var.set("")
+                        self.voice_status_var.set(
+                            "Kokoro no está conectado. Pulsa «Configurar Kokoro» para instalarlo o iniciar el servidor."
+                        )
+                        if not quiet:
+                            messagebox.showwarning(
+                                "Motor neural no disponible",
+                                f"No se encontró el servidor Kokoro en {self.kokoro_url}. "
+                                "Inicia el servidor local y vuelve a pulsar «Detectar voces».\n\n" + detail
+                            )
                 elif kind == "image_models":
                     models, quiet = event[1], event[2]
                     base_url = event[3] if len(event) > 3 else COMFYUI_URL
@@ -5609,6 +5778,7 @@ Write-Output 'NARRATION_OK'
             button.configure(state=state)
         self.cancel_voice_button.configure(state="disabled")
         self.voice_combo.configure(state="disabled" if active else "readonly")
+        self.voice_engine_combo.configure(state="disabled" if active else "readonly")
         self.project_list.configure(state=state)
         self.cancel_button.configure(state="disabled")
         for widget, idle_state in self.form_widgets:
