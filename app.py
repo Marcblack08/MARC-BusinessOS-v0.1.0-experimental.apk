@@ -604,7 +604,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 11, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=13, pady=(14, 2))
         tk.Label(library, text="Proyectos y guiones", bg=self.colors["panel"], fg=self.colors["muted"],
                  font=("Segoe UI", 9), anchor="w").grid(row=1, column=0, sticky="ew", padx=13, pady=(0, 8))
-        self.project_search_var = tk.StringVar(value="")
+        self.project_search_var = tk.StringVar(value="Buscar proyectos...")
         search_entry = ttk.Entry(library, textvariable=self.project_search_var, style="TEntry")
         search_entry.grid(row=2, column=0, sticky="ew", padx=9, pady=(0, 8))
         self.project_list = tk.Listbox(library, bg=self.colors["input"], fg=self.colors["text"],
@@ -615,6 +615,14 @@ class App(tk.Tk):
         self.project_list.grid(row=3, column=0, sticky="nsew", padx=8)
         self.project_list.bind("<<ListboxSelect>>", self.load_selected)
         self.project_search_var.trace_add("write", lambda *_args: self.refresh_projects())
+        def clear_project_search(_event=None):
+            if self.project_search_var.get() == "Buscar proyectos...":
+                self.project_search_var.set("")
+        def restore_project_search(_event=None):
+            if not self.project_search_var.get().strip():
+                self.project_search_var.set("Buscar proyectos...")
+        search_entry.bind("<FocusIn>", clear_project_search)
+        search_entry.bind("<FocusOut>", restore_project_search)
         lib_buttons = tk.Frame(library, bg=self.colors["panel"], padx=8, pady=8)
         lib_buttons.grid(row=4, column=0, sticky="ew")
         self.new_project_button = ttk.Button(lib_buttons, text="+ Nuevo proyecto", style="Accent.TButton",
@@ -4636,6 +4644,14 @@ Write-Output 'NARRATION_OK'
 
     def refresh_projects(self):
         rows = self.conn.execute("SELECT id,title,approved FROM projects ORDER BY id DESC").fetchall()
+        query = getattr(self, "project_search_var", tk.StringVar(value="")).get().strip().casefold()
+        if query == "buscar proyectos...":
+            query = ""
+        if query:
+            rows = [
+                row for row in rows
+                if query in str(row["title"]).casefold() or query in str(row["id"])
+            ]
         self.project_rows = rows
         self.project_list.delete(0, "end")
         selected_index = None
