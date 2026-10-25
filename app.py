@@ -5439,6 +5439,8 @@ Write-Output 'NARRATION_OK'
         scene_dir.mkdir(parents=True, exist_ok=True)
         output_path = Path(output)
         temp_output_path = output_path.with_name(output_path.stem + ".marc_rendering.mp4")
+        # Each source clip carries a small tail so the next shot can cross-dissolve over it.
+        crossfade_seconds = 0.4 if transition_style == "Fundido suave" else 0.0
 
         def run_ffmpeg(cmd, log_name, cwd=None):
             log_path = scene_dir / log_name
@@ -5574,7 +5576,9 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                 if self.render_cancel_event.is_set():
                     raise RuntimeError("__MARC_RENDER_CANCELLED__")
                 seconds = int(durations[index])
-                source_text = re.sub(r"\[([^\]]+)\]\s*:\s*", "", " ".join(scene["text"].split())).strip()
+                clip_seconds = seconds + crossfade_seconds
+                source_text = re.sub(r"\[EMOC[IÍ]ON\s*=\s*[^\]]{1,32}\]\s*", "", " ".join(scene["text"].split()), flags=re.IGNORECASE)
+                source_text = re.sub(r"\[([^\]]+)\]\s*:\s*", "", source_text).strip()
                 asset = asset_map.get(str(index + 1), "")
                 asset_signature = None
                 if asset and Path(asset).is_file():
@@ -5585,14 +5589,14 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                         "mtime_ns": stat.st_mtime_ns
                     }
                 cache_payload = {
-                    "scene": scene, "duration": seconds, "asset": asset_signature,
+                    "scene": scene, "duration": seconds, "clip_duration": clip_seconds, "asset": asset_signature,
                     "animation": animation_style, "intensity": animation_intensity,
                     "overlay": overlay_mode, "transition": transition_style,
                     "subtitle_font": subtitle_font, "subtitle_size": subtitle_size,
                     "subtitle_color": subtitle_color_value, "subtitle_position": subtitle_position,
                     "subtitle_outline": bool(subtitle_outline), "subtitle_fontfile": subtitle_fontfile,
                     "width": width, "height": height,
-                    "fps": int(fps), "preset": "ultrafast", "crf": 25, "version": 5
+                    "fps": int(fps), "preset": "ultrafast", "crf": 25, "version": 6
                 }
                 cache_fingerprint = hashlib.sha256(
                     json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -5651,18 +5655,17 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                             label_file, subtitle_fontfile or None, subtitle_size_px,
                             color=subtitle_color_value, position=subtitle_position, outline=subtitle_outline
                         )
-                    motion = scene_motion_filter(animation_style, width, height, seconds, animation_intensity)
+                    motion = scene_motion_filter(
+                        animation_style, width, height, max(1, math.ceil(clip_seconds)),
+                        animation_intensity, shot_index=index
+                    )
                     filters = [motion]
                     if label_filter:
                         filters.append(label_filter)
-                    if transition_style == "Fundido suave":
-                        fade = min(0.25, max(0.08, seconds / 3.0))
-                        filters.extend([f"fade=t=in:st=0:d={fade:.3f}",
-                                        f"fade=t=out:st={max(0.0, seconds-fade):.3f}:d={fade:.3f}"])
                     video_filter = ",".join(filters)
                     cmd = [
                         ffmpeg, "-y", "-loop", "1", "-framerate", str(fps), "-i", str(Path(asset).resolve()),
-                        "-t", str(seconds), "-vf", video_filter, "-an", "-r", str(fps),
+                        "-t", str(clip_seconds), "-vf", video_filter, "-an", "-r", str(fps),
                         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
                         "-crf", "25", "-movflags", "+faststart", str(scene_file)
                     ]
@@ -5671,13 +5674,10 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                         "drawbox=x=0:y=0:w=iw:h=8:color=0x168bff@0.90:t=fill,"
                         + draw_filter
                     )
-                    if transition_style == "Fundido suave":
-                        fade = min(0.25, max(0.08, seconds / 3.0))
-                        video_filter += f",fade=t=in:st=0:d={fade:.3f},fade=t=out:st={max(0.0, seconds-fade):.3f}:d={fade:.3f}"
                     cmd = [
                         ffmpeg, "-y", "-f", "lavfi", "-i",
                         f"color=c=0x0b1320:s={width}x{height}:r={fps}",
-                        "-t", str(seconds), "-vf", video_filter, "-an", "-r", str(fps),
+                        "-t", str(clip_seconds), "-vf", video_filter, "-an", "-r", str(fps),
                         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
                         "-crf", "25", "-movflags", "+faststart", str(scene_file)
                     ]
