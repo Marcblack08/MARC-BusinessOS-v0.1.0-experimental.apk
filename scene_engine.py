@@ -44,6 +44,8 @@ def build_scene_visual_brief(
     scene = scene if isinstance(scene, dict) else {}
     title = " ".join(str(scene.get("title", "")).split())[:100]
     raw_text = str(scene.get("text", "") or "").strip()
+    # Performance cues are for narration synthesis, not visible caption/image text.
+    raw_text = re.sub(r"\[EMOC[IÍ]ON\s*=\s*[^\]]{1,32}\]\s*", "", raw_text, flags=re.IGNORECASE)
     normalized_text = " ".join(raw_text.split())
     excerpt_limit = max(0, int(max_excerpt_chars))
     canon_limit = max(0, int(max_canon_chars))
@@ -614,32 +616,61 @@ def build_subtitle_drawtext_filter(textfile: str | Path, fontfile: str | Path | 
 
 
 def scene_motion_filter(
-    animation_style: str, width: int, height: int, seconds: int, intensity: str = "Normal"
+    animation_style: str,
+    width: int,
+    height: int,
+    seconds: int,
+    intensity: str = "Normal",
+    shot_index: int = 0,
 ) -> str:
-    """Return an FFmpeg motion filter for still artwork, scaled by the user's motion intensity."""
+    """Build a per-shot camera move for still artwork (push, pull, pan or tilt)."""
     style = (animation_style or "").lower()
     level = (intensity or "Normal").strip().lower()
     if "pixel" in style:
         low_w, low_h = max(160, width // 5), max(90, height // 5)
         return f"scale={low_w}:{low_h}:flags=neighbor,scale={width}:{height}:flags=neighbor,fps=24"
     if "stop motion" in style:
-        return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps=12, fps=24"
+        return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps=12,fps=24"
     if level == "suave":
-        zoom, step = "1.025", "0.00035"
+        zoom, step = "1.035", "0.00045"
     elif level == "muy animado":
-        zoom, step = "1.16", "0.0028"
+        zoom, step = "1.19", "0.0030"
     else:
-        zoom, step = "1.07", "0.0012"
+        zoom, step = "1.085", "0.0015"
     if "3d" in style or "cinematográfica" in style or "dinámicos" in style:
         if level == "normal":
-            zoom, step = "1.10", "0.0018"
+            zoom, step = "1.11", "0.0019"
         elif level == "suave":
-            zoom, step = "1.04", "0.0006"
-    # The still image is looped by the caller; zoompan creates camera movement, not character animation.
+            zoom, step = "1.045", "0.00065"
+
+    # Different camera directions across adjacent shots prevent every still from
+    # using the same centered push-in. This is camera movement, not body animation.
+    move = max(0, int(shot_index)) % 5
+    frames = max(24, max(1, int(seconds)) * 24)
+    centered_x = "iw/2-(iw/zoom/2)"
+    centered_y = "ih/2-(ih/zoom/2)"
+    if move == 0:
+        zoom_expr = f"min(zoom+{step}*on,{zoom})"
+        x_expr, y_expr = centered_x, centered_y
+    elif move == 1:
+        zoom_expr = f"max(1.0,{zoom}-{step}*on)"
+        x_expr, y_expr = centered_x, centered_y
+    elif move == 2:
+        zoom_expr = f"min(zoom+{step}*on,{zoom})"
+        x_expr = f"(iw-iw/zoom)*min(on/{frames},1)"
+        y_expr = centered_y
+    elif move == 3:
+        zoom_expr = f"min(zoom+{step}*on,{zoom})"
+        x_expr = f"(iw-iw/zoom)*(1-min(on/{frames},1))"
+        y_expr = centered_y
+    else:
+        zoom_expr = f"min(zoom+{step}*on,{zoom})"
+        x_expr = centered_x
+        y_expr = f"(ih-ih/zoom)*min(on/{frames},1)"
     return (
         f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{height},zoompan=z='min(zoom+{step},{zoom})':"
-        f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={width}x{height}:fps=24"
+        f"crop={width}:{height},zoompan=z='{zoom_expr}':"
+        f"x='{x_expr}':y='{y_expr}':d=1:s={width}x{height}:fps=24"
     )
 
 
