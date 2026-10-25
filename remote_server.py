@@ -431,6 +431,7 @@ class RemoteControlServer:
                 destination = destination_dir / (uuid.uuid4().hex[:10] + "_" + filename)
                 remaining = length
                 first_chunk = True
+                signature_invalid = False
                 try:
                     with destination.open("wb") as output:
                         while remaining:
@@ -440,10 +441,9 @@ class RemoteControlServer:
                             if first_chunk:
                                 first_chunk = False
                                 if not _upload_signature_ok(filename, chunk[:32]):
-                                    destination.unlink(missing_ok=True)
+                                    signature_invalid = True
                                     self.close_connection = True
-                                    self._json(415, {"error": "El contenido no coincide con el tipo de archivo declarado."})
-                                    return
+                                    break
                             output.write(chunk)
                             remaining -= len(chunk)
                 except OSError:
@@ -452,6 +452,13 @@ class RemoteControlServer:
                     except OSError:
                         pass
                     self._json(400, {"error": "No se pudo guardar el archivo. Comprueba el espacio disponible e inténtalo de nuevo."})
+                    return
+                if signature_invalid:
+                    try:
+                        destination.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                    self._json(415, {"error": "El contenido no coincide con el tipo de archivo declarado."})
                     return
                 self._json(201, {"uploaded": True, "path": str(destination.relative_to(owner.projects_dir / str(project_id))).replace("\\", "/"),
                                  "name": destination.name, "size": length})
