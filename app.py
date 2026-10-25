@@ -739,8 +739,9 @@ class App(tk.Tk):
             primary_actions, text="⚙ Ajustes −", command=self.toggle_configuration)
         self.config_toggle_button.grid(row=0, column=5, sticky="e", padx=(8, 0))
 
-        secondary_actions = tk.Frame(toolrow, bg=self.colors["bg"])
-        secondary_actions.grid(row=1, column=0, sticky="ew", pady=(5, 0))
+        self.secondary_actions = tk.Frame(toolrow, bg=self.colors["bg"])
+        self.secondary_actions.grid(row=1, column=0, sticky="ew", pady=(5, 0))
+        secondary_actions = self.secondary_actions
         self.cancel_button = ttk.Button(
             secondary_actions, text="Cancelar guion", command=self.cancel_generation, state="disabled"
         )
