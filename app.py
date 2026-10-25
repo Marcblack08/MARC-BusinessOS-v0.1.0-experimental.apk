@@ -588,14 +588,14 @@ class App(tk.Tk):
 
         workspace = tk.PanedWindow(shell, orient="horizontal", sashwidth=7, sashrelief="flat",
                                    bg=self.colors["bg"], bd=0, opaqueresize=True, showhandle=False)
-        workspace.grid(row=1, column=0, sticky="nsew", padx=14, pady=14)
+        workspace.grid(row=1, column=0, sticky="nsew", padx=12, pady=12)
         self.workspace_panes = workspace
 
-        library = tk.Frame(workspace, bg=self.colors["panel"], width=250,
+        library = tk.Frame(workspace, bg=self.colors["panel"], width=225,
                            highlightthickness=1, highlightbackground=self.colors["border"])
         library.grid_rowconfigure(2, weight=1)
         library.grid_columnconfigure(0, weight=1)
-        workspace.add(library, minsize=205, width=250)
+        workspace.add(library, minsize=180, width=225)
         self.project_library_pane = library
         self.project_library_visible = True
         tk.Label(library, text="BIBLIOTECA", bg=self.colors["panel"], fg=self.colors["text"],
@@ -619,7 +619,7 @@ class App(tk.Tk):
         self.continue_series_button.pack(fill="x", pady=(6, 0))
 
         editor = tk.Frame(workspace, bg=self.colors["bg"])
-        workspace.add(editor, minsize=620, stretch="always")
+        workspace.add(editor, minsize=520, stretch="always")
         self.editor_pane = editor
         editor.grid_rowconfigure(0, weight=1)
         editor.grid_columnconfigure(0, weight=1)
@@ -631,7 +631,7 @@ class App(tk.Tk):
 
         controls_area = tk.Frame(vertical, bg=self.colors["bg"])
         self.controls_area = controls_area
-        vertical.add(controls_area, minsize=285, width=325, stretch="never")
+        vertical.add(controls_area, minsize=250, width=310, stretch="never")
         controls_area.grid_rowconfigure(0, weight=1)
         controls_area.grid_columnconfigure(0, weight=1)
         self.config_canvas = tk.Canvas(controls_area, bg=self.colors["bg"], highlightthickness=0, borderwidth=0)
@@ -639,7 +639,7 @@ class App(tk.Tk):
         config_scroll = ttk.Scrollbar(controls_area, orient="vertical", command=self.config_canvas.yview)
         config_scroll.grid(row=0, column=1, sticky="ns")
         self.config_canvas.configure(yscrollcommand=config_scroll.set)
-        card = tk.Frame(self.config_canvas, bg=self.colors["panel"], padx=10, pady=10,
+        card = tk.Frame(self.config_canvas, bg=self.colors["panel"], padx=12, pady=12,
                         highlightthickness=1, highlightbackground=self.colors["border"])
         self.config_canvas_window = self.config_canvas.create_window((0, 0), window=card, anchor="nw")
         card.bind("<Configure>", lambda _event: self.config_canvas.configure(scrollregion=self.config_canvas.bbox("all")))
@@ -708,38 +708,56 @@ class App(tk.Tk):
 
         lower = tk.Frame(vertical, bg=self.colors["bg"])
         self.lower_panel = lower
-        vertical.add(lower, minsize=620, stretch="always")
+        vertical.add(lower, minsize=500, stretch="always")
         lower.grid_rowconfigure(3, weight=1)
         lower.grid_columnconfigure(0, weight=1)
 
+        # Actions are intentionally split into two compact rows so they remain
+        # reachable on 1024px-wide screens instead of disappearing off-screen.
         toolrow = tk.Frame(lower, bg=self.colors["bg"])
         toolrow.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        toolrow.grid_columnconfigure(0, weight=1)
         self.toolrow = toolrow
-        self.generate_button = ttk.Button(toolrow, text="✦ Generar guion", style="Accent.TButton",
-                                          command=self.generate_script)
-        self.generate_button.pack(side="left")
-        self.cancel_button = ttk.Button(toolrow, text="Cancelar", command=self.cancel_generation, state="disabled")
-        self.cancel_button.pack(side="left", padx=(6, 0))
-        self.save_button = ttk.Button(toolrow, text="Guardar", command=self.save_project)
-        self.save_button.pack(side="left", padx=(6, 0))
-        self.approve_button = ttk.Button(toolrow, text="Aprobar", command=self.approve_script)
-        self.approve_button.pack(side="left", padx=(6, 0))
-        self.export_button = ttk.Button(toolrow, text="Exportar MP4", command=self.export_video)
-        self.export_button.pack(side="left", padx=(6, 0))
-        self.preview_render_button = ttk.Button(
-            toolrow, text="Vista previa MP4", command=self.preview_video_render)
-        self.preview_render_button.pack(side="left", padx=(6, 0))
-        self.image_setup_button = ttk.Button(
-            toolrow, text="✦ Configurar imágenes IA", style="Accent.TButton", command=self.open_image_setup
+
+        primary_actions = tk.Frame(
+            toolrow, bg=self.colors["panel"], padx=8, pady=6,
+            highlightthickness=1, highlightbackground=self.colors["border"]
         )
-        self.image_setup_button.pack(side="left", padx=(6, 0))
-        self.cancel_render_button = ttk.Button(toolrow, text="Cancelar render",
-                                               command=self.cancel_export, state="disabled")
-        self.cancel_render_button.pack(side="left", padx=(6, 0))
+        primary_actions.grid(row=0, column=0, sticky="ew")
+        primary_actions.grid_columnconfigure(4, weight=1)
+        self.generate_button = ttk.Button(primary_actions, text="✦ Generar guion", style="Accent.TButton",
+                                          command=self.generate_script)
+        self.generate_button.grid(row=0, column=0, sticky="w")
+        self.save_button = ttk.Button(primary_actions, text="Guardar", command=self.save_project)
+        self.save_button.grid(row=0, column=1, sticky="w", padx=(6, 0))
+        self.approve_button = ttk.Button(primary_actions, text="Aprobar", command=self.approve_script)
+        self.approve_button.grid(row=0, column=2, sticky="w", padx=(6, 0))
+        self.export_button = ttk.Button(primary_actions, text="Exportar MP4", command=self.export_video)
+        self.export_button.grid(row=0, column=3, sticky="w", padx=(6, 0))
         self.configuration_visible = True
         self.config_toggle_button = ttk.Button(
-            toolrow, text="Ocultar configuración", command=self.toggle_configuration)
-        self.config_toggle_button.pack(side="right")
+            primary_actions, text="⚙ Ajustes −", command=self.toggle_configuration)
+        self.config_toggle_button.grid(row=0, column=5, sticky="e", padx=(8, 0))
+
+        secondary_actions = tk.Frame(toolrow, bg=self.colors["bg"])
+        secondary_actions.grid(row=1, column=0, sticky="ew", pady=(5, 0))
+        self.cancel_button = ttk.Button(
+            secondary_actions, text="Cancelar guion", command=self.cancel_generation, state="disabled"
+        )
+        self.cancel_button.pack(side="left")
+        self.preview_render_button = ttk.Button(
+            secondary_actions, text="Vista previa MP4", command=self.preview_video_render
+        )
+        self.preview_render_button.pack(side="left", padx=(6, 0))
+        self.image_setup_button = ttk.Button(
+            secondary_actions, text="✦ Configurar imágenes IA", style="Accent.TButton",
+            command=self.open_image_setup
+        )
+        self.image_setup_button.pack(side="left", padx=(6, 0))
+        self.cancel_render_button = ttk.Button(
+            secondary_actions, text="Cancelar render", command=self.cancel_export, state="disabled"
+        )
+        self.cancel_render_button.pack(side="left", padx=(6, 0))
 
         statuscard = tk.Frame(lower, bg=self.colors["panel"], padx=10, pady=6,
                               highlightthickness=1, highlightbackground=self.colors["border"])
@@ -792,7 +810,7 @@ class App(tk.Tk):
         monitor.grid_columnconfigure(0, weight=1)
         monitor.grid_rowconfigure(0, weight=1)
         self.preview_canvas = tk.Canvas(monitor, bg="#070c16", highlightthickness=0,
-                                        height=196, width=520)
+                                        height=178, width=460)
         self.preview_canvas.grid(row=0, column=0, sticky="nsew")
         self.preview_canvas.bind("<Configure>", lambda _event: self._render_preview_frame())
         self.preview_video_host = tk.Frame(monitor, bg="#070c16", borderwidth=0, highlightthickness=0)
@@ -3375,7 +3393,7 @@ Write-Output 'NARRATION_OK'
         if visible and not is_visible:
             self.vertical_panes.add(
                 self.controls_area, before=self.lower_panel,
-                minsize=285, width=325, stretch="never"
+                minsize=250, width=310, stretch="never"
             )
             self.configuration_visible = True
         elif not visible and is_visible:
@@ -3406,15 +3424,15 @@ Write-Output 'NARRATION_OK'
 
     def _field(self, parent, label, variable, row, col, values=None, span=1):
         cell = tk.Frame(parent, bg=self.colors["panel"])
-        cell.grid(row=row, column=col, columnspan=span, sticky="ew", padx=4, pady=3)
-        tk.Label(cell, text=label.upper(), bg=self.colors["panel"], fg="#8fa8c8",
-                 font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 3))
+        cell.grid(row=row, column=col, columnspan=span, sticky="ew", padx=4, pady=4)
+        tk.Label(cell, text=label.upper(), bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 4))
         if values is not None:
             widget = ttk.Combobox(cell, textvariable=variable, values=values,
                                   state="readonly", font=("Segoe UI", 9))
         else:
             widget = ttk.Entry(cell, textvariable=variable, font=("Segoe UI", 9))
-        widget.pack(fill="x", ipady=1)
+        widget.pack(fill="x", ipady=2)
         self.form_widgets.append((widget, "readonly" if values is not None else "normal"))
         return widget
 
