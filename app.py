@@ -500,11 +500,11 @@ class App(tk.Tk):
         self.colors = {
             # Premium midnight palette: ink background, layered navy surfaces,
             # electric-blue primary actions and restrained cyan highlights.
-            "bg": "#080e1b", "panel": "#111a2b", "panel2": "#1a2941",
-            "input": "#0b1322", "accent": "#2878ff", "accent_hover": "#4a91ff",
-            "text": "#f1f5ff", "muted": "#9eacc2", "border": "#2b3a54",
-            "success": "#71e0b3", "warning": "#ffd071", "danger": "#ff7894",
-            "glow": "#173b6b", "surface": "#14233a",
+            "bg": "#080d18", "panel": "#101a2b", "panel2": "#1a2a42",
+            "input": "#0a1220", "accent": "#397dff", "accent_hover": "#6096ff",
+            "text": "#f4f7ff", "muted": "#aab8ce", "border": "#293b56",
+            "success": "#70dfb4", "warning": "#f3ca79", "danger": "#ff8298",
+            "glow": "#19365f", "surface": "#142239",
         }
         self.configure(bg=self.colors["bg"])
         style = ttk.Style(self)
@@ -523,9 +523,9 @@ class App(tk.Tk):
         style.configure("KPI.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 18, "bold"))
         style.configure("TLabelFrame", background=self.colors["panel"], foreground=self.colors["text"], bordercolor=self.colors["border"], relief="solid", borderwidth=1)
         style.configure("TLabelFrame.Label", background=self.colors["panel"], foreground=self.colors["muted"], font=("Segoe UI", 9, "bold"))
-        style.configure("TButton", padding=(14, 10), font=("Segoe UI", 9, "bold"), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=1, bordercolor=self.colors["border"], focusthickness=2, focuscolor=self.colors["accent"], relief="flat")
+        style.configure("TButton", padding=(11, 8), font=("Segoe UI", 9, "bold"), background=self.colors["panel2"], foreground=self.colors["text"], borderwidth=1, bordercolor=self.colors["border"], focusthickness=2, focuscolor=self.colors["accent"], relief="flat")
         style.map("TButton", background=[("disabled", self.colors["panel"]), ("pressed", self.colors["accent"]), ("active", "#243a5c")], foreground=[("disabled", "#64758e"), ("active", self.colors["text"])], bordercolor=[("focus", self.colors["accent"]), ("active", "#35547d")])
-        style.configure("Accent.TButton", padding=(16, 11), font=("Segoe UI", 9, "bold"), background=self.colors["accent"], foreground="#ffffff", borderwidth=0, bordercolor=self.colors["accent"], focusthickness=2, focuscolor=self.colors["accent"], relief="flat")
+        style.configure("Accent.TButton", padding=(13, 9), font=("Segoe UI", 9, "bold"), background=self.colors["accent"], foreground="#ffffff", borderwidth=0, bordercolor=self.colors["accent"], focusthickness=2, focuscolor=self.colors["accent"], relief="flat")
         style.map("Accent.TButton", background=[("disabled", "#263a5c"), ("pressed", "#255edb"), ("active", self.colors["accent_hover"])], foreground=[("disabled", "#93a4bd"), ("active", "#ffffff")])
         style.configure("Quiet.TButton", padding=(10, 7), background=self.colors["panel"], foreground=self.colors["muted"], borderwidth=0, relief="flat")
         style.map("Quiet.TButton", background=[("active", self.colors["panel2"])], foreground=[("active", self.colors["text"])])
@@ -543,7 +543,7 @@ class App(tk.Tk):
         style.configure("Horizontal.TScrollbar", background=self.colors["panel2"], troughcolor=self.colors["bg"], arrowcolor=self.colors["muted"], bordercolor=self.colors["bg"], relief="flat", arrowsize=12)
         style.map("Horizontal.TScrollbar", background=[("active", self.colors["accent"])])
         style.configure("TNotebook", background=self.colors["bg"], borderwidth=0, tabmargins=(3, 5, 3, 0))
-        style.configure("TNotebook.Tab", background=self.colors["panel"], foreground=self.colors["muted"], padding=(19, 12), font=("Segoe UI", 9, "bold"), borderwidth=0)
+        style.configure("TNotebook.Tab", background=self.colors["panel"], foreground=self.colors["muted"], padding=(14, 9), font=("Segoe UI", 9, "bold"), borderwidth=0)
         style.map("TNotebook.Tab", background=[("selected", self.colors["accent"]), ("active", self.colors["panel2"])], foreground=[("selected", "#ffffff"), ("active", self.colors["text"])])
         style.configure("Treeview", background=self.colors["input"], fieldbackground=self.colors["input"], foreground=self.colors["text"], rowheight=36, borderwidth=0, font=("Segoe UI", 9))
         style.configure("Treeview.Heading", background=self.colors["panel2"], foreground="#a9caff", font=("Segoe UI", 9, "bold"), relief="flat", padding=(10, 9))
