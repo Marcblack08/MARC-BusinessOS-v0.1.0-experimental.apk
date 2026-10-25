@@ -2463,7 +2463,7 @@ class App(tk.Tk):
             )
             return
         dialog = tk.Toplevel(self)
-        dialog.title("Voces por personaje")
+        dialog.title("Voces por personaje · Kokoro" if is_kokoro else "Voces por personaje")
         dialog.configure(bg=self.colors["panel"])
         dialog.transient(self)
         dialog.grab_set()
@@ -2474,7 +2474,9 @@ class App(tk.Tk):
         tk.Label(body, text="ASIGNACIÓN DE VOCES", bg=self.colors["panel"],
                  fg=self.colors["text"], font=("Segoe UI", 13, "bold")).pack(anchor="w")
         tk.Label(body,
-                 text="Elige una voz local para el narrador y cada personaje. «Voz principal» utiliza la voz general seleccionada en Audio.",
+                 text=("Elige una voz neural para cada personaje. «Voz principal» usa la voz seleccionada en Audio."
+                       if is_kokoro else
+                       "Elige una voz local para el narrador y cada personaje. «Voz principal» utiliza la voz general seleccionada en Audio."),
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=560, justify="left").pack(anchor="w", pady=(5, 12))
         scroll = tk.Canvas(body, bg=self.colors["input"], highlightthickness=0)
