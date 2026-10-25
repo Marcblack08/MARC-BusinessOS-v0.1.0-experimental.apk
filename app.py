@@ -1138,6 +1138,7 @@ class App(tk.Tk):
         self.image_model_combo = ttk.Combobox(model_row, textvariable=self.image_model_var,
                                               values=[], state="readonly", width=32, font=("Segoe UI", 9))
         self.image_model_combo.pack(side="left")
+        self.image_model_combo.bind("<<ComboboxSelected>>", lambda _event: self.update_image_model_guidance())
         self.detect_models_button = ttk.Button(model_row, text="Detectar motor",
                                                 command=self.detect_image_models)
         self.detect_models_button.pack(side="left", padx=(6, 0))
@@ -1412,7 +1413,7 @@ class App(tk.Tk):
         voice_card.grid(row=3, column=0, sticky="ew", pady=(0, 10))
         tk.Label(voice_card, text="GENERAR NARRACIÓN LOCAL", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        tk.Label(voice_card, text="Usa las voces instaladas de Windows sin nube. Con etiquetas [NARRADOR]: y [PERSONAJE]:, MARC puede cambiar de voz entre hablantes; se requieren varias voces de Windows para oír timbres distintos.",
+        tk.Label(voice_card, text="MARC adapta ritmo, tono y volumen si el guion marca emociones. El timbre depende de las voces compatibles instaladas; puedes asignar una voz distinta a cada personaje.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
                  wraplength=1050, justify="left").pack(anchor="w", pady=(3, 10))
         voice_select_row = tk.Frame(voice_card, bg=self.colors["panel"])
@@ -1425,6 +1426,8 @@ class App(tk.Tk):
         self.voice_combo.pack(side="left")
         self.detect_voice_button = ttk.Button(voice_select_row, text="Detectar voces", command=self.detect_local_voices)
         self.detect_voice_button.pack(side="left", padx=(7, 0))
+        self.add_voices_button = ttk.Button(voice_select_row, text="Añadir voces de Windows", command=self.open_windows_voice_settings)
+        self.add_voices_button.pack(side="left", padx=(7, 0))
         voice_action_row = tk.Frame(voice_card, bg=self.colors["panel"])
         voice_action_row.pack(fill="x")
         self.assign_character_voices_button = ttk.Button(
@@ -2294,6 +2297,24 @@ class App(tk.Tk):
                 self.music_track_label_var.set("Sin música de fondo.")
         self._draw_timeline()
 
+    def open_windows_voice_settings(self):
+        """Open Windows speech settings and explain how to refresh the installed voice list."""
+        if os.name != "nt":
+            self.voice_status_var.set("La gestión de voces locales está disponible en Windows.")
+            return
+        try:
+            os.startfile("ms-settings:speech")
+            self.voice_status_var.set(
+                "En Configuración de Windows, añade una voz compatible con texto a voz. "
+                "Al terminar, vuelve a MARC y pulsa «Detectar voces»."
+            )
+        except (OSError, AttributeError) as exc:
+            messagebox.showinfo(
+                "Añadir voces de Windows",
+                "Abre Configuración → Hora e idioma → Voz, instala una voz compatible y vuelve a pulsar «Detectar voces».\n\n"
+                + str(exc)
+            )
+
     def detect_local_voices(self, quiet=False):
         if self.voice_generation_running:
             return
@@ -2564,7 +2585,7 @@ Write-Output 'NARRATION_OK'
             self.export_button, self.preview_render_button, self.delete_button, self.assign_image_button, self.clear_image_button,
             self.refresh_scenes_button, self.select_audio_button, self.clear_audio_button,
             self.detect_models_button, self.start_comfyui_button, self.generate_image_button, self.generate_missing_images_button, self.detect_voice_button,
-            self.generate_voice_button, self.assign_character_voices_button, self.inspector_assign_image_button,
+            self.generate_voice_button, self.assign_character_voices_button, self.add_voices_button, self.inspector_assign_image_button,
             self.inspector_generate_image_button, self.inspector_duration_button, self.export_srt_button,
             self.select_music_button, self.clear_music_button
         ):
@@ -3287,6 +3308,28 @@ Write-Output 'NARRATION_OK'
             messagebox.showerror(
                 "No se pudo abrir la configuración de imágenes",
                 f"Vuelve a abrir MARC e inténtalo de nuevo.\n\nDetalle: {exc}"
+            )
+
+    def update_image_model_guidance(self):
+        """Explain when a generic base checkpoint is likely to produce generic artwork."""
+        selected = str(self.image_model_var.get() or "").strip()
+        if not selected:
+            return
+        model = selected.casefold()
+        style = str(self.drawing_style_var.get() or "").casefold()
+        if "v1-5-pruned-emaonly" in model or "sd_v1-5" in model or "base" in Path(selected).stem.casefold():
+            self.image_ai_status_var.set(
+                "Checkpoint base detectado: suele producir imágenes genéricas. "
+                "Para mejorar, instala un checkpoint afinado para tu estilo (anime, ilustración o realismo) y selecciónalo aquí."
+            )
+        elif "anime" in style and not any(term in model for term in ("anime", "animagine", "anything", "meina", "counterfeit")):
+            self.image_ai_status_var.set(
+                "Para anime, un checkpoint especializado suele dar mejores resultados que un modelo general. "
+                "La calidad también depende de memoria y resolución."
+            )
+        else:
+            self.image_ai_status_var.set(
+                f"Checkpoint seleccionado: {selected}. MARC aplicará encuadre, continuidad visual y movimiento de cámara."
             )
 
     def detect_image_models(self, quiet=False):
@@ -4689,11 +4732,12 @@ Write-Output 'NARRATION_OK'
                         self.image_model_var.set(current_model)
                     elif models:
                         self.image_model_var.set(models[0])
-                    self.image_ai_status_var.set(
-                        f"ComfyUI conectado · {len(models)} checkpoint(s) · {base_url}"
-                        if models else
-                        f"ComfyUI conectado en {base_url}, pero falta un checkpoint en models/checkpoints"
-                    )
+                    if models:
+                        self.update_image_model_guidance()
+                    else:
+                        self.image_ai_status_var.set(
+                            f"ComfyUI conectado en {base_url}, pero falta un checkpoint en models/checkpoints"
+                        )
                     if not models and not quiet:
                         messagebox.showwarning(
                             "No hay modelos de imagen",
@@ -5434,7 +5478,7 @@ Write-Output 'NARRATION_OK'
                        self.select_audio_button, self.clear_audio_button,
                        self.select_music_button, self.clear_music_button,
                        self.detect_models_button, self.start_comfyui_button, self.generate_image_button, self.generate_missing_images_button,
-                       self.detect_voice_button, self.generate_voice_button, self.assign_character_voices_button,
+                       self.detect_voice_button, self.generate_voice_button, self.assign_character_voices_button, self.add_voices_button,
                        self.inspector_assign_image_button, self.inspector_generate_image_button,
                        self.inspector_duration_button, self.export_srt_button):
             button.configure(state=state)
