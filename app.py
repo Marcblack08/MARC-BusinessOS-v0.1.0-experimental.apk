@@ -1273,20 +1273,21 @@ class App(tk.Tk):
         # Hide duplicate panels; keep their dedicated tabs available.
         self.preview_dock.grid_remove()
         self.mini_timeline_panel.grid_remove()
-
-        # The original action buttons are children of primary_actions and use
-        # grid. Never call pack() on them: Tk forbids mixing pack and grid in
-        # the same parent, which previously crashed the packaged app at startup.
         self.secondary_actions.grid_remove()
-        self.generate_button.grid_remove()
-        self.save_button.grid_remove()
-        self.approve_button.grid_remove()
-        self.export_button.grid_remove()
-        self.config_toggle_button.grid_remove()
-        self.cancel_button.pack_forget()
-        self.preview_render_button.pack_forget()
-        self.image_setup_button.pack_forget()
-        self.cancel_render_button.pack_forget()
+
+        # Primary actions were created inside primary_actions and use grid.
+        # Secondary actions belong to secondary_actions and must stay there:
+        # Tk widgets cannot be reparented by calling grid() on another frame.
+        for widget in (
+            self.generate_button, self.save_button, self.approve_button,
+            self.export_button, self.config_toggle_button,
+        ):
+            widget.grid_remove()
+        for widget in (
+            self.cancel_button, self.preview_render_button, self.image_setup_button,
+            self.cancel_render_button,
+        ):
+            widget.pack_forget()
         self.header_diagnose_button.pack_forget()
         self.header_tools_button.pack_forget()
 
@@ -1302,10 +1303,8 @@ class App(tk.Tk):
         self.save_button.grid(row=0, column=3, sticky="w", padx=(6, 0))
         self.approve_button.configure(text="Aprobar guion")
         self.approve_button.grid(row=0, column=4, sticky="w", padx=(6, 0))
-        self.preview_render_button.configure(text="Vista previa")
-        self.preview_render_button.grid(row=0, column=5, sticky="w", padx=(6, 0))
         self.export_button.configure(text="Exportar MP4")
-        self.export_button.grid(row=0, column=6, sticky="w", padx=(6, 0))
+        self.export_button.grid(row=0, column=5, sticky="w", padx=(6, 0))
 
         self.more_button = ttk.Menubutton(self.primary_actions, text="Más ▾")
         self.more_menu = tk.Menu(
@@ -1314,8 +1313,9 @@ class App(tk.Tk):
             activebackground=self.colors["accent"], activeforeground="#ffffff",
             bd=0, relief="flat",
         )
-        self.more_menu.add_command(label="Biblioteca de proyectos", command=self.toggle_project_library)
+        self.more_menu.add_command(label="Vista previa MP4", command=self.preview_video_render)
         self.more_menu.add_command(label="Configurar imágenes IA", command=self.open_image_setup)
+        self.more_menu.add_command(label="Biblioteca de proyectos", command=self.toggle_project_library)
         self.more_menu.add_command(label="Diagnóstico del equipo", command=self.detect_pc_async)
         self.more_menu.add_command(label="Herramientas instaladas", command=self.check_tools)
         self.more_menu.add_command(label="Acceso remoto desde el teléfono", command=self.show_remote_access)
@@ -1325,7 +1325,7 @@ class App(tk.Tk):
         self.more_menu.add_command(label="Cancelar generación", command=self.cancel_generation)
         self.more_menu.add_command(label="Cancelar render", command=self.cancel_export)
         self.more_button.configure(menu=self.more_menu)
-        self.more_button.grid(row=0, column=7, sticky="w", padx=(6, 0))
+        self.more_button.grid(row=0, column=6, sticky="w", padx=(6, 0))
 
     def toggle_project_library(self):
         """Show or hide the saved-project library without shrinking the editor all day."""
