@@ -227,7 +227,7 @@ class App(tk.Tk):
         body = tk.Frame(window, bg=self.colors["panel"], padx=18, pady=16)
         body.pack(fill="both", expand=True)
         tk.Label(body, text="MARC · ACCESO REMOTO", bg=self.colors["panel"],
-                 fg=self.colors["text"], font=("Segoe UI", 13, "bold")).pack(anchor="w")
+                 fg=self.colors["text"], font=("Segoe UI", 14, "bold")).pack(anchor="w")
         tk.Label(body, text="Código privado para iniciar sesión desde el teléfono.",
                  bg=self.colors["panel"], fg=self.colors["muted"]).pack(anchor="w", pady=(6, 10))
         tk.Label(body, text="Código de acceso", bg=self.colors["panel"], fg=self.colors["text"]).pack(anchor="w")
@@ -633,16 +633,16 @@ class App(tk.Tk):
         self.brand_gradient_canvas.bind("<Configure>", self._draw_brand_gradient)
         self._brand_gradient_phase = 0.0
 
-        workspace = tk.PanedWindow(shell, orient="horizontal", sashwidth=7, sashrelief="flat",
+        workspace = tk.PanedWindow(shell, orient="horizontal", sashwidth=10, sashrelief="raised",
                                    bg=self.colors["bg"], bd=0, opaqueresize=True, showhandle=False)
         workspace.grid(row=2, column=0, sticky="nsew", padx=12, pady=12)
         self.workspace_panes = workspace
 
-        library = tk.Frame(workspace, bg=self.colors["panel"], width=225,
+        library = tk.Frame(workspace, bg=self.colors["panel"], width=165,
                            highlightthickness=1, highlightbackground=self.colors["border"])
         library.grid_rowconfigure(3, weight=1)
         library.grid_columnconfigure(0, weight=1)
-        workspace.add(library, minsize=180, width=225)
+        workspace.add(library, minsize=125, width=165, stretch="never")
         self.project_library_pane = library
         self.project_library_visible = True
         tk.Label(library, text="▣  BIBLIOTECA", bg=self.colors["panel"], fg=self.colors["text"],
@@ -679,19 +679,19 @@ class App(tk.Tk):
         self.continue_series_button.pack(fill="x", pady=(6, 0))
 
         editor = tk.Frame(workspace, bg=self.colors["bg"])
-        workspace.add(editor, minsize=520, stretch="always")
+        workspace.add(editor, minsize=650, stretch="always")
         self.editor_pane = editor
         editor.grid_rowconfigure(0, weight=1)
         editor.grid_columnconfigure(0, weight=1)
 
-        vertical = tk.PanedWindow(editor, orient="horizontal", sashwidth=7, sashrelief="flat",
+        vertical = tk.PanedWindow(editor, orient="horizontal", sashwidth=10, sashrelief="raised",
                                   bg=self.colors["bg"], bd=0, opaqueresize=True, showhandle=False)
         vertical.grid(row=0, column=0, sticky="nsew")
         self.vertical_panes = vertical
 
         controls_area = tk.Frame(vertical, bg=self.colors["bg"])
         self.controls_area = controls_area
-        vertical.add(controls_area, minsize=250, width=310, stretch="never")
+        vertical.add(controls_area, minsize=300, width=390, stretch="always")
         controls_area.grid_rowconfigure(0, weight=1)
         controls_area.grid_columnconfigure(0, weight=1)
         self.config_canvas = tk.Canvas(controls_area, bg=self.colors["bg"], highlightthickness=0, borderwidth=0)
@@ -768,7 +768,7 @@ class App(tk.Tk):
 
         lower = tk.Frame(vertical, bg=self.colors["bg"])
         self.lower_panel = lower
-        vertical.add(lower, minsize=500, stretch="always")
+        vertical.add(lower, minsize=520, stretch="always")
         lower.grid_rowconfigure(2, weight=1)
         lower.grid_columnconfigure(0, weight=1)
 
@@ -828,10 +828,10 @@ class App(tk.Tk):
         status_head.pack(fill="x")
         self.progress_label_var = tk.StringVar(value="Listo para crear el guion")
         tk.Label(status_head, textvariable=self.progress_label_var, bg=self.colors["panel"],
-                 fg=self.colors["text"], font=("Segoe UI", 10, "bold")).pack(side="left", anchor="w")
+                 fg=self.colors["text"], font=("Segoe UI", 9, "bold")).pack(side="left", anchor="w")
         tk.Label(statuscard, text="Configura tu historia y genera un guion con IA.",
                  bg=self.colors["panel"], fg=self.colors["muted"],
-                 font=("Segoe UI", 9)).pack(anchor="w", pady=(1, 4))
+                 font=("Segoe UI", 8)).pack(anchor="w", pady=(0, 2))
         self.details_visible = False
         self.details_button = ttk.Button(status_head, text="＋ Diagnóstico y estimaciones",
                                          command=self.toggle_status_details)
@@ -841,7 +841,7 @@ class App(tk.Tk):
         )
         self.remote_access_button.pack(side="right", padx=(0, 6))
         self.progressbar = ttk.Progressbar(statuscard, mode="determinate", maximum=100, value=0)
-        self.progressbar.pack(fill="x", pady=(4, 2))
+        self.progressbar.pack(fill="x", pady=(2, 1))
         self.progress_detail_var = tk.StringVar(value="0% · En espera")
         tk.Label(statuscard, textvariable=self.progress_detail_var, bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 8)).pack(anchor="w")
@@ -864,8 +864,8 @@ class App(tk.Tk):
         script_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=8, pady=8)
         self.script_tab = script_tab
         studio_tabs.add(script_tab, text="  ✎  GUION  ")
-        script_tab.grid_columnconfigure(0, weight=3, uniform="scriptworkspace")
-        script_tab.grid_columnconfigure(1, weight=2, uniform="scriptworkspace")
+        script_tab.grid_columnconfigure(0, weight=4, uniform="scriptworkspace")
+        script_tab.grid_columnconfigure(1, weight=3, uniform="scriptworkspace")
         script_tab.grid_rowconfigure(0, weight=3)
         script_tab.grid_rowconfigure(1, weight=2)
 
@@ -1341,7 +1341,19 @@ class App(tk.Tk):
         tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
                  font=("Segoe UI", 8), anchor="w").grid(row=3, column=0, sticky="ew", pady=(3, 0))
         self._apply_compact_workspace()
+        self.after(120, self._set_responsive_initial_sashes)
         self.after(90, lambda: self._animate_brand_gradient(0))
+
+    def _set_responsive_initial_sashes(self):
+        """Set useful initial panel proportions while keeping both dividers draggable."""
+        try:
+            self.update_idletasks()
+            self.workspace_panes.sash_place(0, 165, 0)
+            editor_width = max(650, self.editor_pane.winfo_width())
+            config_width = min(max(330, int(editor_width * 0.40)), max(330, editor_width - 520))
+            self.vertical_panes.sash_place(0, config_width, 0)
+        except (tk.TclError, AttributeError):
+            return
 
     def _apply_compact_workspace(self):
         """Build a clean premium toolbar and preserve the three-column studio."""
@@ -1438,8 +1450,8 @@ class App(tk.Tk):
         # the preview rather than leaving a large empty gap under the editor.
         self.preview_dock.configure(padx=10, pady=9)
         self.mini_timeline_panel.configure(padx=9, pady=7)
-        self.script_tab.grid_columnconfigure(0, weight=3, uniform="scriptworkspace")
-        self.script_tab.grid_columnconfigure(1, weight=2, uniform="scriptworkspace")
+        self.script_tab.grid_columnconfigure(0, weight=4, uniform="scriptworkspace")
+        self.script_tab.grid_columnconfigure(1, weight=3, uniform="scriptworkspace")
 
     def toggle_project_library(self):
         """Show or hide the saved-project library without shrinking the editor all day."""
