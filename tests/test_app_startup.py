@@ -37,7 +37,7 @@ class AppStartupSmokeTests(unittest.TestCase):
             self.assertEqual(root.script_tab.winfo_parent(), str(root.studio_tabs))
             self.assertEqual(root.preview_dock.winfo_parent(), str(root.script_tab))
             self.assertEqual(root.mini_timeline_panel.winfo_parent(), str(root.script_tab))
-            self.assertEqual(root.script_text.winfo_parent(), str(root.textframe) if hasattr(root, "textframe") else root.script_text.winfo_parent())
+            self.assertEqual(root.script_text.winfo_parent(), str(root.script_text_frame))
         finally:
             root._on_close()
 
