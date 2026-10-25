@@ -865,6 +865,20 @@ class App(tk.Tk):
         self.progress_detail_var = tk.StringVar(value="0% · En espera")
         tk.Label(statuscard, textvariable=self.progress_detail_var, bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 8)).pack(anchor="w")
+        workflow_row = tk.Frame(statuscard, bg=self.colors["panel"])
+        workflow_row.pack(fill="x", pady=(7, 1))
+        self.workflow_hint_var = tk.StringVar(
+            value="Paso 1 de 6 · Crea el guion y revísalo antes de continuar."
+        )
+        tk.Label(
+            workflow_row, textvariable=self.workflow_hint_var, bg=self.colors["panel"],
+            fg="#a9caff", font=("Segoe UI", 9, "bold"), anchor="w"
+        ).pack(side="left", fill="x", expand=True)
+        self.workflow_next_button = ttk.Button(
+            workflow_row, text="Ir al siguiente paso  →",
+            style="Accent.TButton", command=self.go_to_next_step
+        )
+        self.workflow_next_button.pack(side="right", padx=(8, 0))
         self.details_frame = tk.Frame(statuscard, bg=self.colors["panel"])
         self.pc_summary_var = tk.StringVar(value="Detectando equipo…")
         tk.Label(self.details_frame, textvariable=self.pc_summary_var, bg=self.colors["panel"],
@@ -880,6 +894,15 @@ class App(tk.Tk):
         studio_tabs = ttk.Notebook(lower)
         studio_tabs.grid(row=2, column=0, sticky="nsew")
         self.studio_tabs = studio_tabs
+        self.workflow_steps = [
+            ("Guion", "Crea el guion y revísalo antes de continuar."),
+            ("Escenas", "Comprueba las escenas y que cada plano dure 5 segundos o menos."),
+            ("Imágenes", "Genera o asigna una imagen para cada escena."),
+            ("Montaje", "Revisa el orden, la duración y las transiciones."),
+            ("Vista previa", "Reproduce el resultado y comprueba que todo se vea bien."),
+            ("Audio", "Añade o revisa voces, música y niveles de sonido."),
+        ]
+        self.studio_tabs.bind("<<NotebookTabChanged>>", self.update_workflow_guide)
 
         script_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=8, pady=8)
         self.script_tab = script_tab
@@ -1363,6 +1386,37 @@ class App(tk.Tk):
         self._apply_compact_workspace()
         self.after(120, self._set_responsive_initial_sashes)
         self.after(90, lambda: self._animate_brand_gradient(0))
+
+    def update_workflow_guide(self, _event=None):
+        """Keep the guidance strip aligned with the currently selected production step."""
+        tabs = getattr(self, "studio_tabs", None)
+        steps = getattr(self, "workflow_steps", ())
+        if tabs is None or not steps:
+            return
+        try:
+            index = tabs.index(tabs.select())
+        except (tk.TclError, ValueError):
+            index = 0
+        index = max(0, min(index, len(steps) - 1))
+        _name, hint = steps[index]
+        self.workflow_hint_var.set(f"Paso {index + 1} de {len(steps)} · {hint}")
+        self.workflow_next_button.configure(
+            text="Vídeo listo ✓" if index == len(steps) - 1 else "Ir al siguiente paso  →"
+        )
+
+    def go_to_next_step(self):
+        """Move one tab forward without starting expensive generation automatically."""
+        tabs = getattr(self, "studio_tabs", None)
+        if tabs is None:
+            return
+        try:
+            current = tabs.index(tabs.select())
+        except (tk.TclError, ValueError):
+            current = 0
+        last = len(getattr(self, "workflow_steps", ())) - 1
+        if current < last:
+            tabs.select(current + 1)
+        self.update_workflow_guide()
 
     def _set_responsive_initial_sashes(self):
         """Set useful initial panel proportions while keeping both dividers draggable."""
