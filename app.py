@@ -910,6 +910,7 @@ class App(tk.Tk):
         tk.Label(script_head, text="Revisa el texto antes de aprobar y exportar", bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 9)).pack(side="right")
         textframe = tk.Frame(script_editor_frame, bg=self.colors["input"])
+        self.script_text_frame = textframe
         textframe.grid(row=1, column=0, sticky="nsew")
         textframe.grid_rowconfigure(0, weight=1)
         textframe.grid_columnconfigure(0, weight=1)
