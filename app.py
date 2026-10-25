@@ -3572,7 +3572,16 @@ Write-Output 'NARRATION_OK'
             candidate = next((name for name in names if term in name.casefold()), None)
             if candidate:
                 return candidate
-        return names[0]
+        # If filenames are opaque, prefer a tuned/non-base checkpoint when one
+        # exists instead of the generic SD 1.5 base model.
+        non_base = next(
+            (name for name in names if not any(
+                marker in name.casefold()
+                for marker in ("v1-5-pruned-emaonly", "sd_v1-5", "base-model")
+            )),
+            None,
+        )
+        return non_base or names[0]
 
     def update_image_model_guidance(self):
         """Explain when a generic base checkpoint is likely to produce generic artwork."""
@@ -5034,10 +5043,16 @@ Write-Output 'NARRATION_OK'
                     self.comfy_available = True
                     self.image_model_combo.configure(values=models)
                     current_model = self.image_model_var.get()
-                    if current_model in models:
-                        self.image_model_var.set(current_model)
-                    elif models:
-                        self.image_model_var.set(self._preferred_image_checkpoint(models))
+                    if models:
+                        preferred_model = self._preferred_image_checkpoint(models)
+                        generic_model = any(
+                            marker in str(current_model).casefold()
+                            for marker in ("v1-5-pruned-emaonly", "sd_v1-5", "base-model")
+                        )
+                        if current_model in models and not (generic_model and preferred_model != current_model):
+                            self.image_model_var.set(current_model)
+                        else:
+                            self.image_model_var.set(preferred_model)
                     if models:
                         self.update_image_model_guidance()
                     else:
