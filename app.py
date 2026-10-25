@@ -702,7 +702,7 @@ class App(tk.Tk):
 
         controls_area = tk.Frame(vertical, bg=self.colors["bg"])
         self.controls_area = controls_area
-        vertical.add(controls_area, minsize=300, width=390, stretch="always")
+        vertical.add(controls_area, minsize=235, width=280, stretch="never")
         controls_area.grid_rowconfigure(0, weight=1)
         controls_area.grid_columnconfigure(0, weight=1)
         self.config_canvas = tk.Canvas(controls_area, bg=self.colors["bg"], highlightthickness=0, borderwidth=0)
@@ -710,6 +710,16 @@ class App(tk.Tk):
         config_scroll = ttk.Scrollbar(controls_area, orient="vertical", command=self.config_canvas.yview)
         config_scroll.grid(row=0, column=1, sticky="ns")
         self.config_canvas.configure(yscrollcommand=config_scroll.set)
+        # Scroll the compact configuration rail with the mouse wheel.
+        def _scroll_config(event):
+            try:
+                self.config_canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
+            except (tk.TclError, AttributeError):
+                pass
+            return "break"
+        self.config_canvas.bind_all("<MouseWheel>", _scroll_config, add="+")
+        self.config_canvas.bind_all("<Button-4>", lambda _event: self.config_canvas.yview_scroll(-1, "units"), add="+")
+        self.config_canvas.bind_all("<Button-5>", lambda _event: self.config_canvas.yview_scroll(1, "units"), add="+")
         card = tk.Frame(self.config_canvas, bg=self.colors["panel"], padx=12, pady=12,
                         highlightthickness=1, highlightbackground=self.colors["border"])
         self.config_canvas_window = self.config_canvas.create_window((0, 0), window=card, anchor="nw")
@@ -866,7 +876,7 @@ class App(tk.Tk):
         tk.Label(statuscard, textvariable=self.progress_detail_var, bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 8)).pack(anchor="w")
         workflow_row = tk.Frame(statuscard, bg=self.colors["panel"])
-        workflow_row.pack(fill="x", pady=(7, 1))
+        workflow_row.pack(fill="x", pady=(4, 0))
         self.workflow_hint_var = tk.StringVar(
             value="Paso 1 de 6 · Crea el guion y revísalo antes de continuar."
         )
@@ -1380,6 +1390,7 @@ class App(tk.Tk):
 
         self.status_var = tk.StringVar(value="Listo. Configura la historia, genera el guion y revisa las escenas.")
         self.after(250, lambda: studio_tabs.select(script_tab))
+        self.after(280, self.update_workflow_guide)
         self.after(300, self._draw_timeline)
         tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
                  font=("Segoe UI", 8), anchor="w").grid(row=3, column=0, sticky="ew", pady=(3, 0))
@@ -1425,7 +1436,7 @@ class App(tk.Tk):
             if str(self.project_library_pane) in tuple(self.workspace_panes.panes()):
                 self.workspace_panes.sash_place(0, 165, 0)
             editor_width = max(650, self.editor_pane.winfo_width())
-            config_width = min(max(330, int(editor_width * 0.40)), max(330, editor_width - 520))
+            config_width = min(max(245, int(editor_width * 0.22)), max(245, editor_width - 600))
             self.vertical_panes.sash_place(0, config_width, 0)
         except (tk.TclError, AttributeError):
             return
