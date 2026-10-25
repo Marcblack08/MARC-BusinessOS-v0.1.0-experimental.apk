@@ -2478,6 +2478,33 @@ try {
     $synth.SelectVoice($defaultVoice)
     $synth.Rate = 0
     $synth.Volume = 100
+    function Speak-Expressive {
+        param([string]$Line)
+        $emotion = 'neutral'
+        $spoken = [string]$Line
+        if ($spoken -match '^\s*\[EMOCION\s*=\s*([^\]]+)\]\s*') {
+            $emotion = $Matches[1].Trim().ToLowerInvariant()
+            $spoken = $spoken.Substring($Matches[0].Length).Trim()
+        }
+        if ([string]::IsNullOrWhiteSpace($spoken)) { return }
+        $rate = '+0%'; $pitch = '+0%'; $volume = 'medium'
+        switch -Regex ($emotion) {
+            '^(miedo|temor|panico|pánico)$' { $rate = '-10%'; $pitch = '+12%'; $volume = 'medium'; break }
+            '^(susurro|secreto)$' { $rate = '-18%'; $pitch = '-2%'; $volume = 'soft'; break }
+            '^(ira|enojo|rabia)$' { $rate = '+14%'; $pitch = '+8%'; $volume = 'loud'; break }
+            '^(tristeza|dolor|duelo)$' { $rate = '-18%'; $pitch = '-8%'; $volume = 'soft'; break }
+            '^(alegria|alegría|entusiasmo)$' { $rate = '+10%'; $pitch = '+8%'; $volume = 'loud'; break }
+            '^(sorpresa|shock)$' { $rate = '+8%'; $pitch = '+16%'; $volume = 'loud'; break }
+            '^(urgencia|panico|pánico)$' { $rate = '+18%'; $pitch = '+10%'; $volume = 'loud'; break }
+            '^(suspenso|tension|tensión)$' { $rate = '-16%'; $pitch = '-4%'; $volume = 'soft'; break }
+            '^(calma|sereno)$' { $rate = '-7%'; $pitch = '-2%'; $volume = 'medium'; break }
+        }
+        $safeText = [System.Security.SecurityElement]::Escape($spoken)
+        $culture = $synth.Voice.Culture.Name
+        if (!$culture) { $culture = 'es-ES' }
+        $ssml = '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="' + $culture + '"><prosody rate="' + $rate + '" pitch="' + $pitch + '" volume="' + $volume + '">' + $safeText + '</prosody></speak>'
+        try { $synth.SpeakSsml($ssml) } catch { $synth.Speak($spoken) }
+    }
     $text = [System.IO.File]::ReadAllText($TextFile, [System.Text.Encoding]::UTF8)
     if ([string]::IsNullOrWhiteSpace($text)) { throw 'El texto de narración está vacío.' }
     $synth.SetOutputToWaveFile($OutputFile)
@@ -2495,18 +2522,11 @@ try {
                 } else {
                     $synth.SelectVoice($defaultVoice)
                 }
-                if (![string]::IsNullOrWhiteSpace($spoken)) {
-          $startSeconds = $synth.AudioPosition.TotalSeconds
-          $synth.Speak($spoken)
-          $endSeconds = $synth.AudioPosition.TotalSeconds
-          if ($endSeconds -gt $startSeconds) {
-            $timedSegments.Add([ordered]@{ text = $spoken; start_seconds = [double]$startSeconds; end_seconds = [double]$endSeconds })
-          }
-        }
+                if (![string]::IsNullOrWhiteSpace($spoken)) { Speak-Expressive $spoken }
             }
         } else {
             $synth.SelectVoice($defaultVoice)
-            $synth.Speak($line)
+            Speak-Expressive $line
         }
     }
     $synth.SetOutputToNull()
@@ -4086,6 +4106,10 @@ Write-Output 'NARRATION_OK'
                     "Devuelve exactamente dos secciones: [BIBLIA CANONICA] con 3-5 líneas de rasgos visuales estables, deseos y relaciones; "
                     "y [GUION] con escenas breves encabezadas [ESCENA 01 — título visual concreto]. Dentro de cada escena, usa [NARRADOR]: "
                     "solo para acción visible y [PERSONAJE]: para cada intervención, una por línea. No pongas dos hablantes en una línea. "
+                    "Para ayudar a la actuación vocal, añade al inicio del texto hablado una etiqueta opcional como [EMOCION=miedo], "
+                    "[EMOCION=susurro], [EMOCION=ira], [EMOCION=tristeza], [EMOCION=alegria], [EMOCION=sorpresa], "
+                    "[EMOCION=urgencia], [EMOCION=suspenso] o [EMOCION=calma] cuando la escena lo justifique; ejemplo: "
+                    "[MATEO]: [EMOCION=miedo] ¡No abras esa puerta! La etiqueta es técnica y no se pronuncia. No la pongas en cada frase por costumbre. "
                     "Cada escena representa UN instante visual, una acción dominante y un encuadre; máximo 5 segundos por plano. "
                     "Incluye un cambio visual concreto en cada escena y evita describir varias acciones consecutivas en el mismo plano.\n"
                     f"Título: {data['title']}. Género: {data['genre']}. Premisa: {data['topic']}. Tono: {data['tone']}. "
@@ -4182,6 +4206,10 @@ Write-Output 'NARRATION_OK'
                     "y [JUAN]: diálogo. No pongas dos hablantes en una línea, pero no dejes líneas vacías entre voces de la misma escena; "
                     "deja una línea vacía solo entre escenas. Usa nombres canónicos en mayúsculas y entre corchetes. "
                     "Usa [NARRADOR] para acciones y descripción, y deja que cada personaje hable por sí mismo. "
+                    "Para que la narración no suene plana, puedes añadir al inicio de una intervención [EMOCION=miedo], [EMOCION=susurro], "
+                    "[EMOCION=ira], [EMOCION=tristeza], [EMOCION=alegria], [EMOCION=sorpresa], [EMOCION=urgencia], "
+                    "[EMOCION=suspenso] o [EMOCION=calma]. Ejemplo: [LUCIA]: [EMOCION=susurro] No mires detrás de ti. "
+                    "Esas etiquetas son indicaciones de actuación: no se pronuncian ni deben aparecer dibujadas. Úsalas solo cuando ayuden a la escena. "
                     "No leas indicaciones técnicas como diálogo.\n"
                     "CONTINUIDAD: no presentes de nuevo a personajes conocidos. Conserva nombres, voces, relaciones, heridas, objetos, escenarios, tiempo y secretos. "
                     "En una continuación, empieza después del estado más reciente; no reinicies ni contradigas el canon.\n"
@@ -5501,6 +5529,33 @@ try {
   $synth.SelectVoice($defaultVoice)
   $synth.Rate = 0
   $synth.Volume = 100
+  function Speak-Expressive {
+      param([string]$Line)
+      $emotion = 'neutral'
+      $spoken = [string]$Line
+      if ($spoken -match '^\s*\[EMOCION\s*=\s*([^\]]+)\]\s*') {
+          $emotion = $Matches[1].Trim().ToLowerInvariant()
+          $spoken = $spoken.Substring($Matches[0].Length).Trim()
+      }
+      if ([string]::IsNullOrWhiteSpace($spoken)) { return }
+      $rate = '+0%'; $pitch = '+0%'; $volume = 'medium'
+      switch -Regex ($emotion) {
+          '^(miedo|temor|panico|pánico)$' { $rate = '-10%'; $pitch = '+12%'; $volume = 'medium'; break }
+          '^(susurro|secreto)$' { $rate = '-18%'; $pitch = '-2%'; $volume = 'soft'; break }
+          '^(ira|enojo|rabia)$' { $rate = '+14%'; $pitch = '+8%'; $volume = 'loud'; break }
+          '^(tristeza|dolor|duelo)$' { $rate = '-18%'; $pitch = '-8%'; $volume = 'soft'; break }
+          '^(alegria|alegría|entusiasmo)$' { $rate = '+10%'; $pitch = '+8%'; $volume = 'loud'; break }
+          '^(sorpresa|shock)$' { $rate = '+8%'; $pitch = '+16%'; $volume = 'loud'; break }
+          '^(urgencia|panico|pánico)$' { $rate = '+18%'; $pitch = '+10%'; $volume = 'loud'; break }
+          '^(suspenso|tension|tensión)$' { $rate = '-16%'; $pitch = '-4%'; $volume = 'soft'; break }
+          '^(calma|sereno)$' { $rate = '-7%'; $pitch = '-2%'; $volume = 'medium'; break }
+      }
+      $safeText = [System.Security.SecurityElement]::Escape($spoken)
+      $culture = $synth.Voice.Culture.Name
+      if (!$culture) { $culture = 'es-ES' }
+      $ssml = '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="' + $culture + '"><prosody rate="' + $rate + '" pitch="' + $pitch + '" volume="' + $volume + '">' + $safeText + '</prosody></speak>'
+      try { $synth.SpeakSsml($ssml) } catch { $synth.Speak($spoken) }
+  }
   $text = [System.IO.File]::ReadAllText($TextFile, [System.Text.Encoding]::UTF8)
   if ([string]::IsNullOrWhiteSpace($text)) { throw 'El texto de narración está vacío.' }
   $synth.SetOutputToWaveFile($OutputFile)
@@ -5519,15 +5574,24 @@ try {
         } else {
           $synth.SelectVoice($defaultVoice)
         }
-        if (![string]::IsNullOrWhiteSpace($spoken)) { $synth.Speak($spoken) }
+        if (![string]::IsNullOrWhiteSpace($spoken)) {
+          $spokenText = $spoken -replace '^\s*\[EMOCION\s*=\s*[^\]]+\]\s*', ''
+          $startSeconds = $synth.AudioPosition.TotalSeconds
+          Speak-Expressive $spoken
+          $endSeconds = $synth.AudioPosition.TotalSeconds
+          if ($endSeconds -gt $startSeconds) {
+            $timedSegments.Add([ordered]@{ text = $spokenText; start_seconds = [double]$startSeconds; end_seconds = [double]$endSeconds })
+          }
+        }
       }
     } else {
       if ($defaultVoice -and $defaultVoice -ne '(Automática)') { $synth.SelectVoice($defaultVoice) }
+      $lineText = $line -replace '^\s*\[EMOCION\s*=\s*[^\]]+\]\s*', ''
       $startSeconds = $synth.AudioPosition.TotalSeconds
-      $synth.Speak($line)
+      Speak-Expressive $line
       $endSeconds = $synth.AudioPosition.TotalSeconds
       if ($endSeconds -gt $startSeconds) {
-        $timedSegments.Add([ordered]@{ text = $line; start_seconds = [double]$startSeconds; end_seconds = [double]$endSeconds })
+        $timedSegments.Add([ordered]@{ text = $lineText; start_seconds = [double]$startSeconds; end_seconds = [double]$endSeconds })
       }
     }
   }
