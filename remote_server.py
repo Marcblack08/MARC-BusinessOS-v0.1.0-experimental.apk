@@ -9,6 +9,7 @@ import hmac
 import json
 import mimetypes
 import os
+import queue
 import re
 import secrets
 import sqlite3
@@ -30,6 +31,69 @@ DOWNLOAD_EXTENSIONS = {
     ".mp4", ".mov", ".m4v", ".webm", ".png", ".jpg", ".jpeg", ".webp", ".gif",
     ".mp3", ".wav", ".m4a", ".aac", ".srt", ".txt", ".json"
 }
+
+
+def _upload_signature_ok(filename: str, header: bytes) -> bool:
+    """Reject obvious extension/content mismatches before storing untrusted media."""
+    ext = Path(filename).suffix.lower()
+    if ext == ".png":
+        return header.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+    if ext in {".jpg", ".jpeg"}:
+        return header.startswith(b"\\xff\\xd8\\xff")
+    if ext == ".gif":
+        return header.startswith((b"GIF87a", b"GIF89a"))
+    if ext == ".webp":
+        return len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP"
+    if ext in {".mp4", ".mov", ".m4v", ".m4a"}:
+        return len(header) >= 8 and header[4:8] == b"ftyp"
+    if ext == ".webm":
+        return header.startswith(b"\\x1a\\x45\\xdf\\xa3")
+    if ext == ".wav":
+        return len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WAVE"
+    if ext in {".mp3", ".aac"}:
+        return header.startswith(b"ID3") or (len(header) >= 2 and header[0] == 0xFF and (header[1] & 0xE0) == 0xE0)
+    if ext in {".txt", ".srt"}:
+        return b"\\x00" not in header and _is_text_header(header)
+    return False
+
+
+def _is_text_header(header: bytes) -> bool:
+    try:
+        header.decode("utf-8-sig")
+        return True
+    except UnicodeDecodeError:
+        return False
+
+
+class _BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    """Bound concurrent request threads so a burst cannot spawn unlimited workers."""
+    daemon_threads = True
+    block_on_close = False
+    request_queue_size = 32
+
+    def __init__(self, server_address, request_handler, max_workers=16):
+        self._worker_slots = threading.BoundedSemaphore(max_workers)
+        super().__init__(server_address, request_handler)
+
+    def process_request(self, request, client_address):
+        if not self._worker_slots.acquire(blocking=False):
+            try:
+                request.sendall(b"HTTP/1.1 503 Service Unavailable\\r\\nConnection: close\\r\\nContent-Length: 0\\r\\n\\r\\n")
+            except OSError:
+                pass
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._worker_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._worker_slots.release()
 
 PANEL_HTML = r"""<!doctype html>
 <html lang="es">
@@ -180,6 +244,11 @@ class RemoteControlServer:
             server_version = "MARCRemote/1.0"
             sys_version = ""
 
+            def setup(self):
+                super().setup()
+                # Slow or stalled clients must not hold a worker indefinitely.
+                self.connection.settimeout(30)
+
             def log_message(self, fmt, *args):
                 # Do not log request headers or authentication material.
                 return
@@ -194,7 +263,11 @@ class RemoteControlServer:
                 self.send_header("X-Content-Type-Options", "nosniff")
                 self.send_header("Referrer-Policy", "no-referrer")
                 self.send_header("X-Frame-Options", "DENY")
-                self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+                self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+                self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+                self.send_header("X-Permitted-Cross-Domain-Policies", "none")
+                self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+                self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
                 if headers:
                     for key, value in headers.items():
                         self.send_header(key, value)
@@ -295,8 +368,9 @@ class RemoteControlServer:
                                 self.wfile.write(chunk)
                     else:
                         self._json(404, {"error": "Ruta no encontrada."})
-                except (OSError, sqlite3.Error, ValueError) as exc:
-                    self._json(500, {"error": str(exc)[:500] or "Error interno."})
+                except (OSError, sqlite3.Error, ValueError):
+                    # Keep filesystem paths, SQL details and other internals out of API responses.
+                    self._json(500, {"error": "Error interno al procesar la solicitud."})
 
             def do_POST(self):
                 parsed = urlparse(self.path)
@@ -309,8 +383,8 @@ class RemoteControlServer:
                     return
                 try:
                     payload = self._read_json()
-                except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-                    self._json(400, {"error": str(exc)[:300] or "JSON no válido."})
+                except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                    self._json(400, {"error": "Solicitud JSON no válida o demasiado grande."})
                     return
                 if parsed.path == "/api/command":
                     action = str(payload.get("action", "")).strip()
@@ -324,7 +398,11 @@ class RemoteControlServer:
                         self._json(400, {"error": "Los parámetros deben ser un objeto."})
                         return
                     request_id = uuid.uuid4().hex
-                    owner.command_queue.put({"id": request_id, "action": action, "payload": command_payload})
+                    try:
+                        owner.command_queue.put_nowait({"id": request_id, "action": action, "payload": command_payload})
+                    except queue.Full:
+                        self._json(503, {"error": "MARC está ocupado. Espera a que termine una solicitud e inténtalo de nuevo."})
+                        return
                     self._json(202, {"accepted": True, "request_id": request_id, "message": "Solicitud encolada en MARC."})
                     return
                 self._json(404, {"error": "Ruta no encontrada."})
@@ -352,26 +430,33 @@ class RemoteControlServer:
                 destination_dir.mkdir(parents=True, exist_ok=True)
                 destination = destination_dir / (uuid.uuid4().hex[:10] + "_" + filename)
                 remaining = length
+                first_chunk = True
                 try:
                     with destination.open("wb") as output:
                         while remaining:
                             chunk = self.rfile.read(min(1024 * 1024, remaining))
                             if not chunk:
-                                raise OSError("La carga se interrumpió antes de completarse.")
+                                raise OSError("incomplete_upload")
+                            if first_chunk:
+                                first_chunk = False
+                                if not _upload_signature_ok(filename, chunk[:32]):
+                                    destination.unlink(missing_ok=True)
+                                    self.close_connection = True
+                                    self._json(415, {"error": "El contenido no coincide con el tipo de archivo declarado."})
+                                    return
                             output.write(chunk)
                             remaining -= len(chunk)
-                except OSError as exc:
+                except OSError:
                     try:
                         destination.unlink(missing_ok=True)
                     except OSError:
                         pass
-                    self._json(400, {"error": str(exc)[:300]})
+                    self._json(400, {"error": "No se pudo guardar el archivo. Comprueba el espacio disponible e inténtalo de nuevo."})
                     return
                 self._json(201, {"uploaded": True, "path": str(destination.relative_to(owner.projects_dir / str(project_id))).replace("\\", "/"),
                                  "name": destination.name, "size": length})
 
-        self._httpd = ThreadingHTTPServer((self.host, self.port), Handler)
-        self._httpd.daemon_threads = True
+        self._httpd = _BoundedThreadingHTTPServer((self.host, self.port), Handler)
         self._thread = threading.Thread(target=self._httpd.serve_forever, name="MARCRemoteHTTP", daemon=True)
         self._thread.start()
 
