@@ -542,6 +542,13 @@ class App(tk.Tk):
         style.map("Vertical.TScrollbar", background=[("active", self.colors["accent"])])
         style.configure("Horizontal.TScrollbar", background=self.colors["panel2"], troughcolor=self.colors["bg"], arrowcolor=self.colors["muted"], bordercolor=self.colors["bg"], relief="flat", arrowsize=12)
         style.map("Horizontal.TScrollbar", background=[("active", self.colors["accent"])])
+        style.configure("TMenubutton", padding=(10, 8), font=("Segoe UI", 9, "bold"),
+                        background=self.colors["panel2"], foreground=self.colors["text"],
+                        borderwidth=1, bordercolor=self.colors["border"], relief="flat")
+        style.map("TMenubutton",
+                  background=[("active", self.colors["accent"]), ("disabled", self.colors["panel"])],
+                  foreground=[("active", "#ffffff"), ("disabled", "#64758e")],
+                  bordercolor=[("active", self.colors["accent"])])
         style.configure("TNotebook", background=self.colors["bg"], borderwidth=0, tabmargins=(3, 5, 3, 0))
         style.configure("TNotebook.Tab", background=self.colors["panel"], foreground=self.colors["muted"], padding=(14, 9), font=("Segoe UI", 9, "bold"), borderwidth=0)
         style.map("TNotebook.Tab", background=[("selected", self.colors["accent"]), ("active", self.colors["panel2"])], foreground=[("selected", "#ffffff"), ("active", self.colors["text"])])
@@ -740,8 +747,12 @@ class App(tk.Tk):
         self.config_canvas.bind("<Configure>", lambda event: self.config_canvas.itemconfigure(self.config_canvas_window, width=event.width))
         tk.Label(card, text="Crea tu historia", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 15, "bold")).pack(anchor="w")
-        tk.Label(card, text="Completa lo básico. Después podrás revisar el guion, las escenas y el vídeo.",
-                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).pack(anchor="w", pady=(5, 10))
+        tk.Label(
+            card,
+            text="Empieza con un nombre y una idea sencilla. Ej.: «Una familia descubre un secreto». MARC te guiará paso a paso.",
+            bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
+            justify="left", wraplength=260,
+        ).pack(anchor="w", pady=(5, 10))
 
         self.title_var = tk.StringVar()
         self.topic_var = tk.StringVar()
