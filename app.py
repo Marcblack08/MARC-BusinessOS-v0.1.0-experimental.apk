@@ -1439,6 +1439,11 @@ class App(tk.Tk):
         )
         self.toolbar_export_button.pack(side="left", padx=(0, 6))
 
+        # Keep only the two common actions visible; less-frequent actions live in Más opciones.
+        for button in (self.toolbar_config_button, self.toolbar_save_button,
+                       self.toolbar_approve_button, self.toolbar_export_button):
+            button.pack_forget()
+
         # Redirect state updates to the visible controls. The original widgets
         # remain hidden in their legacy frame, but progress callbacks must affect
         # the buttons the user can actually click.
@@ -1455,6 +1460,11 @@ class App(tk.Tk):
             activebackground=self.colors["accent"], activeforeground="#ffffff",
             bd=0, relief="flat",
         )
+        self.more_menu.add_command(label="Guardar proyecto", command=self.save_project)
+        self.more_menu.add_command(label="Aprobar guion", command=self.approve_script)
+        self.more_menu.add_command(label="Crear vídeo final", command=self.export_video)
+        self.more_menu.add_command(label="Mostrar / ocultar ajustes", command=self.toggle_configuration)
+        self.more_menu.add_separator()
         self.more_menu.add_command(label="Vista previa MP4", command=self.preview_video_render)
         self.more_menu.add_command(label="Configurar imágenes IA", command=self.open_image_setup)
         self.more_menu.add_command(label="Abrir menú Herramientas", command=lambda: self.header_tools_button.event_generate("<Button-1>"))
