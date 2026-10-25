@@ -2409,8 +2409,8 @@ class App(tk.Tk):
     def detect_local_voices(self, quiet=False):
         if self.voice_generation_running:
             return
-        if str(getattr(self, "voice_engine_var", tk.StringVar(value="Windows (básica)").get()).get()
-               if hasattr(getattr(self, "voice_engine_var", None), "get") else "") .startswith("Kokoro"):
+        engine_var = getattr(self, "voice_engine_var", None)
+        if engine_var is not None and str(engine_var.get()).startswith("Kokoro"):
             self.detect_kokoro_voices(quiet=quiet)
             return
         if os.name != "nt":
