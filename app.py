@@ -1266,12 +1266,19 @@ class App(tk.Tk):
         self._apply_compact_workspace()
 
     def _apply_compact_workspace(self):
-        """Start in a focused editor without mixing Tk geometry managers."""
-        self.toggle_project_library()
-        self.set_configuration_visible(False)
-
-        # Hide duplicate panels; keep their dedicated tabs available.
-        self.preview_dock.grid_remove()
+        """Start in the balanced, visible studio layout used by the main workspace."""
+        # Keep the project library, story configuration, and persistent preview
+        # monitor visible on startup. These are core work areas, not optional
+        # duplicate panels; hiding them made the first screen feel incomplete.
+        if hasattr(self, "workspace_panes") and hasattr(self, "project_library_pane"):
+            if str(self.project_library_pane) not in tuple(self.workspace_panes.panes()):
+                self.workspace_panes.add(
+                    self.project_library_pane, before=self.editor_pane,
+                    minsize=180, width=225, stretch="never"
+                )
+            self.project_library_visible = True
+        self.set_configuration_visible(True)
+        self.preview_dock.grid()
         self.mini_timeline_panel.grid_remove()
         self.secondary_actions.grid_remove()
 
