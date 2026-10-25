@@ -1264,80 +1264,66 @@ class App(tk.Tk):
         self._apply_compact_workspace()
 
     def _apply_compact_workspace(self):
-        """Start in a focused editor; secondary areas remain available on demand."""
-        # The editor should receive the available width by default.
+        """Start in a focused editor without mixing Tk geometry managers."""
         self.toggle_project_library()
         self.set_configuration_visible(False)
 
-        # A second always-visible monitor and overview timeline duplicated the
-        # dedicated Preview and Montage tabs and made the editor feel crowded.
+        # Hide duplicate panels; keep their dedicated tabs available.
         self.preview_dock.grid_remove()
         self.mini_timeline_panel.grid_remove()
 
-        # Keep only the actions used in the normal production flow.
-        for widget in (
-            self.generate_button, self.cancel_button, self.save_button,
-            self.approve_button, self.export_button, self.preview_render_button,
-            self.image_setup_button, self.cancel_render_button, self.config_toggle_button,
-        ):
-            widget.pack_forget()
+        # The original action buttons are children of primary_actions and use
+        # grid. Never call pack() on them: Tk forbids mixing pack and grid in
+        # the same parent, which previously crashed the packaged app at startup.
+        self.secondary_actions.grid_remove()
+        self.generate_button.grid_remove()
+        self.save_button.grid_remove()
+        self.approve_button.grid_remove()
+        self.export_button.grid_remove()
+        self.config_toggle_button.grid_remove()
+        self.cancel_button.pack_forget()
+        self.preview_render_button.pack_forget()
+        self.image_setup_button.pack_forget()
+        self.cancel_render_button.pack_forget()
         self.header_diagnose_button.pack_forget()
         self.header_tools_button.pack_forget()
 
         self.toolbar_new_button = ttk.Button(
-            self.toolrow, text="＋ Nuevo", command=self.new_project
+            self.primary_actions, text="＋ Nuevo", command=self.new_project
         )
-        self.toolbar_new_button.pack(side="left", padx=(0, 6))
+        self.toolbar_new_button.grid(row=0, column=0, sticky="w")
         self.config_toggle_button.configure(text="⚙ Ajustes +", command=self.toggle_configuration)
-        self.config_toggle_button.pack(side="left", padx=(0, 6))
+        self.config_toggle_button.grid(row=0, column=1, sticky="w", padx=(6, 0))
         self.generate_button.configure(text="✦ Generar guion")
-        self.generate_button.pack(side="left", padx=(0, 6))
+        self.generate_button.grid(row=0, column=2, sticky="w", padx=(6, 0))
         self.save_button.configure(text="Guardar")
-        self.save_button.pack(side="left", padx=(0, 6))
+        self.save_button.grid(row=0, column=3, sticky="w", padx=(6, 0))
         self.approve_button.configure(text="Aprobar guion")
-        self.approve_button.pack(side="left", padx=(0, 6))
+        self.approve_button.grid(row=0, column=4, sticky="w", padx=(6, 0))
         self.preview_render_button.configure(text="Vista previa")
-        self.preview_render_button.pack(side="left", padx=(0, 6))
+        self.preview_render_button.grid(row=0, column=5, sticky="w", padx=(6, 0))
         self.export_button.configure(text="Exportar MP4")
-        self.export_button.pack(side="left", padx=(0, 6))
+        self.export_button.grid(row=0, column=6, sticky="w", padx=(6, 0))
 
-        self.more_button = ttk.Menubutton(self.toolrow, text="Más ▾")
+        self.more_button = ttk.Menubutton(self.primary_actions, text="Más ▾")
         self.more_menu = tk.Menu(
             self.more_button, tearoff=0,
             bg=self.colors["panel"], fg=self.colors["text"],
             activebackground=self.colors["accent"], activeforeground="#ffffff",
             bd=0, relief="flat",
         )
-        self.more_menu.add_command(
-            label="Biblioteca de proyectos", command=self.toggle_project_library
-        )
-        self.more_menu.add_command(
-            label="Configurar imágenes IA", command=self.open_image_setup
-        )
-        self.more_menu.add_command(
-            label="Diagnóstico del equipo", command=self.detect_pc_async
-        )
-        self.more_menu.add_command(
-            label="Herramientas instaladas", command=self.check_tools
-        )
-        self.more_menu.add_command(
-            label="Acceso remoto desde el teléfono", command=self.show_remote_access
-        )
-        self.more_menu.add_command(
-            label="Continuar historia", command=self.create_continuation
-        )
-        self.more_menu.add_command(
-            label="Estado / reanudar producción", command=self.show_pipeline_status
-        )
+        self.more_menu.add_command(label="Biblioteca de proyectos", command=self.toggle_project_library)
+        self.more_menu.add_command(label="Configurar imágenes IA", command=self.open_image_setup)
+        self.more_menu.add_command(label="Diagnóstico del equipo", command=self.detect_pc_async)
+        self.more_menu.add_command(label="Herramientas instaladas", command=self.check_tools)
+        self.more_menu.add_command(label="Acceso remoto desde el teléfono", command=self.show_remote_access)
+        self.more_menu.add_command(label="Continuar historia", command=self.create_continuation)
+        self.more_menu.add_command(label="Estado / reanudar producción", command=self.show_pipeline_status)
         self.more_menu.add_separator()
-        self.more_menu.add_command(
-            label="Cancelar generación", command=self.cancel_generation
-        )
-        self.more_menu.add_command(
-            label="Cancelar render", command=self.cancel_export
-        )
+        self.more_menu.add_command(label="Cancelar generación", command=self.cancel_generation)
+        self.more_menu.add_command(label="Cancelar render", command=self.cancel_export)
         self.more_button.configure(menu=self.more_menu)
-        self.more_button.pack(side="left", padx=(0, 6))
+        self.more_button.grid(row=0, column=7, sticky="w", padx=(6, 0))
 
     def toggle_project_library(self):
         """Show or hide the saved-project library without shrinking the editor all day."""
