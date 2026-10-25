@@ -1317,21 +1317,27 @@ class App(tk.Tk):
             self.compact_toolbar, text="＋ Nuevo", command=self.new_project
         )
         self.toolbar_new_button.pack(side="left", padx=(0, 6))
-        self.config_toggle_button.configure(text="⚙ Ajustes", command=self.toggle_configuration)
-        self.config_toggle_button.pack_forget()
-        self.config_toggle_button.pack(side="left", padx=(0, 6))
-        self.generate_button.configure(text="✦ Generar guion", style="Accent.TButton")
-        self.generate_button.pack_forget()
-        self.generate_button.pack(side="left", padx=(0, 6))
-        self.save_button.configure(text="Guardar")
-        self.save_button.pack_forget()
-        self.save_button.pack(side="left", padx=(0, 6))
-        self.approve_button.configure(text="✓ Aprobar")
-        self.approve_button.pack_forget()
-        self.approve_button.pack(side="left", padx=(0, 6))
-        self.export_button.configure(text="Exportar MP4")
-        self.export_button.pack_forget()
-        self.export_button.pack(side="left", padx=(0, 6))
+        self.toolbar_config_button = ttk.Button(
+            self.compact_toolbar, text="⚙ Ajustes", command=self.toggle_configuration
+        )
+        self.toolbar_config_button.pack(side="left", padx=(0, 6))
+        self.toolbar_generate_button = ttk.Button(
+            self.compact_toolbar, text="✦ Generar guion", style="Accent.TButton",
+            command=self.generate_script
+        )
+        self.toolbar_generate_button.pack(side="left", padx=(0, 6))
+        self.toolbar_save_button = ttk.Button(
+            self.compact_toolbar, text="Guardar", command=self.save_project
+        )
+        self.toolbar_save_button.pack(side="left", padx=(0, 6))
+        self.toolbar_approve_button = ttk.Button(
+            self.compact_toolbar, text="✓ Aprobar", command=self.approve_script
+        )
+        self.toolbar_approve_button.pack(side="left", padx=(0, 6))
+        self.toolbar_export_button = ttk.Button(
+            self.compact_toolbar, text="Exportar MP4", command=self.export_video
+        )
+        self.toolbar_export_button.pack(side="left", padx=(0, 6))
 
         self.more_button = ttk.Menubutton(self.compact_toolbar, text="Más  ▾")
         self.more_menu = tk.Menu(
