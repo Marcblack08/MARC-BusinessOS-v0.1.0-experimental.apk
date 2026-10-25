@@ -554,13 +554,51 @@ class App(tk.Tk):
         style.map("TRadiobutton", background=[("active", self.colors["panel"])], foreground=[("disabled", "#64758e")])
         style.configure("TSeparator", background=self.colors["border"])
         style.configure("Status.TLabel", background=self.colors["surface"], foreground=self.colors["muted"], padding=(10, 6), font=("Segoe UI", 9))
+    def _draw_brand_gradient(self, _event=None):
+        """Draw a lightweight electric-blue gradient rail using native Tk Canvas."""
+        canvas = getattr(self, "brand_gradient_canvas", None)
+        if canvas is None or not canvas.winfo_exists():
+            return
+        width = max(1, canvas.winfo_width())
+        height = max(2, canvas.winfo_height())
+        canvas.delete("brand-gradient")
+        # Periodic cyan → blue → violet → cyan gradient.
+        stops = ((0.0, (20, 205, 255)), (0.38, (40, 117, 255)),
+                 (0.72, (111, 66, 255)), (1.0, (20, 205, 255)))
+        segments = max(60, min(240, width // 5))
+        phase = float(getattr(self, "_brand_gradient_phase", 0.0))
+        for index in range(segments):
+            t = ((index / max(1, segments - 1)) + phase) % 1.0
+            left_stop, right_stop = stops[0], stops[-1]
+            for j in range(len(stops) - 1):
+                if stops[j][0] <= t <= stops[j + 1][0]:
+                    left_stop, right_stop = stops[j], stops[j + 1]
+                    break
+            span = right_stop[0] - left_stop[0] or 1.0
+            ratio = (t - left_stop[0]) / span
+            rgb = tuple(round(left_stop[1][k] + (right_stop[1][k] - left_stop[1][k]) * ratio)
+                        for k in range(3))
+            color = "#%02x%02x%02x" % rgb
+            x0 = int(index * width / segments)
+            x1 = int((index + 1) * width / segments) + 1
+            canvas.create_rectangle(x0, 0, x1, height, fill=color, outline="", tags="brand-gradient")
+
+    def _animate_brand_gradient(self, step=0):
+        """Run a brief startup shimmer; keep the interface still during normal work."""
+        if not self.winfo_exists():
+            return
+        self._brand_gradient_phase = (step / 18.0) % 1.0
+        self._draw_brand_gradient()
+        if step < 18:
+            self.after(75, lambda: self._animate_brand_gradient(step + 1))
+
     def _build(self):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
         shell = tk.Frame(self, bg=self.colors["bg"])
         shell.grid(row=0, column=0, sticky="nsew")
-        shell.grid_rowconfigure(1, weight=1)
+        shell.grid_rowconfigure(2, weight=1)
         shell.grid_columnconfigure(0, weight=1)
 
         top = tk.Frame(shell, bg="#0b1424", padx=18, pady=10,
@@ -588,9 +626,16 @@ class App(tk.Tk):
         self.header_tools_button = ttk.Button(head_right, text="Herramientas", command=self.check_tools)
         self.header_tools_button.pack(side="left")
 
+        self.brand_gradient_canvas = tk.Canvas(
+            shell, height=3, bg=self.colors["bg"], highlightthickness=0, bd=0
+        )
+        self.brand_gradient_canvas.grid(row=1, column=0, sticky="ew")
+        self.brand_gradient_canvas.bind("<Configure>", self._draw_brand_gradient)
+        self._brand_gradient_phase = 0.0
+
         workspace = tk.PanedWindow(shell, orient="horizontal", sashwidth=7, sashrelief="flat",
                                    bg=self.colors["bg"], bd=0, opaqueresize=True, showhandle=False)
-        workspace.grid(row=1, column=0, sticky="nsew", padx=12, pady=12)
+        workspace.grid(row=2, column=0, sticky="nsew", padx=12, pady=12)
         self.workspace_panes = workspace
 
         library = tk.Frame(workspace, bg=self.colors["panel"], width=225,
@@ -1293,6 +1338,7 @@ class App(tk.Tk):
         tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
                  font=("Segoe UI", 8), anchor="w").grid(row=3, column=0, sticky="ew", pady=(3, 0))
         self._apply_compact_workspace()
+        self.after(90, lambda: self._animate_brand_gradient(0))
 
     def _apply_compact_workspace(self):
         """Build a clean premium toolbar and preserve the three-column studio."""
@@ -4644,7 +4690,8 @@ Write-Output 'NARRATION_OK'
 
     def refresh_projects(self):
         rows = self.conn.execute("SELECT id,title,approved FROM projects ORDER BY id DESC").fetchall()
-        query = getattr(self, "project_search_var", tk.StringVar(value="")).get().strip().casefold()
+        search_var = getattr(self, "project_search_var", None)
+        query = search_var.get().strip().casefold() if search_var is not None else ""
         if query == "buscar proyectos...":
             query = ""
         if query:
