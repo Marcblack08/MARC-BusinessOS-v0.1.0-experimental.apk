@@ -595,23 +595,28 @@ class App(tk.Tk):
 
         library = tk.Frame(workspace, bg=self.colors["panel"], width=225,
                            highlightthickness=1, highlightbackground=self.colors["border"])
-        library.grid_rowconfigure(2, weight=1)
+        library.grid_rowconfigure(3, weight=1)
         library.grid_columnconfigure(0, weight=1)
         workspace.add(library, minsize=180, width=225)
         self.project_library_pane = library
         self.project_library_visible = True
-        tk.Label(library, text="BIBLIOTECA", bg=self.colors["panel"], fg=self.colors["text"],
-                 font=("Segoe UI", 10, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=13, pady=(14, 2))
+        tk.Label(library, text="▣  BIBLIOTECA", bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 11, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=13, pady=(14, 2))
         tk.Label(library, text="Proyectos y guiones", bg=self.colors["panel"], fg=self.colors["muted"],
-                 font=("Segoe UI", 9), anchor="w").grid(row=1, column=0, sticky="ew", padx=13, pady=(0, 9))
+                 font=("Segoe UI", 9), anchor="w").grid(row=1, column=0, sticky="ew", padx=13, pady=(0, 8))
+        self.project_search_var = tk.StringVar(value="")
+        search_entry = ttk.Entry(library, textvariable=self.project_search_var, style="TEntry")
+        search_entry.grid(row=2, column=0, sticky="ew", padx=9, pady=(0, 8))
         self.project_list = tk.Listbox(library, bg=self.colors["input"], fg=self.colors["text"],
                                        selectbackground=self.colors["accent"], selectforeground="#fff",
-                                       borderwidth=0, highlightthickness=0, font=("Segoe UI", 9),
-                                       activestyle="none")
-        self.project_list.grid(row=2, column=0, sticky="nsew", padx=8)
+                                       borderwidth=0, highlightthickness=1,
+                                       highlightbackground=self.colors["border"],
+                                       font=("Segoe UI", 9), activestyle="none")
+        self.project_list.grid(row=3, column=0, sticky="nsew", padx=8)
         self.project_list.bind("<<ListboxSelect>>", self.load_selected)
+        self.project_search_var.trace_add("write", lambda *_args: self.refresh_projects())
         lib_buttons = tk.Frame(library, bg=self.colors["panel"], padx=8, pady=8)
-        lib_buttons.grid(row=3, column=0, sticky="ew")
+        lib_buttons.grid(row=4, column=0, sticky="ew")
         self.new_project_button = ttk.Button(lib_buttons, text="+ Nuevo proyecto", style="Accent.TButton",
                                               command=self.new_project)
         self.new_project_button.pack(fill="x", pady=(0, 6))
