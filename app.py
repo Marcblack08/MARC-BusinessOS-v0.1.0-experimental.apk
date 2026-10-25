@@ -829,6 +829,9 @@ class App(tk.Tk):
         self.progress_label_var = tk.StringVar(value="Listo para crear el guion")
         tk.Label(status_head, textvariable=self.progress_label_var, bg=self.colors["panel"],
                  fg=self.colors["text"], font=("Segoe UI", 10, "bold")).pack(side="left", anchor="w")
+        tk.Label(statuscard, text="Configura tu historia y genera un guion con IA.",
+                 bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 9)).pack(anchor="w", pady=(1, 4))
         self.details_visible = False
         self.details_button = ttk.Button(status_head, text="＋ Diagnóstico y estimaciones",
                                          command=self.toggle_status_details)
