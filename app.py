@@ -711,7 +711,7 @@ class App(tk.Tk):
         lower = tk.Frame(vertical, bg=self.colors["bg"])
         self.lower_panel = lower
         vertical.add(lower, minsize=500, stretch="always")
-        lower.grid_rowconfigure(3, weight=1)
+        lower.grid_rowconfigure(2, weight=1)
         lower.grid_columnconfigure(0, weight=1)
 
         # Actions are intentionally split into two compact rows so they remain
@@ -794,10 +794,20 @@ class App(tk.Tk):
                  fg=self.colors["success"], font=("Segoe UI", 9, "bold"), justify="left",
                  wraplength=1250).pack(anchor="w", pady=(4, 0))
 
+        # Main production workspace: editor tabs on the left, live preview and
+        # timeline on the right, matching the intended reference layout.
+        studio_body = tk.Frame(lower, bg=self.colors["bg"])
+        studio_body.grid(row=2, column=0, sticky="nsew", pady=(0, 5))
+        studio_body.grid_columnconfigure(0, weight=3, uniform="studio")
+        studio_body.grid_columnconfigure(1, weight=2, uniform="studio")
+        studio_body.grid_rowconfigure(0, weight=4)
+        studio_body.grid_rowconfigure(1, weight=1)
+        self.studio_body = studio_body
+
         # Persistent monitor in the main workspace; it stays visible while switching tabs.
-        preview_dock = tk.Frame(lower, bg=self.colors["panel"], padx=9, pady=7,
+        preview_dock = tk.Frame(studio_body, bg=self.colors["panel"], padx=9, pady=7,
                                 highlightthickness=1, highlightbackground=self.colors["border"])
-        preview_dock.grid(row=2, column=0, sticky="ew", pady=(0, 7))
+        preview_dock.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
         self.preview_dock = preview_dock
         preview_dock.grid_columnconfigure(0, weight=3, uniform="monitor")
         preview_dock.grid_columnconfigure(1, weight=2, uniform="monitor")
@@ -877,9 +887,9 @@ class App(tk.Tk):
                  bg=self.colors["panel"], fg=self.colors["muted"],
                  font=("Segoe UI", 8), anchor="w").grid(row=4, column=0, columnspan=2, sticky="ew", pady=(3, 0))
 
-        script_card = tk.Frame(lower, bg=self.colors["panel"], padx=10, pady=9,
+        script_card = tk.Frame(studio_body, bg=self.colors["panel"], padx=10, pady=9,
                                highlightthickness=1, highlightbackground=self.colors["border"])
-        script_card.grid(row=3, column=0, sticky="nsew")
+        script_card.grid(row=0, column=0, sticky="nsew")
         script_card.grid_rowconfigure(0, weight=1)
         script_card.grid_columnconfigure(0, weight=1)
         studio_tabs = ttk.Notebook(script_card)
@@ -1235,9 +1245,9 @@ class App(tk.Tk):
         ).pack(side="left", padx=(10, 0))
 
         # Secondary overview timeline kept available in code; the full editor lives in Montage.
-        mini_timeline = tk.Frame(lower, bg=self.colors["panel"], padx=8, pady=5,
+        mini_timeline = tk.Frame(studio_body, bg=self.colors["panel"], padx=8, pady=5,
                                  highlightthickness=1, highlightbackground=self.colors["border"])
-        mini_timeline.grid(row=4, column=0, sticky="ew", pady=(5, 0))
+        mini_timeline.grid(row=1, column=1, sticky="nsew", padx=(6, 0), pady=(5, 0))
         self.mini_timeline_panel = mini_timeline
         mini_timeline.grid_columnconfigure(0, weight=1)
         mini_head = tk.Frame(mini_timeline, bg=self.colors["panel"])
@@ -1281,7 +1291,6 @@ class App(tk.Tk):
             self.project_library_visible = True
         self.set_configuration_visible(True)
         self.preview_dock.grid()
-        self.mini_timeline_panel.grid_remove()
         self.secondary_actions.grid_remove()
 
         # Primary actions were created inside primary_actions and use grid.
