@@ -794,22 +794,36 @@ class App(tk.Tk):
                  fg=self.colors["success"], font=("Segoe UI", 9, "bold"), justify="left",
                  wraplength=1250).pack(anchor="w", pady=(4, 0))
 
-        # Main production workspace: editor tabs on the left, live preview and
-        # timeline on the right, matching the intended reference layout.
-        studio_body = tk.Frame(lower, bg=self.colors["bg"])
-        studio_body.grid(row=2, column=0, sticky="nsew", pady=(0, 5))
-        studio_body.grid_columnconfigure(0, weight=3, uniform="studio")
-        studio_body.grid_columnconfigure(1, weight=2, uniform="studio")
-        studio_body.grid_rowconfigure(0, weight=4)
-        studio_body.grid_rowconfigure(1, weight=1)
-        self.studio_body = studio_body
+        # Full-width studio tabs: the GUION tab is a two-column workspace,
+        # with the editor on the left and preview/timeline on the right.
+        studio_tabs = ttk.Notebook(lower)
+        studio_tabs.grid(row=2, column=0, sticky="nsew")
+        self.studio_tabs = studio_tabs
+
+        script_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=8, pady=8)
+        self.script_tab = script_tab
+        studio_tabs.add(script_tab, text="  ✎  GUION  ")
+        script_tab.grid_columnconfigure(0, weight=3, uniform="scriptworkspace")
+        script_tab.grid_columnconfigure(1, weight=2, uniform="scriptworkspace")
+        script_tab.grid_rowconfigure(0, weight=3)
+        script_tab.grid_rowconfigure(1, weight=2)
+
+        script_editor_frame = tk.Frame(
+            script_tab, bg=self.colors["panel"], padx=8, pady=8,
+            highlightthickness=1, highlightbackground=self.colors["border"]
+        )
+        script_editor_frame.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 6))
+        script_editor_frame.grid_rowconfigure(1, weight=1)
+        script_editor_frame.grid_columnconfigure(0, weight=1)
+        self.script_editor_frame = script_editor_frame
 
         # Persistent monitor in the main workspace; it stays visible while switching tabs.
-        preview_dock = tk.Frame(studio_body, bg=self.colors["panel"], padx=9, pady=7,
+        preview_dock = tk.Frame(script_tab, bg=self.colors["panel"], padx=9, pady=7,
                                 highlightthickness=1, highlightbackground=self.colors["border"])
         preview_dock.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
         self.preview_dock = preview_dock
         preview_dock.grid_columnconfigure(0, weight=3, uniform="monitor")
+        preview_dock.grid_rowconfigure(1, weight=1)
         preview_dock.grid_columnconfigure(1, weight=2, uniform="monitor")
         monitor_header = tk.Frame(preview_dock, bg=self.colors["panel"])
         monitor_header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 5))
@@ -887,26 +901,15 @@ class App(tk.Tk):
                  bg=self.colors["panel"], fg=self.colors["muted"],
                  font=("Segoe UI", 8), anchor="w").grid(row=4, column=0, columnspan=2, sticky="ew", pady=(3, 0))
 
-        script_card = tk.Frame(studio_body, bg=self.colors["panel"], padx=10, pady=9,
-                               highlightthickness=1, highlightbackground=self.colors["border"])
-        script_card.grid(row=0, column=0, sticky="nsew")
-        script_card.grid_rowconfigure(0, weight=1)
-        script_card.grid_columnconfigure(0, weight=1)
-        studio_tabs = ttk.Notebook(script_card)
-        studio_tabs.grid(row=0, column=0, sticky="nsew")
-        self.studio_tabs = studio_tabs
-
-        script_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=8, pady=8)
-        studio_tabs.add(script_tab, text="  ✎  GUION  ")
         script_tab.grid_rowconfigure(1, weight=1)
         script_tab.grid_columnconfigure(0, weight=1)
-        script_head = tk.Frame(script_tab, bg=self.colors["panel"])
+        script_head = tk.Frame(script_editor_frame, bg=self.colors["panel"])
         script_head.grid(row=0, column=0, sticky="ew", pady=(0, 7))
         tk.Label(script_head, text="EDITOR DE GUION", bg=self.colors["panel"], fg=self.colors["text"],
                  font=("Segoe UI", 11, "bold")).pack(side="left")
         tk.Label(script_head, text="Revisa el texto antes de aprobar y exportar", bg=self.colors["panel"],
                  fg=self.colors["muted"], font=("Segoe UI", 9)).pack(side="right")
-        textframe = tk.Frame(script_tab, bg=self.colors["input"])
+        textframe = tk.Frame(script_editor_frame, bg=self.colors["input"])
         textframe.grid(row=1, column=0, sticky="nsew")
         textframe.grid_rowconfigure(0, weight=1)
         textframe.grid_columnconfigure(0, weight=1)
@@ -1245,7 +1248,7 @@ class App(tk.Tk):
         ).pack(side="left", padx=(10, 0))
 
         # Secondary overview timeline kept available in code; the full editor lives in Montage.
-        mini_timeline = tk.Frame(studio_body, bg=self.colors["panel"], padx=8, pady=5,
+        mini_timeline = tk.Frame(script_tab, bg=self.colors["panel"], padx=8, pady=5,
                                  highlightthickness=1, highlightbackground=self.colors["border"])
         mini_timeline.grid(row=1, column=1, sticky="nsew", padx=(6, 0), pady=(5, 0))
         self.mini_timeline_panel = mini_timeline
@@ -1274,7 +1277,7 @@ class App(tk.Tk):
         self.after(250, lambda: studio_tabs.select(script_tab))
         self.after(300, self._draw_timeline)
         tk.Label(lower, textvariable=self.status_var, bg=self.colors["bg"], fg=self.colors["muted"],
-                 font=("Segoe UI", 8), anchor="w").grid(row=5, column=0, sticky="ew", pady=(3, 0))
+                 font=("Segoe UI", 8), anchor="w").grid(row=3, column=0, sticky="ew", pady=(3, 0))
         self._apply_compact_workspace()
 
     def _apply_compact_workspace(self):
@@ -1363,8 +1366,8 @@ class App(tk.Tk):
         # the preview rather than leaving a large empty gap under the editor.
         self.preview_dock.configure(padx=10, pady=9)
         self.mini_timeline_panel.configure(padx=9, pady=7)
-        self.studio_body.grid_columnconfigure(0, weight=3, uniform="studio")
-        self.studio_body.grid_columnconfigure(1, weight=2, uniform="studio")
+        self.script_tab.grid_columnconfigure(0, weight=3, uniform="scriptworkspace")
+        self.script_tab.grid_columnconfigure(1, weight=2, uniform="scriptworkspace")
 
     def toggle_project_library(self):
         """Show or hide the saved-project library without shrinking the editor all day."""
