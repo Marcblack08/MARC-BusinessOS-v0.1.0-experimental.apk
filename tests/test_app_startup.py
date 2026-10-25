@@ -31,7 +31,7 @@ class AppStartupSmokeTests(unittest.TestCase):
             self.assertFalse(root.toolbar_save_button.winfo_ismapped())
             self.assertFalse(root.toolbar_approve_button.winfo_ismapped())
             self.assertFalse(root.toolbar_export_button.winfo_ismapped())
-            self.assertTrue(root.toolbar_config_button.winfo_ismapped())
+            self.assertEqual(root.toolbar_config_button.winfo_manager(), "pack")
             self.assertEqual(root.preview_render_button.winfo_parent(), str(root.secondary_actions))
             self.assertFalse(root.secondary_actions.winfo_ismapped())
             self.assertFalse(root.preview_dock.winfo_ismapped())
