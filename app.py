@@ -27,6 +27,7 @@ from urllib.parse import urlencode
 
 from scene_engine import (
     allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief,
+    build_cinematic_image_prompt, build_video_transition_filter_graph, camera_direction_for_shot,
     build_srt_subtitles, build_srt_from_timed_segments, build_subtitle_drawtext_filter, expand_scenes_to_shots, ffmpeg_filter_path,
     parse_script_scenes, scene_motion_filter
 )
@@ -3464,23 +3465,28 @@ Write-Output 'NARRATION_OK'
                     )
                 except Exception:
                     visual_description = story_excerpt
-            prompt = (
-                f"{style_prompt}. One cinematic still of this precise story beat: {visual_description}. "
-                f"Relevant canonical visual cues: {canon_reference[:650]}. "
-                "Use only characters required by the described action; preserve recognizable facial features, hairstyle, proportions, "
-                "costume and recurring props when relevant. Show one coherent moment, strong focal hierarchy, readable silhouettes, "
-                "cinematic composition and intentional lighting. No captions, readable text, speech bubbles, logos or watermark."
+            prompt = build_cinematic_image_prompt(
+                style_prompt=style_prompt,
+                visual_description=visual_description or story_excerpt,
+                scene_number=scene_number,
+                title=visual_brief["title"],
+                canon_reference=canon_reference,
+                continuity_reference=continuity_reference,
             )
             negative = (
-                "text, subtitles, letters, watermark, logo, blurry, low resolution, malformed hands, "
-                "extra fingers, extra limbs, duplicate people, distorted face, bad anatomy, compression artifacts"
+                "text, subtitles, letters, watermark, logo, blurry, low resolution, muddy detail, "
+                "flat lighting, washed out colors, malformed hands, extra fingers, extra limbs, "
+                "duplicate people, duplicated face, deformed face, bad anatomy, plastic skin, "
+                "cropped head, cut-off subject, random accessories, incorrect costume, compression artifacts"
             )
+            # More usable source pixels than the previous 288x512 preset, while staying
+            # below typical SDXL memory demands for older GPUs such as the GTX 750.
             if "TikTok" in platform_name or "9:16" in platform_name:
-                width, height = 288, 512
+                width, height = 384, 672
             elif "1:1" in platform_name:
                 width, height = 512, 512
             else:
-                width, height = 512, 288
+                width, height = 672, 384
             client_id = os.urandom(12).hex()
             workflow = {
                 "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": checkpoint}},
@@ -3488,8 +3494,8 @@ Write-Output 'NARRATION_OK'
                 "3": {"class_type": "CLIPTextEncode", "inputs": {"text": negative, "clip": ["1", 1]}},
                 "4": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
                 "5": {"class_type": "KSampler", "inputs": {
-                    "seed": random.randint(1, 2**31 - 1), "steps": 18, "cfg": 6.5,
-                    "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0,
+                    "seed": random.randint(1, 2**31 - 1), "steps": 22, "cfg": 6.5,
+                    "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1.0,
                     "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0]
                 }},
                 "6": {"class_type": "VAEDecode", "inputs": {"samples": ["5", 0], "vae": ["1", 2]}},
@@ -3593,6 +3599,7 @@ Write-Output 'NARRATION_OK'
                     "action": brief["narration"] or brief["excerpt"],
                     "dialogue_emotion_only": " | ".join(brief["dialogue"])[:180],
                     "characters": brief["speakers"], "canon": brief["canon_reference"][:420],
+                    "camera_direction": camera_direction_for_shot(scene_number),
                 })
             self.generation_queue.put(("image_prompt_plan_progress", start, total,
                 f"Preparando storyboard visual · {start}/{total} escenas"))
@@ -3601,8 +3608,10 @@ Write-Output 'NARRATION_OK'
                 "You are a cinematic storyboard artist. Return only a valid JSON object. "
                 "Keys must be supplied scene ids; values are concise English prompts for one still image each. "
                 "No markdown, collage, panels, captions, logos or watermarks. One coherent moment per image. "
-                "Describe visible action, expression, wardrobe, environment, framing, lighting and mood. "
-                "Use relevant character canon and preserve visual identity across scenes. "
+                "Describe visible action, specific facial emotion, expressive body language, wardrobe, environment and lighting. "
+                "Follow each record's camera_direction so successive frames use different shot sizes and angles. "
+                "Use relevant character canon and preserve hair, face, clothing and recurring props across scenes. "
+                "Avoid generic posed portraits; the image must show the exact story beat, not merely a character standing. "
                 f"Visual style: {style_prompt}. Premise: {project_topic[:600]}. "
                 "Scene records: " + json.dumps(records, ensure_ascii=False)
             )
@@ -3621,8 +3630,10 @@ Write-Output 'NARRATION_OK'
                 brief = briefs[key]
                 results[key] = generated.get(key,
                     f"{brief['title']}. {brief['narration'] or brief['excerpt']}. "
-                    f"Relevant characters: {', '.join(brief['speakers']) or 'as described in the scene'}. "
-                    "One coherent cinematic still, clear focal point, consistent costume and setting.")
+                    f"Camera: {camera_direction_for_shot(scene_number)}. "
+                    f"Characters: {', '.join(brief['speakers']) or 'only the subjects described in the action'}. "
+                    "One emotionally readable cinematic frame, active body language, a clear focal point, dramatic lighting, "
+                    "and consistent face, hair, costume and props.")
             done = min(total, start + len(group))
             self.generation_queue.put(("image_prompt_plan_progress", done, total,
                 f"Storyboard preparado · {done}/{total} escenas"))
