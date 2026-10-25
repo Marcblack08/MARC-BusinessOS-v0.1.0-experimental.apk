@@ -1278,24 +1278,19 @@ class App(tk.Tk):
         self._apply_compact_workspace()
 
     def _apply_compact_workspace(self):
-        """Start in the balanced, visible studio layout used by the main workspace."""
-        # Keep the project library, story configuration, and persistent preview
-        # monitor visible on startup. These are core work areas, not optional
-        # duplicate panels; hiding them made the first screen feel incomplete.
-        if hasattr(self, "workspace_panes") and hasattr(self, "project_library_pane"):
-            if str(self.project_library_pane) not in tuple(self.workspace_panes.panes()):
-                self.workspace_panes.add(
-                    self.project_library_pane, before=self.editor_pane,
-                    minsize=180, width=225, stretch="never"
-                )
-            self.project_library_visible = True
+        """Build a clean premium toolbar and preserve the three-column studio."""
+        # Restore the core panels in the intended order.
+        if str(self.project_library_pane) not in tuple(self.workspace_panes.panes()):
+            self.workspace_panes.add(
+                self.project_library_pane, before=self.editor_pane,
+                minsize=180, width=225, stretch="never"
+            )
+        self.project_library_visible = True
         self.set_configuration_visible(True)
         self.preview_dock.grid()
-        self.secondary_actions.grid_remove()
 
-        # Primary actions were created inside primary_actions and use grid.
-        # Secondary actions belong to secondary_actions and must stay there:
-        # Tk widgets cannot be reparented by calling grid() on another frame.
+        # Keep the existing widgets and callbacks, but replace the crowded
+        # legacy toolbar with a responsive container whose children all use pack.
         for widget in (
             self.generate_button, self.save_button, self.approve_button,
             self.export_button, self.config_toggle_button,
@@ -1309,22 +1304,36 @@ class App(tk.Tk):
         self.header_diagnose_button.pack_forget()
         self.header_tools_button.pack_forget()
 
-        self.toolbar_new_button = ttk.Button(
-            self.primary_actions, text="＋ Nuevo", command=self.new_project
+        if hasattr(self, "compact_toolbar"):
+            self.compact_toolbar.destroy()
+        self.compact_toolbar = tk.Frame(
+            self.primary_actions, bg=self.colors["panel"], padx=3, pady=2
         )
-        self.toolbar_new_button.grid(row=0, column=0, sticky="w")
-        self.config_toggle_button.configure(text="⚙ Ajustes +", command=self.toggle_configuration)
-        self.config_toggle_button.grid(row=0, column=1, sticky="w", padx=(6, 0))
-        self.generate_button.configure(text="✦ Generar guion")
-        self.generate_button.grid(row=0, column=2, sticky="w", padx=(6, 0))
-        self.save_button.configure(text="Guardar")
-        self.save_button.grid(row=0, column=3, sticky="w", padx=(6, 0))
-        self.approve_button.configure(text="Aprobar guion")
-        self.approve_button.grid(row=0, column=4, sticky="w", padx=(6, 0))
-        self.export_button.configure(text="Exportar MP4")
-        self.export_button.grid(row=0, column=5, sticky="w", padx=(6, 0))
+        self.compact_toolbar.grid(row=0, column=0, columnspan=8, sticky="ew")
+        self.primary_actions.grid_columnconfigure(0, weight=1)
+        self.compact_toolbar.grid_columnconfigure(2, weight=1)
 
-        self.more_button = ttk.Menubutton(self.primary_actions, text="Más ▾")
+        self.toolbar_new_button = ttk.Button(
+            self.compact_toolbar, text="＋ Nuevo", command=self.new_project
+        )
+        self.toolbar_new_button.pack(side="left", padx=(0, 6))
+        self.config_toggle_button.configure(text="⚙ Ajustes", command=self.toggle_configuration)
+        self.config_toggle_button.pack_forget()
+        self.config_toggle_button.pack(side="left", padx=(0, 6))
+        self.generate_button.configure(text="✦ Generar guion", style="Accent.TButton")
+        self.generate_button.pack_forget()
+        self.generate_button.pack(side="left", padx=(0, 6))
+        self.save_button.configure(text="Guardar")
+        self.save_button.pack_forget()
+        self.save_button.pack(side="left", padx=(0, 6))
+        self.approve_button.configure(text="✓ Aprobar")
+        self.approve_button.pack_forget()
+        self.approve_button.pack(side="left", padx=(0, 6))
+        self.export_button.configure(text="Exportar MP4")
+        self.export_button.pack_forget()
+        self.export_button.pack(side="left", padx=(0, 6))
+
+        self.more_button = ttk.Menubutton(self.compact_toolbar, text="Más  ▾")
         self.more_menu = tk.Menu(
             self.more_button, tearoff=0,
             bg=self.colors["panel"], fg=self.colors["text"],
@@ -1333,7 +1342,6 @@ class App(tk.Tk):
         )
         self.more_menu.add_command(label="Vista previa MP4", command=self.preview_video_render)
         self.more_menu.add_command(label="Configurar imágenes IA", command=self.open_image_setup)
-        self.more_menu.add_command(label="Biblioteca de proyectos", command=self.toggle_project_library)
         self.more_menu.add_command(label="Diagnóstico del equipo", command=self.detect_pc_async)
         self.more_menu.add_command(label="Herramientas instaladas", command=self.check_tools)
         self.more_menu.add_command(label="Acceso remoto desde el teléfono", command=self.show_remote_access)
@@ -1343,7 +1351,14 @@ class App(tk.Tk):
         self.more_menu.add_command(label="Cancelar generación", command=self.cancel_generation)
         self.more_menu.add_command(label="Cancelar render", command=self.cancel_export)
         self.more_button.configure(menu=self.more_menu)
-        self.more_button.grid(row=0, column=6, sticky="w", padx=(6, 0))
+        self.more_button.pack(side="right")
+
+        # Slightly increase visual hierarchy and keep the timeline attached to
+        # the preview rather than leaving a large empty gap under the editor.
+        self.preview_dock.configure(padx=10, pady=9)
+        self.mini_timeline_panel.configure(padx=9, pady=7)
+        self.studio_body.grid_columnconfigure(0, weight=3, uniform="studio")
+        self.studio_body.grid_columnconfigure(1, weight=2, uniform="studio")
 
     def toggle_project_library(self):
         """Show or hide the saved-project library without shrinking the editor all day."""
