@@ -396,15 +396,15 @@ def analyze_image_with_ollama(image_path: str | Path,
         "messages": [{
             "role": "user",
             "content": (
-                "Analiza esta imagen para crear un clip de image-to-video. Describe solo lo visible, "
-                "y devuelve una instrucción breve en español para el modelo de vídeo. "
-                "Conserva identidad, vestuario, entorno y estilo visual. Propón un movimiento corporal "
-                "natural y una acción coherente con la postura; no inventes personajes adicionales. "
+                "Analyze this image for an image-to-video clip. Describe only what is visible, "
+                "and return a concise ENGLISH motion prompt for the video model. "
+                "Preserve identity, clothing, setting, and visual style. Propose natural body movement "
+                "that fits the visible pose; do not invent additional characters. "
                 "Usa el contexto narrativo y la dirección visual siguientes cuando estén presentes. "
                 "No cambies la identidad del personaje ni añadas elementos incompatibles. "
                 f"Contexto del guion: {str(scene_context or '').strip()[:1200] or 'Sin contexto narrativo adicional'}. "
                 f"Dirección del plano: {str(camera_direction or '').strip()[:350] or 'Movimiento natural apropiado para la escena'}. "
-                "No incluyas explicaciones, encabezados ni comillas: solo el prompt de movimiento."
+                "Do not include explanations, headings, or quotation marks; return only the motion prompt."
             ),
             "images": [image_data],
         }],
