@@ -418,8 +418,9 @@ def generate_video(image_path: str | Path, motion_prompt: str, workflow_path: st
                    negative_prompt: str = "", timeout_seconds: int = 1800,
                    poll_interval: float = 2.0,
                    progress: Callable[[str], None] | None = None,
-                   cancel_check: Callable[[], bool] | None = None) -> Path:
-    """Run an exported ComfyUI API workflow and copy its first video output locally."""
+                   cancel_check: Callable[[], bool] | None = None,
+                   frame_count: int = 49) -> Path:
+    """Run an API or supported visual ComfyUI I2V workflow and save the resulting video locally."""
     prompt = str(motion_prompt or "").strip()
     if not prompt:
         raise VideoGenerationError("Describe el movimiento que debe realizar el personaje.")
@@ -430,18 +431,15 @@ def generate_video(image_path: str | Path, motion_prompt: str, workflow_path: st
         workflow = json.loads(workflow_file.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise VideoGenerationError(f"No se pudo leer el workflow JSON: {exc}") from exc
-    if "nodes" in workflow and "links" in workflow:
-        raise VideoGenerationError(
-            "Este parece un workflow visual de ComfyUI. Exporta el workflow en formato API JSON "
-            "(menú Save/Export API format) y vuelve a seleccionarlo."
-        )
     if progress:
         progress("Comprobando ComfyUI…")
     check_comfyui(base_url)
     if progress:
         progress("Subiendo imagen de referencia…")
     uploaded_name = upload_image(image_path, base_url)
-    api_workflow = prepare_workflow(workflow, uploaded_name, prompt, negative_prompt)
+    api_workflow = prepare_workflow(
+        workflow, uploaded_name, prompt, negative_prompt, frame_count=frame_count
+    )
     client_id = str(uuid.uuid4())
     payload = json.dumps({"prompt": api_workflow, "client_id": client_id}).encode("utf-8")
     response = json.loads(_request(base_url.rstrip("/") + "/prompt", payload,
