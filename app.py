@@ -6442,7 +6442,7 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                     "subtitle_color": subtitle_color_value, "subtitle_position": subtitle_position,
                     "subtitle_outline": bool(subtitle_outline), "subtitle_fontfile": subtitle_fontfile,
                     "width": width, "height": height,
-                    "fps": int(fps), "preset": "ultrafast", "crf": 25, "version": 6
+                    "fps": int(fps), "preset": "ultrafast", "crf": 25, "version": 7
                 }
                 cache_fingerprint = hashlib.sha256(
                     json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
