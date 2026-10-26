@@ -250,7 +250,8 @@ def create_creator_wizard(app, on_start: Callable[..., None],
                         app._creator_images.append(resolved)
                         seen.add(resolved)
             app._creator_images.sort(key=lambda path: _natural_sort_key(Path(path).name))
-            image_count_var.set(images_summary())
+            if getattr(app, "_creator_image_count_var", None) is not None:
+            app._creator_image_count_var.set(images_summary())
 
     def choose_image_folder():
         folder = filedialog.askdirectory(parent=app, title="Selecciona una carpeta de imágenes")
@@ -309,8 +310,8 @@ def create_creator_wizard(app, on_start: Callable[..., None],
         images_area.grid(row=4, column=0, sticky="ew", pady=(12, 0))
         tk.Label(images_area, text="IMÁGENES", bg=CARD_BG, fg=MUTED,
                  font=("Segoe UI", 9, "bold")).pack(anchor="w")
-        image_count_var = tk.StringVar(value=images_summary())
-        tk.Label(images_area, textvariable=image_count_var, bg=CARD_BG, fg=TEXT,
+        app._creator_image_count_var = tk.StringVar(value=images_summary())
+        tk.Label(images_area, textvariable=app._creator_image_count_var, bg=CARD_BG, fg=TEXT,
                  font=("Segoe UI", 9), anchor="w").pack(fill="x", pady=(4, 8))
         image_buttons = tk.Frame(images_area, bg=CARD_BG)
         image_buttons.pack(fill="x")
@@ -447,10 +448,17 @@ def create_creator_wizard(app, on_start: Callable[..., None],
         ttk.Button(actions, text="Crear otro vídeo", command=new_video).pack(side="right")
 
     def new_video():
+        try:
+            if getattr(app, "current_id", None) is not None:
+                app.save_project(quiet=True)
+                app.new_project()
+        except Exception:
+            pass
         app._creator_images = []
         app._creator_pending_script = ""
         app.title_var.set("")
         app.topic_var.set("")
+        app._creator_mode_var.set("Básico")
         show_page(1)
 
     # Save callbacks on the app instance for progress/automation helpers.
