@@ -39,6 +39,7 @@ from story_engine import (
     creative_direction, dialogue_quality_warnings
 )
 from production_pipeline import ProductionPipeline, STAGE_LABELS
+from production_package import discover_production_package, parse_scene_directions
 from media_quality import inspect_media_file
 from remote_server import RemoteControlServer
 
@@ -2283,7 +2284,34 @@ class App(tk.Tk):
         self._render_preview_frame()
 
     def import_production_package(self):
-        """Import a user-prepared script, per-scene direction notes, and a batch of images."""
+        """Import an entire prepared folder; fall back to selecting individual files."""
+        if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
+            messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
+            return
+        package_dir = filedialog.askdirectory(
+            title="Selecciona la carpeta completa del vídeo (guion, direcciones, imagenes y audio opcional)"
+        )
+        if package_dir:
+            try:
+                package = discover_production_package(package_dir)
+                script = package.script_path.read_text(encoding="utf-8-sig").strip()
+                directions = parse_scene_directions(package.direction_path) if package.direction_path else []
+            except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+                messagebox.showerror("No se pudo leer el paquete", str(exc))
+                return
+            self._apply_production_package(
+                package.script_path, script, directions, list(package.image_paths),
+                narration_path=package.narration_path, music_path=package.music_path,
+            )
+            return
+        if messagebox.askyesno(
+            "Importación manual",
+            "No seleccionaste una carpeta. ¿Quieres elegir el guion, las direcciones y las imágenes por separado?"
+        ):
+            self.import_production_package_files()
+
+    def import_production_package_files(self):
+        """Legacy/manual import flow for users who keep assets in separate locations."""
         if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
             messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.")
             return
@@ -2305,64 +2333,11 @@ class App(tk.Tk):
             title="Selecciona la dirección por escena (opcional; Cancelar para omitir)",
             filetypes=[("Dirección por escena", "*.txt *.md *.json"), ("Todos los archivos", "*.*")]
         )
-        directions = []
-        if direction_path:
-            try:
-                raw_directions = Path(direction_path).read_text(encoding="utf-8-sig").strip()
-                if raw_directions:
-                    if Path(direction_path).suffix.lower() == ".json":
-                        payload = json.loads(raw_directions)
-                        if isinstance(payload, dict):
-                            payload = payload.get("scenes", payload)
-                        if isinstance(payload, dict):
-                            directions = [
-                                " ".join(str(value.get("direction", value.get("movement", value.get("camera", ""))) if isinstance(value, dict) else str(value)).split())
-                                for _, value in sorted(payload.items(), key=lambda item: int(item[0]) if str(item[0]).isdigit() else 10**9)
-                            ]
-                        elif isinstance(payload, list):
-                            directions = [
-                                " ".join(str(item.get("direction", item.get("movement", item.get("camera", ""))) if isinstance(item, dict) else str(item)).split())
-                                for item in payload
-                            ]
-                    else:
-                        heading_pattern = re.compile(
-                            r"^\s*(?:\[?\s*)?(?:ESCENA|SCENE)\s*(\d+)\s*\]?\s*[:.)\-–—]+\s*(.*)$",
-                            re.IGNORECASE
-                        )
-                        numbered = {}
-                        current_number = None
-                        current_lines = []
-                        sequential = []
-                        for raw_line in raw_directions.splitlines():
-                            line = raw_line.strip()
-                            if not line:
-                                if current_number is None and current_lines:
-                                    sequential.append(" ".join(current_lines))
-                                    current_lines = []
-                                elif current_number is not None and current_lines:
-                                    current_lines.append("")
-                                continue
-                            match = heading_pattern.match(line)
-                            if match:
-                                if current_number is not None:
-                                    numbered[current_number] = " ".join(" ".join(current_lines).split())
-                                elif current_lines:
-                                    sequential.append(" ".join(current_lines))
-                                current_number = int(match.group(1))
-                                current_lines = [match.group(2).strip()] if match.group(2).strip() else []
-                            elif current_number is not None:
-                                current_lines.append(line)
-                            else:
-                                current_lines.append(line)
-                        if current_number is not None:
-                            numbered[current_number] = " ".join(" ".join(current_lines).split())
-                        elif current_lines:
-                            sequential.append(" ".join(current_lines))
-                        directions = [numbered[key] for key in sorted(numbered) if numbered[key]] if numbered else sequential
-                    directions = [str(item).strip()[:500] for item in directions if str(item).strip()]
-            except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
-                messagebox.showerror("No se pudo leer la dirección", f"Revisa el archivo de dirección por escena.\n\n{exc}")
-                return
+        try:
+            directions = parse_scene_directions(direction_path) if direction_path else []
+        except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
+            messagebox.showerror("No se pudo leer la dirección", f"Revisa el archivo de dirección por escena.\n\n{exc}")
+            return
         image_paths = filedialog.askopenfilenames(
             title="Selecciona todas las imágenes en orden narrativo",
             filetypes=[("Imágenes", "*.png *.jpg *.jpeg *.webp *.bmp"), ("Todos los archivos", "*.*")]
@@ -2375,10 +2350,22 @@ class App(tk.Tk):
         if not images:
             messagebox.showerror("Sin imágenes compatibles", "No se encontraron imágenes PNG, JPG, JPEG, WEBP o BMP válidas.")
             return
+        self._apply_production_package(Path(script_path), script, directions, images)
+
+    def _apply_production_package(self, script_path, script, directions, images, narration_path=None, music_path=None):
+        """Copy package assets into a project and connect available audio tracks automatically."""
+        images = [Path(item) for item in images if Path(item).is_file()]
+        directions = [str(item).strip()[:500] for item in directions if str(item).strip()]
+        if not script.strip():
+            messagebox.showwarning("Guion vacío", "El paquete no contiene un guion válido.")
+            return
+        if not images:
+            messagebox.showwarning("Faltan imágenes", "El paquete debe incluir al menos una imagen.")
+            return
         if self.current_id is not None and (self.script_text.get("1.0", "end-1c").strip() or self.scene_assets):
             if not messagebox.askyesno(
                 "Reemplazar el contenido actual",
-                "Se reemplazará el guion y la asignación de imágenes de este proyecto. Los archivos originales no se borrarán. ¿Continuar?"
+                "Se reemplazará el guion y la asignación de recursos de este proyecto. Los archivos originales no se borrarán. ¿Continuar?"
             ):
                 return
         if not str(self.title_var.get() or "").strip():
@@ -2391,13 +2378,14 @@ class App(tk.Tk):
         self.scene_assets = {}
         self.scene_directions = {}
         self.scene_duration_overrides = {}
+        self.audio_track_path = ""
+        self.music_track_path = ""
         self._refresh_scene_outline(script)
         if not self.scene_data:
             messagebox.showerror("No se detectaron escenas", "El guion no pudo convertirse en escenas. Añade encabezados como ESCENA 1, ESCENA 2… y vuelve a importarlo.")
             return
         assets_dir = self._project_assets_dir(self.current_id)
         if assets_dir is None:
-            # Create the project record first; this also gives the package a stable project folder.
             self.save_project(reset_approval=True, quiet=True)
             assets_dir = self._project_assets_dir(self.current_id)
         if assets_dir is None:
@@ -2411,6 +2399,7 @@ class App(tk.Tk):
                 if source.resolve() != destination.resolve():
                     shutil.copy2(source, destination)
                 imported_paths.append(str(destination.resolve()))
+
             scene_count = len(self.scene_data)
             for index in range(scene_count):
                 image_index = min(len(imported_paths) - 1, (index * len(imported_paths)) // scene_count)
@@ -2418,25 +2407,50 @@ class App(tk.Tk):
                 if directions:
                     direction_index = min(len(directions) - 1, (index * len(directions)) // scene_count)
                     self.scene_directions[str(index + 1)] = directions[direction_index]
+
+            if narration_path and Path(narration_path).is_file():
+                source = Path(narration_path)
+                destination = assets_dir / f"imported_narration{source.suffix.lower()}"
+                if source.resolve() != destination.resolve():
+                    shutil.copy2(source, destination)
+                self.audio_track_path = str(destination.resolve())
+            if music_path and Path(music_path).is_file():
+                source = Path(music_path)
+                destination = assets_dir / f"imported_music{source.suffix.lower()}"
+                if source.resolve() != destination.resolve():
+                    shutil.copy2(source, destination)
+                self.music_track_path = str(destination.resolve())
+
             self._save_scene_assets()
             self.save_project(reset_approval=True, quiet=True)
             self._refresh_scene_outline(script)
-            self.scene_outline.selection_set("scene_1")
-            self.scene_outline.see("scene_1")
+            if self.scene_data:
+                self.scene_outline.selection_set("scene_1")
+                self.scene_outline.see("scene_1")
         except (OSError, tk.TclError) as exc:
             messagebox.showerror("Error al importar el paquete", str(exc))
             return
         self.studio_tabs.select(self.scenes_tab)
         direction_note = f" · {len(directions)} indicaciones de movimiento" if directions else " · movimiento de cámara automático"
+        audio_note = []
+        if self.audio_track_path:
+            audio_note.append("narración importada")
+        if self.music_track_path:
+            audio_note.append("música importada")
+        audio_summary = " · " + ", ".join(audio_note) if audio_note else " · voz/música no incluidas en la carpeta"
+        unused_images = max(0, len(imported_paths) - scene_count)
+        extra_note = f" · {unused_images} imágenes importadas sin plano asignado (hay menos planos que imágenes)" if unused_images else ""
         self.status_var.set(
-            f"Paquete importado: {len(images)} imágenes distribuidas en {scene_count} planos{direction_note}. "
-            "Revisa las escenas, aprueba el guion y genera narración/audio antes de exportar."
+            f"Paquete importado: {len(images)} imágenes distribuidas en {scene_count} planos{direction_note}{audio_summary}{extra_note}. "
+            "Revisa y aprueba el guion antes de exportar."
         )
         messagebox.showinfo(
             "Paquete importado",
             f"Guion: {Path(script_path).name}\nImágenes: {len(images)}\nPlanos detectados: {scene_count}\n"
-            f"Direcciones: {len(directions)}\n\nLas imágenes se distribuyeron en orden y se copiaron al proyecto. "
-            "Las indicaciones controlan paneo/zoom en el montaje de imágenes fijas; no crean animación corporal generativa."
+            f"Direcciones: {len(directions)}\nNarración: {'importada' if self.audio_track_path else 'no incluida'}\n"
+            f"Música: {'importada' if self.music_track_path else 'no incluida'}\n\n"
+            "Los recursos se copiaron al proyecto. Las indicaciones controlan zoom/paneo de imágenes fijas; "
+            "no crean movimiento corporal generativo. Si no importaste voz, puedes generarla desde la pestaña Audio."
         )
 
     def assign_scene_image(self):
