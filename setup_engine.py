@@ -623,8 +623,16 @@ def run_automatic_setup(callback: Callable[[str], None] | None = None,
     comfy = probe_comfyui()
     free_disk_gb = shutil.disk_usage(root).free / (1024 ** 3)
     model_downloads_allowed = free_disk_gb >= 8.0
+    # Do not install a visual model if local video inference is not feasible and
+    # the user has no working LTX-capable ComfyUI instance already configured.
+    vision_install_permitted = bool(
+        install_vision_model and (
+            hardware.get("can_install_local_i2v")
+            or (comfy and comfy.get("supports_ltx_i2v"))
+        )
+    )
     ollama_url, models = (None, [])
-    if install_text_model or install_vision_model:
+    if install_text_model or vision_install_permitted:
         ollama_url, models = _ensure_ollama_server(callback)
     if ollama_url:
         if install_text_model and not _model_installed(models, OLLAMA_TEXT_MODEL):
@@ -639,13 +647,15 @@ def run_automatic_setup(callback: Callable[[str], None] | None = None,
         ] if isinstance(tags, dict) else models
         vision_ready = any(_model_installed(models, model) for model in
                            (OLLAMA_VISION_MODEL, "qwen2.5vl", "gemma3", "llava", "llama3.2-vision", "gemma4"))
-        if install_vision_model and not vision_ready:
+        if vision_install_permitted and not vision_ready:
             if model_downloads_allowed:
                 _ollama_pull(OLLAMA_VISION_MODEL, callback)
             else:
                 _notify(callback, "Se omitió el modelo visual porque no hay espacio libre suficiente.")
-    elif install_text_model or install_vision_model:
+    elif install_text_model or vision_install_permitted:
         _notify(callback, "Ollama no está disponible. Se conserva el editor; la IA local necesita Winget o el instalador oficial de Ollama.")
+    elif install_vision_model and not vision_install_permitted:
+        _notify(callback, "Se omitió el modelo visual: el equipo no cumple el perfil de vídeo local y no hay un motor LTX configurado.")
     workflow_path = ensure_official_workflow(callback) if install_video_models else None
     launcher = _find_comfy_launcher()
     if install_video_models:
@@ -683,7 +693,7 @@ def run_automatic_setup(callback: Callable[[str], None] | None = None,
         report["notes"].append("FFmpeg sigue ausente: instala FFmpeg y vuelve a pulsar Preparar IA.")
     if install_text_model and not report["ollama"]["script_model_ready"]:
         report["notes"].append("El modelo de guion Qwen no está disponible.")
-    if install_vision_model and not report["ollama"]["vision_model_ready"]:
+    if vision_install_permitted and not report["ollama"]["vision_model_ready"]:
         report["notes"].append("No se detectó un modelo visual en Ollama; AUTO no analizará imágenes hasta instalar uno.")
     if not report["video_generation_ready"] and not report["hardware"].get("can_install_local_i2v"):
         report["notes"].append(
