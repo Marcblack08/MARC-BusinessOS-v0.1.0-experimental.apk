@@ -271,6 +271,7 @@ def _start_wizard_production(self, title: str, script: str, narration_script: st
                 pass
         self.new_project()
         self._creator_narration_override = str(narration_script or "").strip()
+        self._creator_auto_narration_active = bool(self._creator_narration_override)
         self.title_var.set(title)
         self.topic_var.set(("Producción desde guion: " + " ".join(script.split()))[:2950])
         preset = animation_preset(mode)
