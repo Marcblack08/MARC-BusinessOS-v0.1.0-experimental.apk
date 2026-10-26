@@ -10,6 +10,7 @@ import base64
 import json
 import mimetypes
 import os
+import secrets
 import time
 import urllib.error
 import urllib.parse
@@ -200,8 +201,10 @@ def visual_workflow_to_api(workflow: dict) -> dict:
             # The visual editor includes an extra control-after-generate choice;
             # this is UI state, not an API input, so it must not shift cfg.
             if len(values) >= 4:
+                seed_mode = str(values[2]).casefold() if len(values) > 2 else ""
+                seed = secrets.randbits(53) if seed_mode in {"randomize", "randomise"} else int(values[1])
                 inputs.update({
-                    "add_noise": values[0], "noise_seed": int(values[1]),
+                    "add_noise": values[0], "noise_seed": seed,
                     "cfg": float(values[3]),
                 })
             for name in ("model", "positive", "negative", "sampler", "sigmas", "latent_image"):
