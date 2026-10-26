@@ -7,6 +7,7 @@ ComfyUI API workflow; it does not download large models automatically.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -65,7 +66,7 @@ def _open_video_generation(self):
     )
     if not image_path:
         return
-    settings_path = Path(getattr(marc_app, "APP_DATA_ROOT", Path.home())) / "video_generation_settings.json"
+    settings_path = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "MARC Video Studio AI Desktop" / "video_generation_settings.json"
     saved_workflow = ""
     try:
         saved_workflow = str(json.loads(settings_path.read_text(encoding="utf-8")).get("workflow_path", ""))
