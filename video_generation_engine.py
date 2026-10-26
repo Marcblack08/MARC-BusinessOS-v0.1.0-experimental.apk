@@ -6,6 +6,7 @@ image-to-video workflows) without silently assuming a model's node layout.
 """
 from __future__ import annotations
 
+import base64
 import json
 import mimetypes
 import os
@@ -133,6 +134,75 @@ def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
     for node_id, key in negative_nodes:
         prepared[node_id]["inputs"][key] = negative_prompt
     return prepared
+
+
+
+def analyze_image_with_ollama(image_path: str | Path,
+                              base_url: str = "http://127.0.0.1:11434",
+                              model_override: str | None = None,
+                              timeout: float = 180.0) -> str:
+    """Use an installed local vision model to describe a still and suggest motion."""
+    path = Path(image_path).expanduser().resolve()
+    if not path.is_file():
+        raise VideoGenerationError(f"No se encontró la imagen para analizar: {path}")
+    try:
+        raw = _request(base_url.rstrip("/") + "/api/tags", timeout=10)
+        tags = json.loads(raw.decode("utf-8")).get("models", [])
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise VideoGenerationError("Ollama no devolvió una lista válida de modelos.") from exc
+    available = [str(item.get("name", "")) for item in tags if isinstance(item, dict)]
+    override = (model_override or os.environ.get("MARC_VISION_MODEL", "")).strip()
+    if override:
+        model = next((name for name in available if name == override or name.split(":")[0] == override), None)
+        if model is None:
+            raise VideoGenerationError(
+                f"El modelo visual '{override}' no está instalado en Ollama. Modelos disponibles: "
+                + (", ".join(available[:12]) or "ninguno")
+            )
+    else:
+        preferred = ("moondream", "qwen2.5vl:3b", "qwen2.5vl", "gemma3:4b",
+                     "gemma3", "llava", "minicpm-v", "llama3.2-vision")
+        model = None
+        for candidate in preferred:
+            model = next((name for name in available
+                          if name == candidate or name.startswith(candidate + ":")), None)
+            if model:
+                break
+        if model is None:
+            raise VideoGenerationError(
+                "No se encontró un modelo visual en Ollama. Instala un modelo de visión compatible "
+                "(por ejemplo moondream o qwen2.5vl:3b) o escribe manualmente la acción en vez de usar AUTO. "
+                "Ollama no puede analizar imágenes con un modelo solo de texto."
+            )
+    image_data = base64.b64encode(path.read_bytes()).decode("ascii")
+    body = json.dumps({
+        "model": model,
+        "stream": False,
+        "messages": [{
+            "role": "user",
+            "content": (
+                "Analiza esta imagen para crear un clip de image-to-video. Describe solo lo visible, "
+                "y devuelve una instrucción breve en español para el modelo de vídeo. "
+                "Conserva identidad, vestuario, entorno y estilo visual. Propón un movimiento corporal "
+                "natural y una acción coherente con la postura; no inventes personajes adicionales. "
+                "No incluyas explicaciones, encabezados ni comillas: solo el prompt de movimiento."
+            ),
+            "images": [image_data],
+        }],
+        "options": {"temperature": 0.25},
+    }).encode("utf-8")
+    try:
+        response = json.loads(_request(
+            base_url.rstrip("/") + "/api/chat", body,
+            {"Content-Type": "application/json"}, timeout=timeout
+        ).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise VideoGenerationError("Ollama devolvió una respuesta visual no válida.") from exc
+    message = response.get("message") or {}
+    result = str(message.get("content", "")).strip()
+    if not result:
+        raise VideoGenerationError(f"El modelo visual {model} no devolvió una descripción.")
+    return result[:4000]
 
 
 def generate_video(image_path: str | Path, motion_prompt: str, workflow_path: str | Path,
