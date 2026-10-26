@@ -608,7 +608,9 @@ def build_report(callback: Callable[[str], None] | None = None,
 
 def run_automatic_setup(callback: Callable[[str], None] | None = None,
                         install_video_models: bool = True,
-                        data_root: str | Path | None = None) -> dict:
+                        data_root: str | Path | None = None,
+                        install_text_model: bool = True,
+                        install_vision_model: bool = True) -> dict:
     """Install missing safe prerequisites, and install local I2V only on suitable hardware."""
     root = Path(data_root or DATA_ROOT).expanduser()
     root.mkdir(parents=True, exist_ok=True)
@@ -621,13 +623,15 @@ def run_automatic_setup(callback: Callable[[str], None] | None = None,
     comfy = probe_comfyui()
     free_disk_gb = shutil.disk_usage(root).free / (1024 ** 3)
     model_downloads_allowed = free_disk_gb >= 8.0
-    ollama_url, models = _ensure_ollama_server(callback)
+    ollama_url, models = (None, [])
+    if install_text_model or install_vision_model:
+        ollama_url, models = _ensure_ollama_server(callback)
     if ollama_url:
-        if not _model_installed(models, OLLAMA_TEXT_MODEL):
+        if install_text_model and not _model_installed(models, OLLAMA_TEXT_MODEL):
             if model_downloads_allowed:
                 _ollama_pull(OLLAMA_TEXT_MODEL, callback)
             else:
-                _notify(callback, "Quedan menos de 8 GB libres; no descargaré modelos de texto/visión para evitar llenar el disco.")
+                _notify(callback, "Quedan menos de 8 GB libres; se omitió la descarga del modelo de guion.")
         tags = _request_json(OLLAMA_URL + "/api/tags", timeout=3.0)
         models = [
             str(item.get("name", "")) for item in (tags or {}).get("models", [])
@@ -635,21 +639,19 @@ def run_automatic_setup(callback: Callable[[str], None] | None = None,
         ] if isinstance(tags, dict) else models
         vision_ready = any(_model_installed(models, model) for model in
                            (OLLAMA_VISION_MODEL, "qwen2.5vl", "gemma3", "llava", "llama3.2-vision", "gemma4"))
-        if not vision_ready:
+        if install_vision_model and not vision_ready:
             if model_downloads_allowed:
                 _ollama_pull(OLLAMA_VISION_MODEL, callback)
             else:
                 _notify(callback, "Se omitió el modelo visual porque no hay espacio libre suficiente.")
-    else:
-        _notify(callback, "Ollama no está disponible. Se conserva el editor; la instalación local de IA necesita Winget o el instalador oficial de Ollama.")
-    workflow_path = ensure_official_workflow(callback)
-    if not comfy:
-        launcher = _find_comfy_launcher()
-        if launcher:
+    elif install_text_model or install_vision_model:
+        _notify(callback, "Ollama no está disponible. Se conserva el editor; la IA local necesita Winget o el instalador oficial de Ollama.")
+    workflow_path = ensure_official_workflow(callback) if install_video_models else None
+    launcher = _find_comfy_launcher()
+    if install_video_models:
+        if not comfy and launcher:
             _launch_comfy(launcher, callback)
             comfy = probe_comfyui()
-    else:
-        launcher = _find_comfy_launcher()
     if not comfy and install_video_models and hardware.get("can_install_local_i2v"):
         if shutil.disk_usage(root).free / (1024 ** 3) < 30:
             _notify(callback, "No hay 30 GB libres. No se descargará ComfyUI ni el modelo de vídeo para evitar llenar el disco.")
@@ -672,16 +674,16 @@ def run_automatic_setup(callback: Callable[[str], None] | None = None,
                     comfy = probe_comfyui()
                 else:
                     _notify(callback, "No hay espacio libre suficiente para instalar el modelo LTX.")
-    if workflow_path is None:
+    if install_video_models and workflow_path is None:
         workflow_path = ensure_official_workflow(callback)
     report = build_report(callback, data_root=root)
     report["ffmpeg"]["path"] = find_ffmpeg() or ""
     report["comfyui"]["workflow_path"] = str(workflow_path) if workflow_path else ""
     if not report["ffmpeg"]["available"]:
         report["notes"].append("FFmpeg sigue ausente: instala FFmpeg y vuelve a pulsar Preparar IA.")
-    if not report["ollama"]["script_model_ready"]:
+    if install_text_model and not report["ollama"]["script_model_ready"]:
         report["notes"].append("El modelo de guion Qwen no está disponible.")
-    if not report["ollama"]["vision_model_ready"]:
+    if install_vision_model and not report["ollama"]["vision_model_ready"]:
         report["notes"].append("No se detectó un modelo visual en Ollama; AUTO no analizará imágenes hasta instalar uno.")
     if not report["video_generation_ready"] and not report["hardware"].get("can_install_local_i2v"):
         report["notes"].append(
