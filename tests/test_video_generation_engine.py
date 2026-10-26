@@ -107,6 +107,14 @@ class VideoGenerationEngineTests(unittest.TestCase):
         self.assertEqual(prepared["6"]["inputs"]["text"], "La mujer camina hacia la puerta")
         self.assertEqual(prepared["7"]["inputs"]["text"], "bad anatomy, blurry")
         self.assertEqual(prepared["77"]["inputs"]["length"], 49)
+        self.assertEqual(prepared["77"]["inputs"]["width"], 768)
+        self.assertEqual(prepared["77"]["inputs"]["height"], 512)
+        vertical = prepare_workflow(
+            visual, "reference.png", "La mujer camina hacia la puerta",
+            frame_count=49, output_width=512, output_height=768
+        )
+        self.assertEqual(vertical["77"]["inputs"]["width"], 512)
+        self.assertEqual(vertical["77"]["inputs"]["height"], 768)
 
 
 
