@@ -19,6 +19,16 @@ Si Winget no está disponible, Python, FFmpeg u Ollama podrían requerir su inst
 
 El artefacto de Actions puede caducar; usa la ejecución más reciente. La aplicación empaquetada no incluye el modelo local ni los motores externos de IA.
 
+## Uso simplificado
+
+Al abrir MARC, la primera pantalla es el **Creador fácil**. No necesitas empezar con la línea de tiempo ni configurar cada herramienta.
+
+1. En **Proyecto**, escribe el nombre, pega el guion y añade imágenes en orden narrativo o importa una carpeta con imágenes.
+2. En **Animación y voces**, elige **Básico**, **Movimiento IA** o **Cinemático IA**. Entra en **Catálogo de voces** para escuchar las voces locales disponibles y elegir la que prefieras. Para añadir voces de Windows se abre la configuración de voz; para voces neuronales se puede configurar Kokoro localmente.
+3. Pulsa **Crear vídeo**. MARC analiza el equipo, detecta dependencias y muestra el progreso. Si el equipo no admite generación de vídeo IA local, te ofrece continuar con el modo básico.
+
+Las escenas de imagen se alinean con la cantidad de imágenes seleccionadas. La narración utiliza el guion original para conservar el texto y los diálogos. El **Editor avanzado** mantiene las pestañas de escenas, montaje, vista previa, audio, subtítulos, opciones visuales y herramientas adicionales.
+
 ## Qué queda preparado automáticamente
 
 - **FFmpeg:** se instala cuando falta; permite montar, mezclar audio y exportar MP4.
