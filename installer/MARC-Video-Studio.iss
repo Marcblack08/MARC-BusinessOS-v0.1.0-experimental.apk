@@ -1,6 +1,6 @@
 ; Inno Setup 6 script for MARC Video Studio AI Desktop
 #define AppName "MARC Video Studio AI Desktop"
-#define AppVersion "0.2.0"
+#define AppVersion "0.3.0"
 #define AppPublisher "MARC"
 #define AppExeName "MARC Video Studio AI Desktop.exe"
 
