@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from production_package import discover_production_package, parse_scene_directions
+from production_package import discover_production_package, map_production_resources, parse_scene_directions
 
 
 class ProductionPackageTests(unittest.TestCase):
@@ -38,6 +38,37 @@ class ProductionPackageTests(unittest.TestCase):
                 parse_scene_directions(package.direction_path),
                 ["Zoom lento hacia la puerta", "Paneo de izquierda a derecha"],
             )
+
+    def test_maps_image_and_direction_by_original_scene_after_shot_expansion(self):
+        shots = [
+            {"source_scene_index": 1},
+            {"source_scene_index": 1},
+            {"source_scene_index": 2},
+            {"source_scene_index": 3},
+            {"source_scene_index": 3},
+        ]
+        self.assertEqual(
+            map_production_resources(shots, image_count=3, direction_count=3, source_scene_count=3),
+            [(0, 0), (0, 0), (1, 1), (2, 2), (2, 2)],
+        )
+
+    def test_distributes_small_image_batch_across_long_single_scene(self):
+        shots = [{"source_scene_index": 1} for _ in range(8)]
+        self.assertEqual(
+            map_production_resources(shots, image_count=2, direction_count=2, source_scene_count=1),
+            [(0, 0)] * 4 + [(1, 1)] * 4,
+        )
+
+    def test_maps_one_image_per_shot_when_batch_is_large_enough(self):
+        shots = [{"source_scene_index": 1} for _ in range(3)]
+        self.assertEqual(
+            map_production_resources(shots, image_count=5, direction_count=3, source_scene_count=1),
+            [(0, 0), (1, 1), (2, 2)],
+        )
+
+    def test_mapping_requires_at_least_one_image(self):
+        with self.assertRaisesRegex(ValueError, "al menos una imagen"):
+            map_production_resources([{"source_scene_index": 1}], 0, 0, 1)
 
     def test_fails_with_clear_error_when_images_are_missing(self):
         with tempfile.TemporaryDirectory() as temporary:
