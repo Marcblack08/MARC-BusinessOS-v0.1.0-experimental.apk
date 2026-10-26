@@ -45,7 +45,11 @@ def _notify(callback: Callable[[str], None] | None, message: str) -> None:
             callback(message)
         except Exception:
             pass
-    print("[MARC setup] " + message, flush=True)
+    try:
+        print("[MARC setup] " + message, flush=True)
+    except Exception:
+        # Windowed PyInstaller builds may not have a console/stdout attached.
+        pass
 
 
 def _request_bytes(url: str, timeout: float = 8.0) -> bytes:
