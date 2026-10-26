@@ -15,7 +15,7 @@ Si Winget no está disponible, Python, FFmpeg u Ollama podrían requerir su inst
 
 1. En el repositorio, abre **Actions → Build Windows desktop installer**.
 2. Descarga el artefacto `MARC-Video-Studio-Windows` de una ejecución exitosa.
-3. Ejecuta `MARC-Video-Studio-Setup-0.4.0-x64.exe`.
+3. Ejecuta `MARC-Video-Studio-Setup-0.5.0-x64.exe`.
 
 El artefacto de Actions puede caducar; usa la ejecución más reciente. La aplicación empaquetada no incluye el modelo local ni los motores externos de IA.
 
