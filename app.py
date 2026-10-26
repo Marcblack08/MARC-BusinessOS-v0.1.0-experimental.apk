@@ -6188,7 +6188,7 @@ Write-Output 'NARRATION_OK'
             voice_assignments_json, bool(preview),
             row["subtitle_font"] or "Arial", row["subtitle_size"] or "Mediano",
             row["subtitle_color"] or "Blanco", row["subtitle_position"] or "Inferior",
-            bool(row["subtitle_outline"])
+            bool(row["subtitle_outline"]), dict(getattr(self, "scene_video_assets", {}) or {})
         )
         threading.Thread(target=self._render_video_worker, args=args, daemon=True).start()
 
@@ -6233,7 +6233,7 @@ Write-Output 'NARRATION_OK'
                              voice_assignments_json="{}", is_preview=False,
                               subtitle_font="Arial", subtitle_size="Mediano",
                               subtitle_color="Blanco", subtitle_position="Inferior",
-                              subtitle_outline=True):
+                              subtitle_outline=True, video_asset_map=None):
         scene_dir = PROJECTS_DIR / str(project_id) / "render_work"
         scene_dir.mkdir(parents=True, exist_ok=True)
         output_path = Path(output)
@@ -6415,6 +6415,8 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                 source_text = re.sub(r"\[EMOC[IÍ]ON\s*=\s*[^\]]{1,32}\]\s*", "", " ".join(scene["text"].split()), flags=re.IGNORECASE)
                 source_text = re.sub(r"\[([^\]]+)\]\s*:\s*", "", source_text).strip()
                 asset = asset_map.get(str(index + 1), "")
+                video_asset_map = video_asset_map or {}
+                video_asset = str(video_asset_map.get(str(index + 1), "") or "")
                 asset_signature = None
                 if asset and Path(asset).is_file():
                     asset_path = Path(asset)
@@ -6423,8 +6425,17 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                         "path": str(asset_path.resolve()), "size": stat.st_size,
                         "mtime_ns": stat.st_mtime_ns
                     }
+                video_asset_signature = None
+                if video_asset and Path(video_asset).is_file():
+                    video_path = Path(video_asset)
+                    video_stat = video_path.stat()
+                    video_asset_signature = {
+                        "path": str(video_path.resolve()), "size": video_stat.st_size,
+                        "mtime_ns": video_stat.st_mtime_ns
+                    }
                 cache_payload = {
-                    "scene": scene, "duration": seconds, "clip_duration": clip_seconds, "asset": asset_signature,
+                    "scene": scene, "duration": seconds, "clip_duration": clip_seconds,
+                    "asset": asset_signature, "video_asset": video_asset_signature,
                     "animation": animation_style, "intensity": animation_intensity,
                     "overlay": overlay_mode, "transition": transition_style,
                     "subtitle_font": subtitle_font, "subtitle_size": subtitle_size,
@@ -6473,7 +6484,35 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                     f"fontsize={font_size}:line_spacing=12:x=(w-text_w)/2:y=(h-text_h)/2:"
                     "box=1:boxcolor=0x06101d@0.80:boxborderw=28"
                 )
-                if asset and Path(asset).is_file():
+                if video_asset and Path(video_asset).is_file():
+                    # A generated I2V clip takes precedence over a still image. Loop/trim it to
+                    # the shot duration, then scale/crop and overlay the scene label if requested.
+                    label_filter = ""
+                    if overlay_mode != "Sin texto":
+                        label_file = scene_dir / f"scene_label_{index + 1:03d}.txt"
+                        scene_label = (" ".join(source_text.split())[:150]
+                                       if overlay_mode == "Subtítulo narrativo"
+                                       else str(title or f"Escena {index + 1}"))
+                        scene_label = re.sub(r"\\s+", " ", scene_label).strip()[:160]
+                        label_file.write_text(scene_label, encoding="utf-8")
+                        label_filter = build_subtitle_drawtext_filter(
+                            label_file, subtitle_fontfile or None, subtitle_size_px,
+                            color=subtitle_color_value, position=subtitle_position, outline=subtitle_outline
+                        )
+                    filters = [
+                        f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos",
+                        f"crop={width}:{height}", f"fps={fps}", "setsar=1",
+                    ]
+                    if label_filter:
+                        filters.append(label_filter)
+                    video_filter = ",".join(filters)
+                    cmd = [
+                        ffmpeg, "-y", "-stream_loop", "-1", "-i", str(Path(video_asset).resolve()),
+                        "-t", str(clip_seconds), "-vf", video_filter, "-an", "-r", str(fps),
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
+                        "-crf", "25", "-movflags", "+faststart", str(scene_file)
+                    ]
+                elif asset and Path(asset).is_file():
                     # Keep the generated illustration dominant. Spoken prose is carried by the audio track;
                     # only a small lower-third scene label is drawn over artwork.
                     label_filter = ""
