@@ -196,7 +196,7 @@ def parse_script_scenes(script: str, max_scenes: int = 120) -> list[dict]:
 def expand_scenes_to_shots(
     scenes: Iterable[dict],
     target_shots: int,
-    max_scenes: int = 120,
+    max_scenes: int = 1440,
     min_words_to_split: int = 12,
 ) -> list[dict]:
     """Split overlong parsed scenes into smaller visual shots without inventing story text.
@@ -214,10 +214,11 @@ def expand_scenes_to_shots(
         raise ValueError("Shot counts and split limits must be integers.") from None
 
     result = []
-    for original in scenes:
+    for source_index, original in enumerate(scenes, start=1):
         if len(result) >= limit:
             break
         item = dict(original)
+        item.setdefault("source_scene_index", source_index)
         item["text"] = str(item.get("text", "") or "").strip()
         item["word_count"] = len(item["text"].split())
         result.append(item)
