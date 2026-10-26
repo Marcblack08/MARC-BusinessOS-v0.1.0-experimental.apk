@@ -225,7 +225,8 @@ def _install_setup_button(self):
     )
 
 
-def _start_wizard_production(self, title: str, script: str, image_paths: list[str], mode: str):
+def _start_wizard_production(self, title: str, script: str, narration_script: str,
+                            image_paths: list[str], mode: str):
     """Prepare a new project from the guided creator, then run its chosen production preset."""
     try:
         title = str(title or "").strip()
@@ -243,6 +244,7 @@ def _start_wizard_production(self, title: str, script: str, image_paths: list[st
             except Exception:
                 pass
         self.new_project()
+        self._creator_narration_override = str(narration_script or "").strip()
         self.title_var.set(title)
         self.topic_var.set(("Producción desde guion: " + " ".join(script.split()))[:2950])
         preset = animation_preset(mode)
