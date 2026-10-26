@@ -19,7 +19,10 @@ class VideoGenerationLauncherSmokeTests(unittest.TestCase):
             self.assertTrue(hasattr(root, "animate_image_button"))
             expected_parent = marc_launcher._find_button_parent(root.scenes_tab, "Añadir imagen propia")
             self.assertIsNotNone(expected_parent)
-            self.assertEqual(root.animate_image_button.master, expected_parent)
+            self.assertEqual(root.full_production_button.master, expected_parent)
+            self.assertEqual(root.video_ai_actions.master, root.image_ai_bar)
+            self.assertEqual(root.animate_image_button.master, root.video_ai_actions)
+            self.assertIn("Producción automática", root.full_production_button.cget("text"))
             self.assertIn("Animar imagen a vídeo IA", root.animate_image_button.cget("text"))
         finally:
             root._on_close()
