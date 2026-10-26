@@ -12,18 +12,19 @@ if os.name == "nt":
 
 class VideoGenerationLauncherSmokeTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "nt", "Tkinter launcher smoke test requires Windows")
-    def test_launcher_adds_production_button_and_keeps_ai_tools_secondary(self):
+    def test_launches_minimal_creator_and_keeps_advanced_editor_available(self):
         root = marc_launcher.marc_app.App()
         try:
             root.update_idletasks()
-            self.assertTrue(hasattr(root, "animate_image_button"))
-            expected_parent = marc_launcher._find_button_parent(root.scenes_tab, "Añadir imagen propia")
-            self.assertIsNotNone(expected_parent)
-            self.assertEqual(root.full_production_button.master, expected_parent)
-            self.assertEqual(root.video_ai_actions.master, root.image_ai_bar)
-            self.assertEqual(root.animate_image_button.master, root.video_ai_actions)
-            self.assertIn("Producción automática", root.full_production_button.cget("text"))
-            self.assertIn("Animar imagen a vídeo IA", root.animate_image_button.cget("text"))
+            self.assertTrue(hasattr(root, "_creator_wizard"))
+            self.assertTrue(hasattr(root, "_creator_show_page"))
+            self.assertTrue(hasattr(root, "easy_creator_button"))
+            self.assertEqual(root._creator_page, 1)
+            self.assertTrue(root._creator_wizard.winfo_exists())
+            self.assertIn("Creador fácil", root.easy_creator_button.cget("text"))
+            self.assertTrue(hasattr(root, "studio_tabs"))
+            self.assertTrue(hasattr(root, "full_production_button"))
+            self.assertEqual(root._creator_mode_var.get(), "Básico")
         finally:
             root._on_close()
 
