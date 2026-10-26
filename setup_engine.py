@@ -11,6 +11,8 @@ import ctypes
 import json
 import os
 import platform
+import queue
+import threading
 import re
 import shutil
 import subprocess
@@ -72,6 +74,18 @@ def _run_capture(command: list[str], timeout: float = 8.0) -> str:
         return ""
 
 
+def supports_local_i2v(hardware: dict) -> bool:
+    """Conservative gate for installing local video models on supported hardware."""
+    gpu_name = str(hardware.get("gpu_name", "")).casefold()
+    return bool(
+        os.name == "nt"
+        and float(hardware.get("gpu_vram_gb") or 0) >= 8.0
+        and float(hardware.get("ram_gb") or 0) >= 24.0
+        and float(hardware.get("free_disk_gb") or 0) >= 30.0
+        and any(token in gpu_name for token in ("rtx", "geforce rtx", "gtx 10"))
+    )
+
+
 def _windows_memory_gb() -> float:
     if os.name == "nt":
         try:
@@ -131,10 +145,10 @@ def detect_hardware(data_root: str | Path | None = None) -> dict:
     # weights plus the runtime. This is a conservative installation gate, not a
     # promise of performance.
     has_nvidia_vram = bool(vram_gb > 0 and gpu_name)
-    can_install_i2v = (
-        os.name == "nt" and has_nvidia_vram and vram_gb >= 8.0
-        and ram_gb >= 24.0 and free_gb >= 30.0
-    )
+    can_install_i2v = supports_local_i2v({
+        "gpu_name": gpu_name, "gpu_vram_gb": vram_gb,
+        "ram_gb": ram_gb, "free_disk_gb": free_gb,
+    })
     return {
         "os": platform.platform(),
         "os_name": platform.system(),
@@ -308,72 +322,69 @@ def _model_installed(models: list[str], required: str) -> bool:
                for item in models)
 
 
-def _ollama_pull(model: str, callback: Callable[[str], None] | None = None) -> bool:
-    exe = find_ollama_exe()
-    if not exe:
-        return False
-    _notify(callback, f"Descargando modelo local {model}. Ollama mostrará el progreso en la consola si está disponible…")
-    try:
-        proc = subprocess.Popen(
-            [exe, "pull", model], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, encoding="utf-8", errors="replace", bufsize=1,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
-        )
-        last_update = time.monotonic()
-        while proc.poll() is None:
-            if proc.stdout:
-                line = proc.stdout.readline()
-                if line:
-                    cleaned = line.strip().replace("\r", " ")
-                    if cleaned:
-                        _notify(callback, f"Ollama {model}: {cleaned[:180]}")
-                        last_update = time.monotonic()
-            if time.monotonic() - last_update > 20:
-                _notify(callback, f"Descargando {model}… (los modelos pueden ocupar varios GB)")
-                last_update = time.monotonic()
-            time.sleep(0.15)
-        if proc.stdout:
-            tail = proc.stdout.read()
-            if tail.strip():
-                _notify(callback, f"Ollama {model}: {tail.strip()[-200:]}")
-        return proc.returncode == 0
-    except OSError as exc:
-        _notify(callback, f"No se pudo descargar {model}: {exc}")
-        return False
-
-
-def _run_with_progress(command: list[str], callback: Callable[[str], None] | None,
-                       label: str, timeout: int = 3600) -> bool:
+def _stream_process(command: list[str], callback: Callable[[str], None] | None,
+                    label: str, timeout: int = 3600) -> bool:
+    """Drain child output on a reader thread so a quiet process cannot block setup."""
     try:
         proc = subprocess.Popen(
             command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
         )
-        started = time.monotonic()
-        last = started
-        while proc.poll() is None:
-            if proc.stdout:
-                line = proc.stdout.readline()
-                if line and time.monotonic() - last >= 2:
-                    _notify(callback, f"{label}: {line.strip()[:180]}")
-                    last = time.monotonic()
-            if time.monotonic() - started > timeout:
-                proc.kill()
-                _notify(callback, f"{label} superó el tiempo límite.")
-                return False
-            time.sleep(0.1)
-        return proc.returncode == 0
     except OSError as exc:
         _notify(callback, f"{label}: {exc}")
         return False
+    messages: queue.Queue[str | None] = queue.Queue()
+    def reader():
+        try:
+            if proc.stdout:
+                for line in proc.stdout:
+                    messages.put(line.rstrip())
+        finally:
+            messages.put(None)
+    threading.Thread(target=reader, daemon=True, name="MARC-Setup-Log").start()
+    start = time.monotonic()
+    last_update = start
+    stream_closed = False
+    while proc.poll() is None or not stream_closed or not messages.empty():
+        if time.monotonic() - start > timeout:
+            proc.kill()
+            _notify(callback, f"{label} superó el tiempo límite.")
+            return False
+        try:
+            line = messages.get(timeout=1.0)
+            if line is None:
+                stream_closed = True
+            elif line.strip():
+                _notify(callback, f"{label}: {line.strip()[:180]}")
+                last_update = time.monotonic()
+        except queue.Empty:
+            pass
+        if time.monotonic() - last_update > 20:
+            _notify(callback, f"{label} sigue trabajando…")
+            last_update = time.monotonic()
+    return proc.returncode == 0
+
+
+def _ollama_pull(model: str, callback: Callable[[str], None] | None = None) -> bool:
+    exe = find_ollama_exe()
+    if not exe:
+        return False
+    _notify(callback, f"Descargando modelo local {model}; puede ocupar varios GB…")
+    return _stream_process([exe, "pull", model], callback, f"Ollama {model}", timeout=7200)
+
+
+def _run_with_progress(command: list[str], callback: Callable[[str], None] | None,
+                       label: str, timeout: int = 3600) -> bool:
+    return _stream_process(command, callback, label, timeout=timeout)
 
 
 def _download_file(url: str, destination: Path,
-                   callback: Callable[[str], None] | None = None) -> bool:
+                   callback: Callable[[str], None] | None = None,
+                   min_bytes: int = 1_000_000) -> bool:
     """Stream large weights to disk and remove incomplete downloads on failure."""
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.is_file() and destination.stat().st_size > 1_000_000:
+    if destination.is_file() and destination.stat().st_size >= max(1, int(min_bytes)):
         return True
     partial = destination.with_suffix(destination.suffix + ".download")
     try:
@@ -395,7 +406,7 @@ def _download_file(url: str, destination: Path,
                     else:
                         _notify(callback, f"Descargando {destination.name}: {done/1024**3:.1f} GB")
                     last = now
-        if partial.stat().st_size < 1_000_000:
+        if partial.stat().st_size < max(1, int(min_bytes)):
             raise OSError("El archivo descargado es demasiado pequeño o está incompleto.")
         partial.replace(destination)
         _notify(callback, f"Descarga terminada: {destination.name}")
@@ -519,7 +530,7 @@ def ensure_official_workflow(callback: Callable[[str], None] | None = None) -> P
         except (OSError, ValueError):
             pass
     _notify(callback, "Descargando la plantilla oficial de imagen a vídeo LTX desde Comfy-Org…")
-    if _download_file(LTX_WORKFLOW_URL, destination, callback):
+    if _download_file(LTX_WORKFLOW_URL, destination, callback, min_bytes=100):
         try:
             payload = json.loads(destination.read_text(encoding="utf-8"))
             if isinstance(payload, dict) and payload.get("nodes") and payload.get("links"):
