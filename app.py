@@ -5357,6 +5357,14 @@ Write-Output 'NARRATION_OK'
                         "Narración generada",
                         f"Se generó la narración local en:\n{audio_path}\n\nPuedes aprobar el guion y exportar el MP4 para combinar el audio."
                     )
+                    if getattr(self, "_auto_export_after_voice", False):
+                        def resume_auto_export():
+                            try:
+                                self._start_video_render(preview=False, remote=False)
+                            finally:
+                                self._auto_export_after_voice = False
+                                self._auto_export_after_import = False
+                        self.after(250, resume_auto_export)
                 elif kind == "voice_cancelled":
                     self._pipeline_checkpoint("narration", "pending", "Síntesis de voz cancelada")
                     self.voice_generation_running = False
