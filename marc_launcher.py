@@ -198,20 +198,46 @@ def _install_setup_button(self):
     _original_build(self)
     shell = getattr(self, "_marc_full_editor_shell", None)
     if shell is None:
-        shell = next((child for child in self.winfo_children() if child.winfo_manager() == "grid"), None)
+        shell = next(
+            (child for child in self.winfo_children() if child.winfo_manager() == "grid"),
+            None,
+        )
         self._marc_full_editor_shell = shell
 
-    # Keep all legacy controls and tabs, but start beginners in the three-step creator.
+    # The beginner creator is the only initial screen. All legacy production
+    # features remain in Advanced Editor, with their original handlers.
+    toolbar = _find_button_parent(self.scenes_tab, "Añadir imagen propia")
+    if toolbar is not None:
+        self.full_production_button = ttk.Button(
+            toolbar, text="Producción automática", style="Accent.TButton",
+            command=lambda: _start_full_production(self),
+        )
+        self.full_production_button.pack(side="left", padx=(6, 0))
+        self.animate_image_button = ttk.Button(
+            toolbar, text="Animar imagen a vídeo IA",
+            command=lambda: _open_video_generation(self),
+        )
+        self.animate_image_button.pack(side="left", padx=(6, 0))
+    else:
+        self.full_production_button = None
+        self.animate_image_button = None
+
     head_right = getattr(getattr(self, "header_tools_button", None), "master", None)
     if head_right is not None:
+        self.prepare_ai_button = ttk.Button(
+            head_right, text="Preparar IA",
+            command=lambda: _run_setup(self, show_dialog=True),
+        )
+        self.prepare_ai_button.pack(side="left", padx=(6, 0))
         self.easy_creator_button = ttk.Button(
-            head_right, text="Creador fácil", command=lambda: _show_easy_creator(self)
+            head_right, text="Creador fácil",
+            command=lambda: _show_easy_creator(self),
         )
         self.easy_creator_button.pack(side="left", padx=(6, 0))
+    else:
+        self.prepare_ai_button = None
+        self.easy_creator_button = None
 
-    self.full_production_button = None
-    self.prepare_ai_button = None
-    self.animate_image_button = None
     self.video_ai_actions = None
     self._creator_package = None
     self._creator_production_mode = "Básico"
