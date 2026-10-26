@@ -107,6 +107,11 @@ if errorlevel 1 (
   goto tests
 )
 echo [OK] Ollama disponible.
+ollama list 2>nul | findstr /I /C:"qwen2.5:3b" >nul
+if not errorlevel 1 (
+  echo [OK] Qwen 2.5 3B ya esta descargado; se omite otra descarga.
+  goto tests
+)
 echo [AUTO] Descargando Qwen 2.5 3B, modelo gratuito local para generar guiones.
 echo Esta descarga ocupa varios GB y necesita conexion a Internet.
 ollama pull qwen2.5:3b
