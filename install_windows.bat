@@ -142,6 +142,12 @@ echo Esta descarga ocupa varios GB. Puedes dejar que termine; no se descargan mo
 ollama pull qwen2.5:3b
 if errorlevel 1 echo [AVISO] No se pudo descargar Qwen; puedes reintentar luego con: ollama pull qwen2.5:3b
 
+echo.
+echo [AUTO] Comprobando modelos visuales y motor opcional de imagen a video...
+echo MARC no descargara modelos de video grandes si la GPU, la RAM o el disco no son adecuados.
+".venv\\Scripts\\python.exe" setup_engine.py --bootstrap
+if errorlevel 1 echo [AVISO] La preparacion IA no termino por completo. MARC guardo el diagnostico para poder reintentarla desde la interfaz.
+
 :tests
 echo.
 echo [7/7] Validando sintaxis y pruebas...
