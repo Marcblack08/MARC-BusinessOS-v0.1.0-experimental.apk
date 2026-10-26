@@ -43,7 +43,7 @@ MiVideo/
     └── musica.mp3       (opcional)
 ```
 
-En **Escenas → Importar paquete**, selecciona la carpeta `MiVideo`. MARC descubre y copia los recursos, distribuye las imágenes entre los planos y vincula automáticamente la narración/música si los archivos tienen nombres convencionales.
+En **Escenas → Importar paquete**, selecciona la carpeta `MiVideo`. MARC descubre y copia los recursos, distribuye las imágenes entre los planos y vincula automáticamente la narración/música si los archivos tienen nombres convencionales. Después pregunta si quieres producir el MP4 inmediatamente. Si confirmas, aprobará el guion por tu autorización, generará la voz con la síntesis local de Windows si no trajiste una pista, renderizará y guardará el resultado en las exportaciones del proyecto. Si prefieres revisar antes, selecciona No.
 
 Usa `guion.md` con encabezados `ESCENA 1`, `ESCENA 2` y etiquetas de hablante `[NARRADOR]:`, `[LUCÍA]:`. En `direcciones.json`, indica movimientos de cámara en `camera_motion`. Las instrucciones actuales aplican zoom/paneo a imágenes fijas; no crean movimiento corporal neuronal por sí mismas.
 
