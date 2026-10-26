@@ -1163,6 +1163,12 @@ class App(tk.Tk):
         tk.Label(upscale_row, text="Aumenta resolución; puede tardar más.",
                  bg=self.colors["panel"], fg=self.colors["muted"],
                  font=("Segoe UI", 8)).pack(side="left", padx=(8, 0))
+        tk.Label(
+            image_ai_bar,
+            text="Para activarlo: instala un modelo ESRGAN gratuito en ComfyUI/models/upscale_models y pulsa «Detectar motor».",
+            bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 8),
+            anchor="w", justify="left", wraplength=1000
+        ).pack(fill="x", anchor="w", pady=(0, 6))
         image_action_row = tk.Frame(image_ai_bar, bg=self.colors["panel"])
         image_action_row.pack(fill="x")
         self.generate_image_button = ttk.Button(image_action_row, text="Generar imagen de esta escena",
