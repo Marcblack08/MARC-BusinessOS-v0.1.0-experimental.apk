@@ -4592,6 +4592,7 @@ Write-Output 'NARRATION_OK'
         self.progress_detail_var.set("0% · Esperando inicio")
         self.script_text.delete("1.0", "end")
         self.scene_assets = {}
+        self.scene_video_assets = {}
         self.auto_expand_storyboard = True
         self.scene_duration_overrides = {}
         self.last_export_path = ""
@@ -5833,6 +5834,7 @@ Write-Output 'NARRATION_OK'
         except (TypeError, json.JSONDecodeError):
             self.voice_assignments = {}
         self._on_video_mode_changed()
+        self.scene_video_assets = {}
         self._load_scene_assets(project["id"])
         self.script_text.delete("1.0", "end")
         self.script_text.insert("1.0", project["script"])
