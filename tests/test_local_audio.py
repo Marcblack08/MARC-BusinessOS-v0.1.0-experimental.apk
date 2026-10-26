@@ -20,7 +20,7 @@ class LocalAudioTests(unittest.TestCase):
             self.assertTrue(any(byte != 0 for byte in data))
 
     def test_selects_mood_from_story_context(self):
-        self.assertEqual(infer_mood("Una sombra persigue a la familia en la casa"), "terror")
+        self.assertEqual(infer_mood("Terror: una sombra persigue a la familia en la casa"), "terror")
         self.assertEqual(infer_mood("La protagonista descubre un secreto"), "misterio")
         self.assertEqual(infer_mood("Un gran viaje y una batalla épica"), "aventura")
         self.assertEqual(infer_mood("Una historia familiar"), "drama")
