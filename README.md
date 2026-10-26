@@ -117,3 +117,6 @@ Puedes entregar al editor una carpeta con el guion, las indicaciones por escena,
 Ejemplo: `MiVideo/guion.md`, `MiVideo/direcciones.json`, `MiVideo/imagenes/001.png`, y opcionalmente `MiVideo/audio/narracion.wav` y `MiVideo/audio/musica.mp3`. Consulta [la guía del paquete de producción](docs/PAQUETE_PRODUCCION.md) y la [plantilla de ejemplo](templates/paquete-produccion/).
 
 El instalador desde el código ahora intenta instalar Python 3.12 automáticamente con Winget si no hay una versión compatible, conserva el entorno virtual anterior si detecta que se creó con una versión incompatible, registra el hardware en `%LOCALAPPDATA%\MARC Video Studio AI Desktop\hardware-profile.json` y guarda las pruebas de instalación en `installation-tests.log`. No descarga modelos visuales grandes por defecto: si importas tus propias imágenes, el montaje funciona sin ComfyUI; los modelos de imagen/vídeo son opcionales y dependen del hardware.
+
+
+El flujo de paquete admite ahora un inicio de producción de un solo clic adicional: tras elegir la carpeta con guion, direcciones e imágenes, puedes autorizar el montaje final. MARC utilizará la voz local de Windows si no importaste narración y guardará el MP4 automáticamente en las exportaciones del proyecto; si quieres revisar primero el guion, elige no iniciar todavía.
