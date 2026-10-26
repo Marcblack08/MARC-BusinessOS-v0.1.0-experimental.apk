@@ -81,6 +81,21 @@ Consulta [docs/INSTALACION_WINDOWS.md](docs/INSTALACION_WINDOWS.md) para requisi
 
 Ollama, sus modelos, ComfyUI/checkpoints y FFmpeg no se incluyen en el instalador; se instalan por separado. En la versión empaquetada, los proyectos y la base de datos se guardan en `%LOCALAPPDATA%\\MARC Video Studio AI Desktop`.
 
+## Animación real de imagen a vídeo (nueva integración opcional)
+
+La barra de la pestaña **Escenas** incorpora **Animar imagen a vídeo IA**. El botón abre un flujo separado del movimiento de cámara habitual:
+
+1. Selecciona una imagen fija del personaje (PNG, JPG, WebP o BMP).
+2. Selecciona un workflow de ComfyUI exportado en formato **API JSON** y configurado para imagen a vídeo, con entrada de imagen, prompt positivo y nodo de salida de vídeo.
+3. Escribe una instrucción de movimiento o deja **AUTO** para que MARC intente analizar la imagen con un modelo visual instalado en Ollama.
+4. El clip generado se guarda en la carpeta `projects/<id>/generated_video` del proyecto local.
+
+**Requisitos adicionales:** ComfyUI debe estar activo y tener instalado/configurado un workflow de imagen a vídeo, sus nodos y los modelos necesarios. El adaptador no descarga checkpoints automáticamente. Para AUTO, Ollama debe tener un modelo que acepte imágenes (por ejemplo, una variante compatible de moondream, qwen2.5vl o gemma3); un modelo únicamente de texto como `qwen2.5:3b` no analiza la imagen. Si no hay modelo visual, describe el movimiento manualmente.
+
+Esta primera integración detecta una única imagen de referencia y trata de encontrar la entrada de texto positivo siguiendo los enlaces del workflow. Rechaza los workflows ambiguos en lugar de sustituir silenciosamente los prompts. Los workflows de ComfyUI pueden variar; si el workflow no tiene un nodo de salida de vídeo, no se podrá descargar un clip. La integración **todavía guarda el clip generado por separado**: su inserción automática en la línea de tiempo y la validación visual del resultado quedan pendientes de pruebas en una computadora Windows con el modelo real.
+
+El modelo de vídeo es un componente independiente y puede consumir mucha memoria y tardar considerablemente. En un equipo sin GPU dedicada, prueba primero una configuración pequeña y una duración corta; la generación puede no ser viable con todos los modelos.
+
 ## Flujo de trabajo
 1. Configura la premisa, género y duración.
 2. Genera el guion con la IA local.
