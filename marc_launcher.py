@@ -45,10 +45,7 @@ def _find_button_parent(widget: tk.Misc, caption: str):
 
 
 def _set_status(self, message: str):
-    try:
-        self.after(0, lambda text=message: self.status_var.set(text))
-    except (tk.TclError, RuntimeError, AttributeError):
-        pass
+    set_creator_status(self, message)
 
 
 def _setup_summary(report: dict) -> str:
@@ -85,10 +82,10 @@ def _setup_finished(self, report: dict, show_dialog: bool, continuation=None):
                 pass
     self._setup_report = report
     summary = _setup_summary(report)
-    self.status_var.set(
-        "Preparación de IA terminada: " +
-        ("vídeo IA listo." if report.get("video_generation_ready") else "revisa el diagnóstico.")
+    result_message = "Preparación de IA terminada: " + (
+        "vídeo IA listo." if report.get("video_generation_ready") else "revisa el diagnóstico."
     )
+    set_creator_status(self, result_message, 18 if not report.get("video_generation_ready") else 25)
     if show_dialog:
         if report.get("video_generation_ready"):
             messagebox.showinfo("Diagnóstico y preparación de IA", summary, parent=self)
@@ -436,7 +433,7 @@ def _watch_export_completion(self, previous_path: str = "", attempt: int = 0):
     path = Path(current_path)
     if not path.is_file():
         return
-    self.status_var.set("MP4 terminado. Abriendo la carpeta de exportación…")
+    set_creator_status(self, "Vídeo listo. Abriendo la carpeta de exportación…", 100)
     try:
         if os.name == "nt":
             os.startfile(str(path.parent))
@@ -496,12 +493,19 @@ def _continue_basic_export(self, original_start, music_path: str, remote=False, 
         except Exception:
             pass
     previous_path = str(getattr(self, "last_export_path", "") or "")
+    needs_kokoro = (
+        str(getattr(getattr(self, "voice_engine_var", None), "get", lambda: "")()).startswith("Kokoro")
+        and not (getattr(self, "audio_track_path", "") and Path(self.audio_track_path).is_file())
+    )
     self._auto_export_after_import = True
+    self._auto_export_after_voice = needs_kokoro
     try:
         original_start(preview=False, remote=remote)
-        self.after(2000, lambda: _watch_export_completion(self, previous_path))
+        if not needs_kokoro:
+            self.after(2000, lambda: _watch_export_completion(self, previous_path))
     finally:
-        self._auto_export_after_import = False
+        if not needs_kokoro:
+            self._auto_export_after_import = False
         if button is not None:
             try:
                 button.configure(state="normal")
@@ -684,14 +688,21 @@ def _finish_video_batch(self, clips: dict[str, str], original_start, button, gen
         except OSError:
             pass
         previous_path = str(getattr(self, "last_export_path", "") or "")
+        needs_kokoro = (
+            str(getattr(getattr(self, "voice_engine_var", None), "get", lambda: "")()).startswith("Kokoro")
+            and not (getattr(self, "audio_track_path", "") and Path(self.audio_track_path).is_file())
+        )
         self._auto_export_after_import = True
-        self.status_var.set("Clips IA listos. Montando voces, música, subtítulos y MP4…")
+        self._auto_export_after_voice = needs_kokoro
+        set_creator_status(self, "Clips IA listos. Montando voz, música y MP4…", 85)
         original_start(preview=False, remote=False)
-        self.after(2000, lambda: _watch_export_completion(self, previous_path))
+        if not needs_kokoro:
+            self.after(2000, lambda: _watch_export_completion(self, previous_path))
     except Exception as exc:
         messagebox.showerror("No se pudo montar el MP4", str(exc), parent=self)
     finally:
-        self._auto_export_after_import = False
+        if not locals().get("needs_kokoro", False):
+            self._auto_export_after_import = False
         if button is not None:
             try:
                 button.configure(state="normal")
