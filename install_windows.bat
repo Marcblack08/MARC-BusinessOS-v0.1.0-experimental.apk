@@ -135,6 +135,9 @@ echo Abre MARC con start_windows.bat.
 echo Para crear un instalador empaquetado, usa build_windows.bat.
 echo El motor de imagenes IA es opcional; puedes importar tus propias imagenes sin descargar modelos.
 echo ============================================================
+echo.
+echo Abriendo MARC Video Studio AI...
+start "" "%~dp0start_windows.bat"
 pause
 exit /b 0
 
