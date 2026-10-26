@@ -426,9 +426,8 @@ def create_creator_wizard(app, on_start: Callable[..., None],
 
     def start_production():
         title = app.title_var.get().strip()
-        script = normalize_script_for_images(
-            getattr(app, "_creator_pending_script", ""), len(app._creator_images)
-        )
+        narration_script = str(getattr(app, "_creator_pending_script", "") or "").strip()
+        script = normalize_script_for_images(narration_script, len(app._creator_images))
         if not title:
             show_page(1)
             return
@@ -437,6 +436,7 @@ def create_creator_wizard(app, on_start: Callable[..., None],
         on_start(
             title=title,
             script=script,
+            narration_script=narration_script,
             image_paths=list(app._creator_images),
             mode=app._creator_mode_var.get(),
         )
