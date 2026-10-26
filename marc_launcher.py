@@ -11,6 +11,7 @@ from pathlib import Path
 
 import app as marc_app
 import setup_engine
+from local_audio import generate_ambient_bed, infer_mood
 from production_package import discover_production_package, parse_scene_directions
 from video_generation_engine import (
     VideoGenerationError,
@@ -199,13 +200,8 @@ def _run_package_import(self, package, script: str, directions: list[str], repor
         if use_i2v and report.get("video_generation_ready"):
             _start_i2v_batch(self, original_start, report)
         elif not use_i2v:
-            # Explicitly selected CPU fallback: the established pipeline uses still
-            # imagery with pan/zoom; it is not mislabelled as bodily AI animation.
-            self._auto_export_after_import = True
-            try:
-                original_start(preview=False, remote=remote)
-            finally:
-                self._auto_export_after_import = False
+            # The CPU-compatible fallback is explicitly labelled as camera motion.
+            _start_basic_export(self, original_start, remote=remote)
         else:
             messagebox.showwarning(
                 "Vídeo IA no disponible",
