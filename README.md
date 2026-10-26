@@ -81,20 +81,30 @@ Consulta [docs/INSTALACION_WINDOWS.md](docs/INSTALACION_WINDOWS.md) para requisi
 
 Ollama, sus modelos, ComfyUI/checkpoints y FFmpeg no se incluyen en el instalador; se instalan por separado. En la versión empaquetada, los proyectos y la base de datos se guardan en `%LOCALAPPDATA%\\MARC Video Studio AI Desktop`.
 
-## Animación real de imagen a vídeo (nueva integración opcional)
+## Producción automática: guion + imágenes → clips animados → MP4
 
-La barra de la pestaña **Escenas** incorpora **Animar imagen a vídeo IA**. El botón abre un flujo separado del movimiento de cámara habitual:
+La pestaña **Escenas** añade tres acciones: **Preparar IA / Diagnóstico**, **Producción automática** y **Animar imagen a vídeo IA**. El nuevo modo de producción usa los recursos que ya tengas y evita obligarte a configurar manualmente cada motor.
 
-1. Selecciona una imagen fija del personaje (PNG, JPG, WebP o BMP).
-2. Selecciona un workflow de ComfyUI exportado en formato **API JSON** y configurado para imagen a vídeo, con entrada de imagen, prompt positivo y nodo de salida de vídeo.
-3. Escribe una instrucción de movimiento o deja **AUTO** para que MARC intente analizar la imagen con un modelo visual instalado en Ollama.
-4. El clip generado se guarda en la carpeta `projects/<id>/generated_video` del proyecto local.
+### Flujo de un clic
+1. Organiza una carpeta con **guion.md**, imágenes numeradas en **imagenes/** y, opcionalmente, **direcciones.json**, **audio/narracion.wav** y **audio/musica.mp3**.
+2. Pulsa **Producción automática** y selecciona esa carpeta.
+3. MARC revisa los componentes instalados, detecta CPU/RAM/GPU/espacio en disco e instala o inicia las dependencias que falten.
+4. Si el equipo reúne los requisitos y el motor de vídeo queda listo, MARC analiza cada imagen con un modelo visual local de Ollama, utiliza el contexto de la escena para definir el movimiento y genera clips con LTX-Video a través de ComfyUI.
+5. MARC conecta los clips generados con las escenas, sintetiza la narración con las voces locales de Windows cuando no hayas importado voz, incorpora música importada o crea una pista ambiental instrumental local, monta el MP4 con FFmpeg y guarda la exportación en **projects/<id>/exports/**.
+6. Los clips por imagen se conservan en **projects/<id>/generated_video/**. El montaje final se guarda en las exportaciones del proyecto.
 
-**Requisitos adicionales:** ComfyUI debe estar activo y tener instalado/configurado un workflow de imagen a vídeo, sus nodos y los modelos necesarios. El adaptador no descarga checkpoints automáticamente. Para AUTO, Ollama debe tener un modelo que acepte imágenes (por ejemplo, una variante compatible de moondream, qwen2.5vl o gemma3); un modelo únicamente de texto como `qwen2.5:3b` no analiza la imagen. Si no hay modelo visual, describe el movimiento manualmente.
+### Qué instala y qué no
+- **FFmpeg**: montaje, transiciones, mezcla de sonido, subtítulos y MP4.
+- **Ollama + Qwen 2.5 3B**: guiones locales, si faltan y se pueden descargar.
+- **Ollama + moondream**: análisis visual automático local, si faltan y hay espacio de disco.
+- **ComfyUI Portable + LTX-Video + codificador T5**: solo se descargan automáticamente cuando la máquina cumple el perfil conservador: Windows, GPU NVIDIA compatible con al menos 8 GB de VRAM, 24 GB de RAM y 30 GB libres. La descarga de modelos de vídeo puede sumar unos 15 GB, además de ComfyUI.
+- La preparación no solicita elevación de administrador silenciosa, no borra proyectos y guarda el diagnóstico en %LOCALAPPDATA%/MARC Video Studio AI Desktop/setup_report.json.
 
-Esta primera integración detecta una única imagen de referencia y trata de encontrar la entrada de texto positivo siguiendo los enlaces del workflow. Rechaza los workflows ambiguos en lugar de sustituir silenciosamente los prompts. Los workflows de ComfyUI pueden variar; si el workflow no tiene un nodo de salida de vídeo, no se podrá descargar un clip. La integración **todavía guarda el clip generado por separado**: su inserción automática en la línea de tiempo y la validación visual del resultado quedan pendientes de pruebas en una computadora Windows con el modelo real.
+### Limitación importante en equipos sin GPU
+Si el equipo no cumple el perfil, MARC no descarga varios gigabytes de modelos que probablemente no podrá ejecutar. Ofrece continuar con el montaje convencional usando movimiento de cámara, voz y música, pero lo identifica como modo alternativo, **no como movimiento corporal real**. Para la animación neuronal local se necesita un equipo compatible o elegir, por separado, un servicio de vídeo externo; los servicios alojados pueden requerir cuenta, créditos o pago.
 
-El modelo de vídeo es un componente independiente y puede consumir mucha memoria y tardar considerablemente. En un equipo sin GPU dedicada, prueba primero una configuración pequeña y una duración corta; la generación puede no ser viable con todos los modelos.
+### Flujo manual de una imagen
+**Animar imagen a vídeo IA** permite elegir una imagen y describir el movimiento, o escribir **AUTO** para el análisis visual. La plantilla LTX oficial se prepara automáticamente; no tienes que exportar un workflow API manualmente. La generación puede tardar y produce clips cortos, que el montaje adapta a la duración de cada plano.
 
 ## Flujo de trabajo
 1. Configura la premisa, género y duración.
