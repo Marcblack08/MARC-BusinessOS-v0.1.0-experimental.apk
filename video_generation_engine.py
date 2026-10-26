@@ -98,11 +98,11 @@ def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
         for key in list(inputs):
             marker = key.upper()
             if marker == "MARC_IMAGE_INPUT" or (
-                key in {"image", "image_name"} and any(x in class_type for x in ("loadimage", "imageonly", "wan", "video")))
+                key in {"image", "image_name"} and any(x in class_type for x in ("loadimage", "imageonly", "wan", "video"))
             :
                 image_nodes.append((node_id, key))
             if marker == "MARC_PROMPT_INPUT" or (
-                key in {"text", "prompt", "positive"} and any(x in class_type for x in ("text", "clip", "prompt", "conditioning", "wan", "ltx", "video")))
+                key in {"text", "prompt", "positive"} and any(x in class_type for x in ("text", "clip", "prompt", "conditioning", "wan", "ltx", "video"))
             :
                 prompt_nodes.append((node_id, key))
             if marker == "MARC_NEGATIVE_INPUT" or key in {"negative_prompt", "negative"}:
@@ -132,12 +132,6 @@ def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
         prepared[node_id]["inputs"][key] = motion_prompt
     for node_id, key in negative_nodes:
         prepared[node_id]["inputs"][key] = negative_prompt
-    # MARC marker names are metadata only and are not valid inputs to ComfyUI.
-    for node in prepared.values():
-        if isinstance(node, dict) and isinstance(node.get("inputs"), dict):
-            for key in list(node["inputs"]):
-                if key.upper().startswith("MARC_"):
-                    node["inputs"].pop(key, None)
     return prepared
 
 
