@@ -248,10 +248,11 @@ def create_creator_wizard(app, on_start: Callable[..., None],
                     resolved = str(path.resolve())
                     if resolved.casefold() not in seen:
                         app._creator_images.append(resolved)
-                        seen.add(resolved)
+                        seen.add(resolved.casefold())
             app._creator_images.sort(key=lambda path: _natural_sort_key(Path(path).name))
-            if getattr(app, "_creator_image_count_var", None) is not None:
-            app._creator_image_count_var.set(images_summary())
+            image_var = getattr(app, "_creator_image_count_var", None)
+            if image_var is not None:
+                image_var.set(images_summary())
 
     def choose_image_folder():
         folder = filedialog.askdirectory(parent=app, title="Selecciona una carpeta de imágenes")
@@ -266,39 +267,53 @@ def create_creator_wizard(app, on_start: Callable[..., None],
             messagebox.showwarning("Sin imágenes", "No encontré PNG, JPG, WEBP o BMP en esa carpeta.", parent=app)
             return
         app._creator_images = [str(path) for path in discovered]
-        image_count_var.set(images_summary())
+        image_var = getattr(app, "_creator_image_count_var", None)
+        if image_var is not None:
+            image_var.set(images_summary())
 
     def remove_images():
         app._creator_images = []
-        image_count_var.set(images_summary())
+        image_var = getattr(app, "_creator_image_count_var", None)
+        if image_var is not None:
+            image_var.set(images_summary())
 
     def build_project_page():
         card = base_card(page)
         card.grid(row=0, column=0, sticky="nsew")
         card.grid_columnconfigure(0, weight=1)
         card.grid_rowconfigure(3, weight=1)
-        heading(card, "Crea tu vídeo", "Ponle un nombre, pega el guion y añade las imágenes. MARC se ocupa del resto.")
+
+        heading_area = tk.Frame(card, bg=CARD_BG)
+        heading_area.grid(row=0, column=0, sticky="ew", pady=(0, 2))
+        heading(heading_area, "Crea tu vídeo", "Ponle un nombre, pega el guion y añade las imágenes. MARC se ocupa del resto.")
+
         tk.Label(card, text="NOMBRE DEL VÍDEO", bg=CARD_BG, fg=MUTED,
                  font=("Segoe UI", 9, "bold")).grid(row=1, column=0, sticky="w")
         title_entry = ttk.Entry(card, textvariable=app.title_var, font=("Segoe UI", 12))
         title_entry.grid(row=2, column=0, sticky="ew", pady=(5, 12))
-        if not app.title_var.get().strip():
-            app.title_var.set("")
+
         script_head = tk.Frame(card, bg=CARD_BG)
-        script_head.grid(row=3, column=0, sticky="new")
+        script_head.grid(row=3, column=0, sticky="nsew")
         script_head.grid_columnconfigure(0, weight=1)
+        script_head.grid_rowconfigure(2, weight=1)
         tk.Label(script_head, text="PEGA TU GUION", bg=CARD_BG, fg=MUTED,
                  font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="w")
-        tk.Label(script_head, text="Respeta tus escenas y diálogos; puedes pegar el texto completo.",
+        tk.Label(script_head, text="Pega el texto completo; MARC alineará las escenas con tus imágenes.",
                  bg=CARD_BG, fg=MUTED, font=("Segoe UI", 9)).grid(row=1, column=0, sticky="w", pady=(2, 6))
+        text_shell = tk.Frame(script_head, bg=INPUT_BG, highlightthickness=1, highlightbackground=BORDER)
+        text_shell.grid(row=2, column=0, sticky="nsew")
+        text_shell.grid_columnconfigure(0, weight=1)
+        text_shell.grid_rowconfigure(0, weight=1)
         script_box = tk.Text(
-            script_head, height=11, wrap="word", undo=True,
+            text_shell, height=9, wrap="word", undo=True,
             bg=INPUT_BG, fg=TEXT, insertbackground=TEXT,
             relief="flat", borderwidth=0, padx=12, pady=10,
-            font=("Segoe UI", 10), highlightthickness=1, highlightbackground=BORDER,
+            font=("Segoe UI", 10),
         )
-        script_box.grid(row=2, column=0, sticky="nsew")
-        script_head.grid_rowconfigure(2, weight=1)
+        script_box.grid(row=0, column=0, sticky="nsew")
+        script_scroll = ttk.Scrollbar(text_shell, orient="vertical", command=script_box.yview)
+        script_scroll.grid(row=0, column=1, sticky="ns")
+        script_box.configure(yscrollcommand=script_scroll.set)
         app._creator_script_box = script_box
         if getattr(app, "_creator_pending_script", ""):
             script_box.insert("1.0", app._creator_pending_script)
@@ -306,6 +321,7 @@ def create_creator_wizard(app, on_start: Callable[..., None],
             existing = app.script_text.get("1.0", "end-1c").strip()
             if existing:
                 script_box.insert("1.0", existing)
+
         images_area = tk.Frame(card, bg=CARD_BG)
         images_area.grid(row=4, column=0, sticky="ew", pady=(12, 0))
         tk.Label(images_area, text="IMÁGENES", bg=CARD_BG, fg=MUTED,
@@ -318,9 +334,10 @@ def create_creator_wizard(app, on_start: Callable[..., None],
         ttk.Button(image_buttons, text="＋ Añadir imágenes", command=choose_images).pack(side="left")
         ttk.Button(image_buttons, text="Importar carpeta", command=choose_image_folder).pack(side="left", padx=(7, 0))
         ttk.Button(image_buttons, text="Quitar todas", command=remove_images).pack(side="left", padx=(7, 0))
+
         footer = tk.Frame(card, bg=CARD_BG)
         footer.grid(row=5, column=0, sticky="ew", pady=(15, 0))
-        tk.Label(footer, text="Tu guion e imágenes se procesan en el equipo cuando usas los motores locales.",
+        tk.Label(footer, text="Los motores locales procesan el guion y las imágenes en tu equipo.",
                  bg=CARD_BG, fg=MUTED, font=("Segoe UI", 8)).pack(side="left")
         ttk.Button(footer, text="Siguiente  →", style="Accent.TButton",
                    command=lambda: continue_to_animation(script_box)).pack(side="right")
