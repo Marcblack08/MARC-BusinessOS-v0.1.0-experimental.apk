@@ -24,7 +24,7 @@ echo [2/4] Limpiando compilacion anterior...
 if exist build rmdir /s /q build
 if exist "dist\MARC Video Studio AI Desktop" rmdir /s /q "dist\MARC Video Studio AI Desktop"
 echo [3/4] Construyendo aplicacion de escritorio...
-".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --windowed --onedir --hidden-import vlc --name "MARC Video Studio AI Desktop" app.py
+".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --windowed --onedir --hidden-import vlc --hidden-import video_generation_engine --name "MARC Video Studio AI Desktop" marc_launcher.py
 if errorlevel 1 goto error
 echo.
 echo [OK] Aplicacion empaquetada en:
