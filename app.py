@@ -148,6 +148,7 @@ class App(tk.Tk):
         self.conn = db_connect()
         self.current_id = None
         self._creator_narration_override = ""
+        self._creator_auto_narration_active = False
         self.series_key = ""
         self.episode_number = 1
         self.story_bible = ""
@@ -4572,6 +4573,8 @@ Write-Output 'NARRATION_OK'
         self.preview_render_signature = ""
         self.manual_preview_path = ""
         self.current_id = None
+        self._creator_narration_override = ""
+        self._creator_auto_narration_active = False
         self.series_key = ""
         self.episode_number = 1
         self.story_bible = ""
