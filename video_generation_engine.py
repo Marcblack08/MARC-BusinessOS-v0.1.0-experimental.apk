@@ -253,7 +253,8 @@ def visual_workflow_to_api(workflow: dict) -> dict:
 
 
 def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
-                     negative_prompt: str = "", frame_count: int = 49) -> dict:
+                     negative_prompt: str = "", frame_count: int = 49,
+                     output_width: int = 768, output_height: int = 512) -> dict:
     """Fill image and positive/negative prompts of an API or official visual workflow."""
     if not isinstance(workflow, dict) or not workflow:
         raise VideoGenerationError("El workflow de ComfyUI está vacío o no es válido.")
@@ -330,13 +331,20 @@ def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
             )
         if len(negative_nodes) == 1:
             prepared[negative_nodes[0][0]]["inputs"][negative_nodes[0][1]] = negative_prompt.strip()
-    # LTX expects 8n+1 frames. Keep a short default clip to contain resource use.
+    # Keep dimensions aligned to 32 pixels and the clip short enough for local inference.
+    width = max(256, min(1024, int(output_width)))
+    height = max(256, min(1024, int(output_height)))
+    width = max(256, round(width / 32) * 32)
+    height = max(256, round(height / 32) * 32)
+    # LTX expects 8n+1 frames.
     length = max(9, int(frame_count))
     length = ((length - 1) // 8) * 8 + 1
     for node in prepared.values():
         if isinstance(node, dict) and isinstance(node.get("inputs"), dict):
             if str(node.get("class_type", "")) == "LTXVImgToVideo":
                 node["inputs"]["length"] = length
+                node["inputs"]["width"] = width
+                node["inputs"]["height"] = height
             if str(node.get("class_type", "")) == "LTXVScheduler":
                 node["inputs"]["steps"] = min(30, max(1, int(node["inputs"].get("steps", 20))))
     return prepared
@@ -422,7 +430,8 @@ def generate_video(image_path: str | Path, motion_prompt: str, workflow_path: st
                    poll_interval: float = 2.0,
                    progress: Callable[[str], None] | None = None,
                    cancel_check: Callable[[], bool] | None = None,
-                   frame_count: int = 49) -> Path:
+                   frame_count: int = 49,
+                   output_width: int = 768, output_height: int = 512) -> Path:
     """Run an API or supported visual ComfyUI I2V workflow and save the resulting video locally."""
     prompt = str(motion_prompt or "").strip()
     if not prompt:
@@ -441,7 +450,8 @@ def generate_video(image_path: str | Path, motion_prompt: str, workflow_path: st
         progress("Subiendo imagen de referencia…")
     uploaded_name = upload_image(image_path, base_url)
     api_workflow = prepare_workflow(
-        workflow, uploaded_name, prompt, negative_prompt, frame_count=frame_count
+        workflow, uploaded_name, prompt, negative_prompt, frame_count=frame_count,
+        output_width=output_width, output_height=output_height
     )
     client_id = str(uuid.uuid4())
     payload = json.dumps({"prompt": api_workflow, "client_id": client_id}).encode("utf-8")
