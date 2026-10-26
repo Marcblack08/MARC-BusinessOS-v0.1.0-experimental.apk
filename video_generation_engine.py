@@ -217,7 +217,7 @@ def analyze_image_with_ollama(image_path: str | Path,
     available = [str(item.get("name", "")) for item in tags if isinstance(item, dict)]
     override = (model_override or os.environ.get("MARC_VISION_MODEL", "")).strip()
     if override:
-        model = next((name for name in available if name == override or name.split(":")[0] == override), None)
+        model = next((name for name in available if name == override or name.startswith(override)), None)
         if model is None:
             raise VideoGenerationError(
                 f"El modelo visual '{override}' no está instalado en Ollama. Modelos disponibles: "
@@ -229,7 +229,7 @@ def analyze_image_with_ollama(image_path: str | Path,
         model = None
         for candidate in preferred:
             model = next((name for name in available
-                          if name == candidate or name.startswith(candidate + ":")), None)
+                          if name == candidate or name.startswith(candidate)), None)
             if model:
                 break
         if model is None:
