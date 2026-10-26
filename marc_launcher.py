@@ -5,13 +5,20 @@ import hashlib
 import json
 import os
 import threading
+import time
+import uuid
 import tkinter as tk
+from types import SimpleNamespace
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from pathlib import Path
 
 import app as marc_app
 import setup_engine
 from local_audio import generate_ambient_bed, infer_mood
+from creator_wizard import (
+    animation_preset, create_creator_wizard, mode_uses_ai,
+    normalize_script_for_images, refresh_voice_label, set_creator_status,
+)
 from production_package import discover_production_package, parse_scene_directions
 from video_generation_engine import (
     VideoGenerationError,
@@ -141,35 +148,63 @@ def _run_setup(self, show_dialog: bool = True, continuation=None):
     threading.Thread(target=worker, daemon=True, name="MARC-AI-Setup").start()
 
 
+def _show_advanced_editor(self):
+    wizard = getattr(self, "_creator_wizard", None)
+    shell = getattr(self, "_marc_full_editor_shell", None)
+    if wizard is not None:
+        wizard.grid_remove()
+    if shell is not None:
+        shell.grid()
+    try:
+        self.studio_tabs.select(self.script_tab)
+        self.after(100, self._set_responsive_initial_sashes)
+    except Exception:
+        pass
+
+
+def _show_easy_creator(self):
+    shell = getattr(self, "_marc_full_editor_shell", None)
+    wizard = getattr(self, "_creator_wizard", None)
+    if shell is not None:
+        shell.grid_remove()
+    if wizard is not None:
+        wizard.grid()
+        try:
+            self._creator_show_page(1)
+        except Exception:
+            pass
+
+
 def _install_setup_button(self):
     _original_build(self)
-    toolbar = _find_button_parent(self.scenes_tab, "Añadir imagen propia")
-    if toolbar is None:
-        print("MARC: no se encontró la barra de herramientas de Escenas.")
-        return
-    self.full_production_button = ttk.Button(
-        toolbar, text="Producción automática", style="Accent.TButton",
-        command=lambda: _start_full_production(self)
-    )
-    self.full_production_button.pack(side="left", padx=(6, 0))
+    shell = getattr(self, "_marc_full_editor_shell", None)
+    if shell is None:
+        shell = next((child for child in self.winfo_children() if child.winfo_manager() == "grid"), None)
+        self._marc_full_editor_shell = shell
 
-    # Keep diagnostics and one-image actions in the optional AI panel so the
-    # main toolbar stays compact on 1366x768 screens.
-    tools_panel = getattr(self, "image_ai_bar", None)
-    if tools_panel is None:
-        tools_panel = self.scenes_tab
-    self.video_ai_actions = tk.Frame(tools_panel, bg=self.colors["panel"])
-    self.video_ai_actions.pack(fill="x", pady=(5, 0))
-    self.prepare_ai_button = ttk.Button(
-        self.video_ai_actions, text="Preparar IA / Diagnóstico",
-        command=lambda: _run_setup(self, show_dialog=True)
+    # Keep all legacy controls and tabs, but start beginners in the three-step creator.
+    head_right = getattr(getattr(self, "header_tools_button", None), "master", None)
+    if head_right is not None:
+        self.easy_creator_button = ttk.Button(
+            head_right, text="Creador fácil", command=lambda: _show_easy_creator(self)
+        )
+        self.easy_creator_button.pack(side="left", padx=(6, 0))
+
+    self.full_production_button = None
+    self.prepare_ai_button = None
+    self.animate_image_button = None
+    self.video_ai_actions = None
+    self._creator_package = None
+    self._creator_production_mode = "Básico"
+    self._creator_status_var = tk.StringVar(value="Listo para empezar.")
+    self._creator_advanced_callback = lambda: _show_advanced_editor(self)
+    self._creator_easy_callback = lambda: _show_easy_creator(self)
+    create_creator_wizard(
+        self,
+        on_start=lambda **kwargs: _start_wizard_production(self, **kwargs),
+        on_advanced=lambda: _show_advanced_editor(self),
     )
-    self.prepare_ai_button.pack(side="left")
-    self.animate_image_button = ttk.Button(
-        self.video_ai_actions, text="Animar imagen a vídeo IA",
-        command=lambda: _open_video_generation(self)
-    )
-    self.animate_image_button.pack(side="left", padx=(6, 0))
+
 
 def _startup_init(self, *args, **kwargs):
     _original_init(self, *args, **kwargs)
