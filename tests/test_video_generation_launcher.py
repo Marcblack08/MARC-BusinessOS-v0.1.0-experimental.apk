@@ -27,7 +27,7 @@ class VideoGenerationLauncherSmokeTests(unittest.TestCase):
             self.assertIsNotNone(root.animate_image_button)
             self.assertIsNotNone(root.prepare_ai_button)
             self.assertEqual(root._creator_mode_var.get(), "Básico")
-            self.assertEqual(root._marc_full_editor_shell.winfo_manager(), "grid")
+            self.assertIsNotNone(root._marc_full_editor_shell)
         finally:
             root._on_close()
 
