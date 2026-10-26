@@ -2631,6 +2631,7 @@ class App(tk.Tk):
             self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
             self.scene_outline.selection_set(f"scene_{scene_number}")
             self.scene_outline.see(f"scene_{scene_number}")
+            self._render_scene_asset_preview()
             self.status_var.set(f"Imagen asignada a la escena {scene_number}. Se usará durante el render.")
         except OSError as exc:
             messagebox.showerror("No se pudo copiar la imagen", str(exc))
@@ -2649,6 +2650,7 @@ class App(tk.Tk):
         self._refresh_scene_outline(self.script_text.get("1.0", "end-1c"))
         self.scene_outline.selection_set(f"scene_{scene_number}")
         self.scene_outline.see(f"scene_{scene_number}")
+        self._render_scene_asset_preview()
         self.status_var.set(f"Se quitó la imagen de la escena {scene_number}; se usará una tarjeta de texto.")
 
     def _refresh_audio_track_label(self):
