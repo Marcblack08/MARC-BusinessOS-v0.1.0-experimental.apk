@@ -2325,18 +2325,40 @@ class App(tk.Tk):
                                 for item in payload
                             ]
                     else:
+                        heading_pattern = re.compile(
+                            r"^\s*(?:\[?\s*)?(?:ESCENA|SCENE)\s*(\d+)\s*\]?\s*[:.)\-–—]+\s*(.*)$",
+                            re.IGNORECASE
+                        )
                         numbered = {}
+                        current_number = None
+                        current_lines = []
                         sequential = []
-                        for block in re.split(r"\n\s*\n", raw_directions):
-                            block = block.strip()
-                            if not block:
+                        for raw_line in raw_directions.splitlines():
+                            line = raw_line.strip()
+                            if not line:
+                                if current_number is None and current_lines:
+                                    sequential.append(" ".join(current_lines))
+                                    current_lines = []
+                                elif current_number is not None and current_lines:
+                                    current_lines.append("")
                                 continue
-                            match = re.match(r"^(?:\[?\s*)?(?:ESCENA|SCENE)\s*(\d+)\s*\]?[\s:.)\-–—]+(.+)$", block, re.IGNORECASE | re.DOTALL)
+                            match = heading_pattern.match(line)
                             if match:
-                                numbered[int(match.group(1))] = " ".join(match.group(2).split())
+                                if current_number is not None:
+                                    numbered[current_number] = " ".join(" ".join(current_lines).split())
+                                elif current_lines:
+                                    sequential.append(" ".join(current_lines))
+                                current_number = int(match.group(1))
+                                current_lines = [match.group(2).strip()] if match.group(2).strip() else []
+                            elif current_number is not None:
+                                current_lines.append(line)
                             else:
-                                sequential.append(" ".join(block.split()))
-                        directions = [numbered[key] for key in sorted(numbered)] if numbered else sequential
+                                current_lines.append(line)
+                        if current_number is not None:
+                            numbered[current_number] = " ".join(" ".join(current_lines).split())
+                        elif current_lines:
+                            sequential.append(" ".join(current_lines))
+                        directions = [numbered[key] for key in sorted(numbered) if numbered[key]] if numbered else sequential
                     directions = [str(item).strip()[:500] for item in directions if str(item).strip()]
             except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
                 messagebox.showerror("No se pudo leer la dirección", f"Revisa el archivo de dirección por escena.\n\n{exc}")
