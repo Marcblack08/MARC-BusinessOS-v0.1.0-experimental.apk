@@ -206,15 +206,107 @@ def _install_setup_button(self):
     )
 
 
+def _start_wizard_production(self, title: str, script: str, image_paths: list[str], mode: str):
+    """Prepare a new project from the guided creator, then run its chosen production preset."""
+    try:
+        title = str(title or "").strip()
+        images = [str(Path(item).expanduser().resolve()) for item in image_paths
+                  if Path(item).expanduser().is_file()]
+        if not title:
+            raise ValueError("Escribe el nombre del vídeo.")
+        if not images:
+            raise ValueError("Añade al menos una imagen.")
+        script = normalize_script_for_images(str(script or ""), len(images))
+        # Preserve a previously open project before opening a fresh production.
+        if getattr(self, "current_id", None) is not None:
+            try:
+                self.save_project(quiet=True)
+            except Exception:
+                pass
+        self.new_project()
+        self.title_var.set(title)
+        self.topic_var.set(("Producción desde guion: " + " ".join(script.split()))[:2950])
+        preset = animation_preset(mode)
+        self.animation_style_var.set(preset["animation_style"])
+        self.animation_intensity_var.set(preset["animation_intensity"])
+        self.transition_style_var.set(preset["transition_style"])
+        self.overlay_mode_var.set(preset["overlay_mode"])
+        self.scene_video_assets = {}
+        refresh_voice_label(self)
+
+        staging = setup_engine.DATA_ROOT / "wizard_imports" / uuid.uuid4().hex
+        staging.mkdir(parents=True, exist_ok=True)
+        script_path = staging / "guion.md"
+        script_path.write_text(script, encoding="utf-8")
+        package = SimpleNamespace(
+            root=staging,
+            script_path=script_path,
+            image_paths=tuple(Path(item) for item in images),
+        )
+        self._creator_package = package
+        self._creator_production_mode = str(mode or "Básico")
+        set_creator_status(self, "Analizando el equipo y preparando las herramientas necesarias…", 8)
+    except Exception as exc:
+        set_creator_status(self, f"No se pudo preparar el proyecto: {exc}", 0)
+        messagebox.showerror("No se pudo preparar el vídeo", str(exc), parent=self)
+        return
+
+    ai_requested = mode_uses_ai(mode)
+
+    def after_setup(report: dict):
+        if not report.get("ffmpeg", {}).get("available"):
+            set_creator_status(self, "Falta FFmpeg. No se ha iniciado el render.", 0)
+            messagebox.showerror(
+                "No se pudo preparar el montaje",
+                "M.A.R.C. no detectó FFmpeg. Pulsa Editor avanzado → Diagnóstico para revisar la instalación.",
+                parent=self,
+            )
+            return
+        if not ai_requested:
+            set_creator_status(self, "Importando escenas y preparando voz, música y montaje…", 22)
+            _run_package_import(self, package, script, [], report, use_i2v=False)
+            return
+        if report.get("video_generation_ready"):
+            set_creator_status(self, "Motor de vídeo listo. Preparando animación IA por escena…", 25)
+            _run_package_import(self, package, script, [], report, use_i2v=True)
+            return
+        summary = _setup_summary(report)
+        continue_basic = messagebox.askyesno(
+            "Movimiento IA no disponible en este equipo",
+            "Este equipo no ha quedado preparado para movimiento corporal neuronal.
+
+"
+            + summary + "
+
+¿Crear el vídeo con movimiento de cámara, voces, música y montaje convencional? "
+            "Podrás volver a probar Movimiento IA desde un equipo compatible.",
+            parent=self,
+        )
+        if continue_basic:
+            self.animation_style_var.set("2D fluida")
+            self.animation_intensity_var.set("Normal")
+            self.transition_style_var.set("Fundido suave")
+            self.overlay_mode_var.set("Título de escena")
+            set_creator_status(self, "Usando el modo básico compatible con este equipo…", 22)
+            _run_package_import(self, package, script, [], report, use_i2v=False)
+        else:
+            set_creator_status(self, "Producción en pausa. Instala un motor de vídeo compatible o cambia a Básico.", 0)
+
+    _run_setup(
+        self, show_dialog=False, continuation=after_setup,
+        install_video_models=ai_requested,
+        install_text_model=False,
+        install_vision_model=ai_requested,
+    )
+
+
 def _startup_init(self, *args, **kwargs):
     _original_init(self, *args, **kwargs)
     self._setup_report = setup_engine.load_setup_report()
     self._setup_running = False
     self.scene_video_assets = {}
-    # Setup is normally run by install_windows.bat; only run it on first launch
-    # if no diagnostics report exists. Do not reinstall/re-download on every launch.
-    if self._setup_report is None:
-        self.after(1800, lambda: _run_setup(self, show_dialog=False))
+    # Installation and model downloads are user-triggered from the creator or tools panel.
+    # Opening the app never starts a hidden multi-GB download.
 
 
 def _run_package_import(self, package, script: str, directions: list[str], report: dict,
