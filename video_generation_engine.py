@@ -77,64 +77,128 @@ def upload_image(image_path: str | Path, base_url: str = "http://127.0.0.1:8188"
     return str(name)
 
 
+def _linked_source(value, workflow: dict) -> str | None:
+    """Return a ComfyUI API node ID for a standard [node_id, output_slot] link."""
+    if isinstance(value, list) and len(value) == 2:
+        source = str(value[0])
+        if source in workflow and isinstance(value[1], int):
+            return source
+    return None
+
+
+def _find_text_encoder(source_id: str, workflow: dict) -> list[tuple[str, str]]:
+    """Walk upstream from a conditioning input and find text-bearing nodes."""
+    found: list[tuple[str, str]] = []
+    pending = [str(source_id)]
+    seen: set[str] = set()
+    while pending:
+        node_id = pending.pop(0)
+        if node_id in seen or node_id not in workflow:
+            continue
+        seen.add(node_id)
+        node = workflow[node_id]
+        if not isinstance(node, dict) or not isinstance(node.get("inputs"), dict):
+            continue
+        inputs = node["inputs"]
+        class_type = str(node.get("class_type", "")).lower()
+        if "text" in inputs and any(token in class_type for token in ("clip", "text", "prompt", "encode")):
+            found.append((node_id, "text"))
+            continue
+        for value in inputs.values():
+            source = _linked_source(value, workflow)
+            if source:
+                pending.append(source)
+    return found
+
+
 def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
                      negative_prompt: str = "") -> dict:
-    """Fill obvious image/prompt inputs in a ComfyUI API workflow.
+    """Fill the unique image input and positive text input of an API workflow.
 
-    It intentionally refuses to guess ambiguous workflows. Users can mark node
-    inputs with MARC_IMAGE_INPUT / MARC_PROMPT_INPUT / MARC_NEGATIVE_INPUT
-    keys in a copied workflow, or use the guided heuristic for common node names.
+    ComfyUI API workflows encode links as [source_node_id, output_slot]. The
+    adapter follows positive/negative conditioning links where possible, avoiding
+    overwriting a negative prompt with the motion prompt. Ambiguous workflows
+    are rejected rather than modified unpredictably.
     """
     if not isinstance(workflow, dict) or not workflow:
         raise VideoGenerationError("El workflow de ComfyUI está vacío o no es válido.")
     prepared = json.loads(json.dumps(workflow))
-    image_nodes = []
-    prompt_nodes = []
-    negative_nodes = []
+
+    image_nodes: list[tuple[str, str]] = []
+    text_nodes: list[tuple[str, str]] = []
     for node_id, node in prepared.items():
         if not isinstance(node, dict) or not isinstance(node.get("inputs"), dict):
             continue
         inputs = node["inputs"]
         class_type = str(node.get("class_type", "")).lower()
-        for key in list(inputs):
-            marker = key.upper()
-            if marker == "MARC_IMAGE_INPUT" or (
-                key in {"image", "image_name"} and any(x in class_type for x in ("loadimage", "imageonly", "wan", "video"))
-            ):
-                image_nodes.append((node_id, key))
-            if marker == "MARC_PROMPT_INPUT" or (
-                key in {"text", "prompt", "positive"} and any(x in class_type for x in ("text", "clip", "prompt", "conditioning", "wan", "ltx", "video"))
-            ):
-                prompt_nodes.append((node_id, key))
-            if marker == "MARC_NEGATIVE_INPUT" or key in {"negative_prompt", "negative"}:
-                negative_nodes.append((node_id, key))
-    # Explicit markers take priority, then common ComfyUI node patterns.
-    explicit_image = [(n, k) for n, node in prepared.items() if isinstance(node, dict)
-                      for k in (node.get("inputs") or {}) if k.upper() == "MARC_IMAGE_INPUT"]
-    explicit_prompt = [(n, k) for n, node in prepared.items() if isinstance(node, dict)
-                       for k in (node.get("inputs") or {}) if k.upper() == "MARC_PROMPT_INPUT"]
-    explicit_negative = [(n, k) for n, node in prepared.items() if isinstance(node, dict)
-                         for k in (node.get("inputs") or {}) if k.upper() == "MARC_NEGATIVE_INPUT"]
-    image_nodes = explicit_image or image_nodes
-    prompt_nodes = explicit_prompt or prompt_nodes
-    negative_nodes = explicit_negative or negative_nodes
+        if "image" in inputs and any(token in class_type for token in ("loadimage", "imageonly")):
+            image_nodes.append((node_id, "image"))
+        if "text" in inputs and any(token in class_type for token in ("clip", "text", "prompt", "encode")):
+            text_nodes.append((node_id, "text"))
+
+    # Trace downstream video/sampler nodes back to their positive/negative text encoders.
+    positive_nodes: list[tuple[str, str]] = []
+    negative_nodes: list[tuple[str, str]] = []
+    for node in prepared.values():
+        if not isinstance(node, dict) or not isinstance(node.get("inputs"), dict):
+            continue
+        for key, value in node["inputs"].items():
+            if key.lower() not in {"positive", "negative"}:
+                continue
+            source_id = _linked_source(value, prepared)
+            if not source_id:
+                continue
+            matches = _find_text_encoder(source_id, prepared)
+            if key.lower() == "positive":
+                positive_nodes.extend(matches)
+            else:
+                negative_nodes.extend(matches)
+    positive_nodes = list(dict.fromkeys(positive_nodes))
+    negative_nodes = list(dict.fromkeys(negative_nodes))
+
+    if not positive_nodes:
+        negative_clues = (
+            "low quality", "worst quality", "bad anatomy", "deformed", "blurry",
+            "extra fingers", "negative prompt", "watermark, text", "jpeg artifacts",
+        )
+        negative_by_text = [
+            item for item in text_nodes
+            if any(clue in str(prepared[item[0]]["inputs"].get(item[1], "")).lower()
+                   for clue in negative_clues)
+        ]
+        candidates = [item for item in text_nodes if item not in negative_by_text]
+        if len(candidates) == 1:
+            positive_nodes = candidates
+        else:
+            raise VideoGenerationError(
+                "No se pudo distinguir la entrada de texto positivo. Usa un workflow API con "
+                "una conexión positive clara al sampler/modelo de vídeo."
+            )
+        if not negative_nodes:
+            negative_nodes = negative_by_text
+
+    image_nodes = list(dict.fromkeys(image_nodes))
     if len(image_nodes) != 1:
         raise VideoGenerationError(
-            "No pude identificar una única entrada de imagen en el workflow. "
-            "Edita una copia del JSON API y marca la entrada con la clave MARC_IMAGE_INPUT."
+            "El workflow debe tener una única entrada LoadImage. Si tiene varias imágenes, "
+            "prepara un workflow de imagen a vídeo con una sola imagen de referencia."
         )
-    if not prompt_nodes:
+    if len(positive_nodes) != 1:
         raise VideoGenerationError(
-            "No pude identificar el campo de prompt. Marca el campo de texto positivo como MARC_PROMPT_INPUT."
+            "El workflow tiene varias entradas de texto positivo. Simplifica el prompt a un único "
+            "codificador de texto positivo para que MARC pueda insertar el movimiento."
         )
-    for node_id, key in image_nodes:
-        prepared[node_id]["inputs"][key] = image_filename
-    for node_id, key in prompt_nodes:
-        prepared[node_id]["inputs"][key] = motion_prompt
-    for node_id, key in negative_nodes:
-        prepared[node_id]["inputs"][key] = negative_prompt
+    prepared[image_nodes[0][0]]["inputs"][image_nodes[0][1]] = image_filename
+    prepared[positive_nodes[0][0]]["inputs"][positive_nodes[0][1]] = motion_prompt
+    if negative_prompt.strip():
+        if len(negative_nodes) > 1:
+            raise VideoGenerationError(
+                "El workflow tiene varias entradas negativas. Deja el prompt negativo vacío o utiliza "
+                "un workflow con una sola entrada negativa."
+            )
+        if len(negative_nodes) == 1:
+            prepared[negative_nodes[0][0]]["inputs"][negative_nodes[0][1]] = negative_prompt.strip()
     return prepared
-
 
 
 def analyze_image_with_ollama(image_path: str | Path,
