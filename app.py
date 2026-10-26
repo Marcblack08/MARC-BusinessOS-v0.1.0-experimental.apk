@@ -27,7 +27,7 @@ from urllib.parse import urlencode
 
 from scene_engine import (
     allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief,
-    build_cinematic_image_prompt, build_video_transition_filter_graph, camera_direction_for_shot,
+    build_cinematic_image_prompt, build_comfy_image_workflow, build_video_transition_filter_graph, camera_direction_for_shot,
     build_srt_subtitles, build_srt_from_timed_segments, build_subtitle_drawtext_filter, expand_scenes_to_shots, ffmpeg_filter_path,
     parse_script_scenes, scene_motion_filter
 )
@@ -1150,6 +1150,19 @@ class App(tk.Tk):
             model_row, text="Iniciar / instalar", command=self.start_comfyui
         )
         self.start_comfyui_button.pack(side="left", padx=(6, 0))
+        upscale_row = tk.Frame(image_ai_bar, bg=self.colors["panel"])
+        upscale_row.pack(fill="x", pady=(0, 6))
+        tk.Label(upscale_row, text="MEJORA IA (OPCIONAL)", bg=self.colors["panel"],
+                 fg=self.colors["muted"], font=("Segoe UI", 8, "bold")).pack(side="left", padx=(0, 7))
+        self.image_upscale_var = tk.StringVar(value="(Sin mejora)")
+        self.image_upscale_combo = ttk.Combobox(
+            upscale_row, textvariable=self.image_upscale_var,
+            values=["(Sin mejora)"], state="readonly", width=30, font=("Segoe UI", 9)
+        )
+        self.image_upscale_combo.pack(side="left")
+        tk.Label(upscale_row, text="Aumenta resolución; puede tardar más.",
+                 bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 8)).pack(side="left", padx=(8, 0))
         image_action_row = tk.Frame(image_ai_bar, bg=self.colors["panel"])
         image_action_row.pack(fill="x")
         self.generate_image_button = ttk.Button(image_action_row, text="Generar imagen de esta escena",
@@ -2826,6 +2839,7 @@ Write-Output 'NARRATION_OK'
         self.project_list.configure(state=state)
         self._set_scene_list_state(active)
         self.image_model_combo.configure(state="disabled" if active else "readonly")
+        self.image_upscale_combo.configure(state="disabled" if active else "readonly")
         self.voice_combo.configure(state="disabled" if active else "readonly")
         self.voice_engine_combo.configure(state="disabled" if active else "readonly")
         for widget, idle_state in self.form_widgets:
@@ -3647,7 +3661,23 @@ Write-Output 'NARRATION_OK'
                 option = required.get("ckpt_name", [])
                 models = option[0] if option and isinstance(option[0], list) else []
                 models = [str(model) for model in models]
-                self.generation_queue.put(("image_models", models, quiet, base_url))
+                upscalers = ["(Sin mejora)"]
+                try:
+                    upscale_request = urllib.request.Request(
+                        base_url + "/object_info/UpscaleModelLoader",
+                        headers={"Accept": "application/json"}
+                    )
+                    with urllib.request.urlopen(upscale_request, timeout=2.5) as response:
+                        upscale_payload = json.loads(response.read().decode("utf-8"))
+                    upscale_node = upscale_payload.get("UpscaleModelLoader", {})
+                    upscale_required = upscale_node.get("input", {}).get("required", {})
+                    upscale_options = upscale_required.get("model_name", [])
+                    if upscale_options and isinstance(upscale_options[0], list):
+                        upscalers.extend(str(name) for name in upscale_options[0] if str(name).strip())
+                except Exception:
+                    # Older/custom ComfyUI builds may not expose the optional upscaler node.
+                    pass
+                self.generation_queue.put(("image_models", models, quiet, base_url, upscalers))
                 return
             except Exception as exc:
                 detail = str(exc).strip().replace("\n", " ")
@@ -3715,12 +3745,21 @@ Write-Output 'NARRATION_OK'
         self.progressbar.configure(mode="indeterminate")
         self.progressbar.start(12)
         self.progress_label_var.set(f"Generando ilustración para la escena {idx + 1}")
-        self.progress_detail_var.set("IA de imágenes local · ComfyUI")
-        self.status_var.set("Generando una ilustración local. En la GTX 750 puede tardar varios minutos.")
+        chosen_upscaler = self.image_upscale_var.get().strip()
+        if chosen_upscaler == "(Sin mejora)":
+            chosen_upscaler = ""
+        self.progress_detail_var.set(
+            "IA local · ComfyUI" + (f" · mejora IA: {chosen_upscaler}" if chosen_upscaler else "")
+        )
+        self.status_var.set(
+            "Generando una ilustración local. La mejora IA opcional aumenta resolución, pero añade tiempo de procesamiento."
+            if chosen_upscaler else
+            "Generando una ilustración local. En la GTX 750 puede tardar varios minutos."
+        )
         args = (
             int(self.current_id), idx + 1, scene, model_name,
             self.drawing_style_var.get(), project["platform"], project["topic"],
-            project["story_bible"] or "", project["continuity_state"] or ""
+            project["story_bible"] or "", project["continuity_state"] or "", chosen_upscaler
         )
         threading.Thread(target=self._generate_scene_image_worker, args=args, daemon=True).start()
 
@@ -3745,6 +3784,7 @@ Write-Output 'NARRATION_OK'
         self.cancel_button.configure(state="normal" if self.generation_running else "disabled")
         self.cancel_render_button.configure(state="normal" if self.render_running else "disabled")
         self.image_model_combo.configure(state="disabled" if active else "readonly")
+        self.image_upscale_combo.configure(state="disabled" if active else "readonly")
         for widget, idle_state in self.form_widgets:
             widget.configure(state="disabled" if active else idle_state)
         self.script_text.configure(state="disabled" if active else "normal")
@@ -3752,7 +3792,7 @@ Write-Output 'NARRATION_OK'
             self.progressbar.stop()
             self.progressbar.configure(mode="determinate")
 
-    def _generate_scene_image_worker(self, project_id, scene_number, scene, checkpoint, drawing_style, platform_name, project_topic, story_bible="", continuity_state=""):
+    def _generate_scene_image_worker(self, project_id, scene_number, scene, checkpoint, drawing_style, platform_name, project_topic, story_bible="", continuity_state="", upscale_model=""):
         base_url = str(getattr(self, "comfy_url", COMFYUI_URL) or COMFYUI_URL).rstrip("/")
         try:
             self.generation_queue.put(("image_progress", scene_number, f"Preparando el prompt visual · ComfyUI en {base_url}…"))
@@ -3826,21 +3866,18 @@ Write-Output 'NARRATION_OK'
             else:
                 width, height = 672, 384
             client_id = os.urandom(12).hex()
-            workflow = {
-                "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": checkpoint}},
-                "2": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["1", 1]}},
-                "3": {"class_type": "CLIPTextEncode", "inputs": {"text": negative, "clip": ["1", 1]}},
-                "4": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
-                "5": {"class_type": "KSampler", "inputs": {
-                    "seed": random.randint(1, 2**31 - 1), "steps": 22, "cfg": 6.5,
-                    "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1.0,
-                    "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0]
-                }},
-                "6": {"class_type": "VAEDecode", "inputs": {"samples": ["5", 0], "vae": ["1", 2]}},
-                "7": {"class_type": "SaveImage", "inputs": {
-                    "filename_prefix": f"MARC_Studio/scene_{scene_number:03d}", "images": ["6", 0]
-                }},
-            }
+            workflow = build_comfy_image_workflow(
+                checkpoint=checkpoint,
+                prompt=prompt,
+                negative_prompt=negative,
+                width=width,
+                height=height,
+                scene_number=scene_number,
+                upscale_model=upscale_model,
+                seed=random.randint(1, 2**31 - 1),
+                steps=22,
+                cfg=6.5,
+            )
             body = json.dumps({"prompt": workflow, "client_id": client_id}).encode("utf-8")
             request = urllib.request.Request(
                 base_url + "/prompt", data=body,
@@ -4389,6 +4426,7 @@ Write-Output 'NARRATION_OK'
             button.configure(state=state)
         self.cancel_voice_button.configure(state="disabled")
         self.image_model_combo.configure(state="disabled" if active else "readonly")
+        self.image_upscale_combo.configure(state="disabled" if active else "readonly")
         self.voice_combo.configure(state="disabled" if active else "readonly")
         self._set_scene_list_state(active)
         # La barra es determinista: solo avanza cuando un capítulo termina realmente.
@@ -5043,9 +5081,13 @@ Write-Output 'NARRATION_OK'
                 elif kind == "image_models":
                     models, quiet = event[1], event[2]
                     base_url = event[3] if len(event) > 3 else COMFYUI_URL
+                    upscalers = event[4] if len(event) > 4 and event[4] else ["(Sin mejora)"]
                     self.comfy_url = base_url
                     self.comfy_available = True
                     self.image_model_combo.configure(values=models)
+                    self.image_upscale_combo.configure(values=upscalers)
+                    if self.image_upscale_var.get() not in upscalers:
+                        self.image_upscale_var.set("(Sin mejora)")
                     current_model = self.image_model_var.get()
                     if models:
                         preferred_model = self._preferred_image_checkpoint(models)
@@ -5826,6 +5868,7 @@ Write-Output 'NARRATION_OK'
             widget.configure(state="disabled" if active else idle_state)
         self.script_text.configure(state="disabled" if active else "normal")
         self.image_model_combo.configure(state="disabled" if active else "readonly")
+        self.image_upscale_combo.configure(state="disabled" if active else "readonly")
         self._set_scene_list_state(active)
 
     def cancel_export(self):
