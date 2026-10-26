@@ -330,6 +330,25 @@ class SceneEngineTests(unittest.TestCase):
         self.assertIn("trim=duration=12.000", graph)
         self.assertTrue(graph.endswith("[vout]"))
 
+    def test_transition_graph_can_preserve_chunk_handle_without_edge_fades(self):
+        graph = build_video_transition_filter_graph(
+            [5, 4, 3], transition_seconds=0.4,
+            fade_edges=False, preserve_tail=True,
+        )
+        self.assertIn("trim=duration=12.400", graph)
+        self.assertNotIn("fade=t=in", graph)
+        self.assertNotIn("fade=t=out", graph)
+        self.assertTrue(graph.endswith("[vout]"))
+
+    def test_transition_graph_final_pass_trims_to_nominal_duration_and_fades_once(self):
+        graph = build_video_transition_filter_graph(
+            [15, 18], transition_seconds=0.4,
+            fade_edges=True, preserve_tail=False,
+        )
+        self.assertIn("trim=duration=33.000", graph)
+        self.assertIn("fade=t=in", graph)
+        self.assertIn("fade=t=out", graph)
+
     def test_transition_graph_supports_multiple_real_effects(self):
         cases = {
             "Fundido suave": "transition=fade",
