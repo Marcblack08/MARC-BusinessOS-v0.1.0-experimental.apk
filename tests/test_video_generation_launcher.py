@@ -23,8 +23,11 @@ class VideoGenerationLauncherSmokeTests(unittest.TestCase):
             self.assertTrue(root._creator_wizard.winfo_exists())
             self.assertIn("Creador fácil", root.easy_creator_button.cget("text"))
             self.assertTrue(hasattr(root, "studio_tabs"))
-            self.assertTrue(hasattr(root, "full_production_button"))
+            self.assertIsNotNone(root.full_production_button)
+            self.assertIsNotNone(root.animate_image_button)
+            self.assertIsNotNone(root.prepare_ai_button)
             self.assertEqual(root._creator_mode_var.get(), "Básico")
+            self.assertEqual(root._marc_full_editor_shell.winfo_manager(), "grid")
         finally:
             root._on_close()
 
