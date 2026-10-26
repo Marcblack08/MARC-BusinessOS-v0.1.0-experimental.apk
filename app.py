@@ -2232,6 +2232,8 @@ class App(tk.Tk):
     def _load_scene_assets(self, project_id=None):
         self.scene_assets = {}
         self.scene_duration_overrides = {}
+        self._creator_narration_override = ""
+        self._creator_auto_narration_active = False
         self.last_export_path = ""
         self.audio_track_path = ""
         self.music_track_path = ""
@@ -2240,6 +2242,14 @@ class App(tk.Tk):
         if project_id is None:
             return
         project_dir = PROJECTS_DIR / str(project_id)
+        original_narration_script = project_dir / "assets" / "narration_original.txt"
+        try:
+            if original_narration_script.is_file():
+                self._creator_narration_override = original_narration_script.read_text(encoding="utf-8-sig").strip()
+                self._creator_auto_narration_active = bool(self._creator_narration_override)
+        except (OSError, UnicodeError):
+            self._creator_narration_override = ""
+            self._creator_auto_narration_active = False
         manifest = project_dir / "scene_assets.json"
         duration_manifest = project_dir / "scene_durations.json"
         last_video = project_dir / "last_export.txt"
@@ -2525,6 +2535,10 @@ class App(tk.Tk):
             return
         try:
             assets_dir.mkdir(parents=True, exist_ok=True)
+            if getattr(self, "_creator_auto_narration_active", False):
+                original_script = str(getattr(self, "_creator_narration_override", "") or "").strip()
+                if original_script:
+                    (assets_dir / "narration_original.txt").write_text(original_script, encoding="utf-8")
             imported_paths = []
             for image_index, source in enumerate(images, start=1):
                 destination = assets_dir / f"imported_image_{image_index:03d}{source.suffix.lower()}"
