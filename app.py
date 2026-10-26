@@ -2562,6 +2562,7 @@ class App(tk.Tk):
             if self.scene_data:
                 self.scene_outline.selection_set("scene_1")
                 self.scene_outline.see("scene_1")
+                self._render_scene_asset_preview()
         except (OSError, tk.TclError) as exc:
             messagebox.showerror("Error al importar el paquete", str(exc))
             return
