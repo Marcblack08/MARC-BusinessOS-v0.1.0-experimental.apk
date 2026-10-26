@@ -627,10 +627,15 @@ def run_automatic_setup(callback: Callable[[str], None] | None = None,
         _winget_install("Gyan.FFmpeg.Shared", callback)
         ffmpeg = find_ffmpeg()
     comfy = probe_comfyui()
+    free_disk_gb = shutil.disk_usage(root).free / (1024 ** 3)
+    model_downloads_allowed = free_disk_gb >= 8.0
     ollama_url, models = _ensure_ollama_server(callback)
     if ollama_url:
         if not _model_installed(models, OLLAMA_TEXT_MODEL):
-            _ollama_pull(OLLAMA_TEXT_MODEL, callback)
+            if model_downloads_allowed:
+                _ollama_pull(OLLAMA_TEXT_MODEL, callback)
+            else:
+                _notify(callback, "Quedan menos de 8 GB libres; no descargaré modelos de texto/visión para evitar llenar el disco.")
         tags = _request_json(OLLAMA_URL + "/api/tags", timeout=3.0)
         models = [
             str(item.get("name", "")) for item in (tags or {}).get("models", [])
@@ -639,7 +644,10 @@ def run_automatic_setup(callback: Callable[[str], None] | None = None,
         vision_ready = any(_model_installed(models, model) for model in
                            (OLLAMA_VISION_MODEL, "qwen2.5vl", "gemma3", "llava", "llama3.2-vision", "gemma4"))
         if not vision_ready:
-            _ollama_pull(OLLAMA_VISION_MODEL, callback)
+            if model_downloads_allowed:
+                _ollama_pull(OLLAMA_VISION_MODEL, callback)
+            else:
+                _notify(callback, "Se omitió el modelo visual porque no hay espacio libre suficiente.")
     else:
         _notify(callback, "Ollama no está disponible. Se conserva el editor; la instalación local de IA necesita Winget o el instalador oficial de Ollama.")
     workflow_path = ensure_official_workflow(callback)
