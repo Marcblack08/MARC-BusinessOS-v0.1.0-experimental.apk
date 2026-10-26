@@ -5,7 +5,7 @@ from pathlib import Path
 
 from scene_engine import (
     allocate_scene_durations, build_audio_filter_graph, build_scene_visual_brief,
-    build_cinematic_image_prompt, build_video_transition_filter_graph, camera_direction_for_shot,
+    build_cinematic_image_prompt, build_comfy_image_workflow, build_video_transition_filter_graph, camera_direction_for_shot,
     expand_scenes_to_shots, build_srt_subtitles, build_srt_from_timed_segments,
     build_subtitle_drawtext_filter, ffmpeg_filter_path, parse_script_scenes, scene_motion_filter
 )
@@ -374,6 +374,36 @@ class SceneEngineTests(unittest.TestCase):
         })
         self.assertNotIn("EMOCION", brief["excerpt"])
         self.assertNotIn("EMOCION", " ".join(brief["dialogue"]))
+
+
+    def test_comfy_image_workflow_uses_normal_save_path_without_upscaler(self):
+        workflow = build_comfy_image_workflow(
+            "DreamShaper8_pruned.safetensors", "cinematic portrait", "blurry",
+            384, 672, 2, seed=123, steps=22
+        )
+        self.assertEqual(workflow["4"]["inputs"]["width"], 384)
+        self.assertEqual(workflow["4"]["inputs"]["height"], 672)
+        self.assertNotIn("UpscaleModelLoader", {node["class_type"] for node in workflow.values()})
+        self.assertEqual(workflow["7"]["inputs"]["images"], ["6", 0])
+
+    def test_comfy_image_workflow_can_apply_optional_ai_upscaler(self):
+        workflow = build_comfy_image_workflow(
+            "DreamShaper8_pruned.safetensors", "cinematic portrait", "blurry",
+            384, 672, 3, upscale_model="4x-UltraSharp.pth", seed=456
+        )
+        self.assertEqual(workflow["8"]["class_type"], "UpscaleModelLoader")
+        self.assertEqual(workflow["8"]["inputs"]["model_name"], "4x-UltraSharp.pth")
+        self.assertEqual(workflow["9"]["class_type"], "ImageUpscaleWithModel")
+        self.assertEqual(workflow["9"]["inputs"]["image"], ["6", 0])
+        self.assertEqual(workflow["7"]["inputs"]["images"], ["9", 0])
+
+    def test_comfy_image_workflow_validates_dimensions_and_checkpoint(self):
+        with self.assertRaises(ValueError):
+            build_comfy_image_workflow("", "prompt", "negative", 512, 512, 1)
+        with self.assertRaises(ValueError):
+            build_comfy_image_workflow("model.safetensors", "prompt", "negative", 513, 512, 1)
+        with self.assertRaises(ValueError):
+            build_comfy_image_workflow("model.safetensors", "prompt", "negative", 512, 512, 1, steps=0)
 
 
 if __name__ == "__main__":
