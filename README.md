@@ -81,6 +81,16 @@ Consulta [docs/INSTALACION_WINDOWS.md](docs/INSTALACION_WINDOWS.md) para requisi
 
 Ollama, sus modelos, ComfyUI/checkpoints y FFmpeg no se incluyen en el instalador; se instalan por separado. En la versión empaquetada, los proyectos y la base de datos se guardan en `%LOCALAPPDATA%\\MARC Video Studio AI Desktop`.
 
+## Interfaz minimalista: crea un vídeo en tres pasos
+
+Al abrir MARC aparece primero **Creador fácil**. El editor avanzado sigue disponible desde **Editor avanzado**.
+
+1. **Proyecto:** escribe el nombre del vídeo, pega el guion completo y selecciona tus imágenes (o importa una carpeta).
+2. **Animación y voces:** elige **Básico** para zoom/paneo, **Movimiento IA** para animación corporal cuando el motor local sea compatible, o **Cinemático IA** para el mismo motor de movimiento con un montaje más marcado. Abre **Catálogo de voces** para ver las voces locales de Windows y Kokoro, escuchar una muestra, seleccionar una voz o abrir las opciones de instalación.
+3. **Crear vídeo:** MARC analiza el equipo, prepara solo los motores que hacen falta, genera los clips si es viable, crea o reutiliza el audio y monta el MP4.
+
+El creador alinea las escenas visuales con el número de imágenes. La pista de voz se sintetiza a partir del guion original, sin reemplazar sus diálogos por los encabezados de escena creados para el montaje. Si no hay un modelo de vídeo compatible, MARC ofrece el modo Básico de forma explícita; no lo presenta como animación corporal real. El catálogo muestra las voces que realmente están instaladas o conectadas: **no descarga voces desconocidas de forma silenciosa**.
+
 ## Producción automática: guion + imágenes → clips animados → MP4
 
 La pestaña **Escenas** añade tres acciones: **Preparar IA / Diagnóstico**, **Producción automática** y **Animar imagen a vídeo IA**. El nuevo modo de producción usa los recursos que ya tengas y evita obligarte a configurar manualmente cada motor.
