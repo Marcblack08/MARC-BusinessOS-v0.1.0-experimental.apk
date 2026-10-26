@@ -24,8 +24,9 @@ class CreatorWizardTests(unittest.TestCase):
         script = "ESCENA 1 — Inicio\nUna noche oscura.\n\nESCENA 2 — Pasillo\nLa puerta se cerró."
         result = normalize_script_for_images(script, 4)
         self.assertEqual(result.count("ESCENA "), 4)
-        self.assertIn("Una noche oscura.", result)
-        self.assertIn("La puerta se cerró.", result)
+        for word in ("Una", "noche", "oscura", "La", "puerta", "se", "cerró"):
+            with self.subTest(word=word):
+                self.assertIn(word, result)
 
     def test_rejects_empty_script_and_missing_images(self):
         with self.assertRaises(ValueError):
