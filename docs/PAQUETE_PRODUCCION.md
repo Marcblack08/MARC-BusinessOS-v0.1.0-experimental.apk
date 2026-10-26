@@ -61,10 +61,13 @@ Las indicaciones controlan el movimiento de cámara del montaje (zoom y paneo) s
 
 ## Importar
 
-1. Abre MARC y crea o abre el proyecto que quieres usar.
-2. En **Escenas**, pulsa **Importar paquete (guion + dirección + imágenes)**.
-3. Selecciona la carpeta `MiVideo`. MARC descubre los archivos, copia los recursos dentro del proyecto, los distribuye por los planos y carga automáticamente narración/música si existen.
-4. Revisa el storyboard y aprueba el guion. Después genera la voz si no importaste una pista, revisa el montaje y exporta MP4.
+1. Abre MARC y usa el nuevo botón principal **Importar guion + imágenes** (también sigue disponible en **Escenas**).
+2. Selecciona la carpeta `MiVideo`. MARC descubre el guion, las direcciones, las imágenes y el audio opcional; copia los archivos al proyecto sin modificar los originales.
+3. En **Escenas**, selecciona las filas para revisar la imagen, el diálogo y la dirección de cámara en el panel visual.
+4. Si hay una imagen por escena original, se conserva esa asociación aunque el guion se divida en varios planos cortos. Si la cantidad de imágenes es menor que el número de planos, las imágenes se distribuyen por el recorrido; si hay una por plano, se asignan en orden.
+5. Revisa el storyboard y aprueba el guion. Si no importaste narración, MARC intenta generarla con las voces SAPI instaladas en Windows. Importa una pista de música si la tienes, revisa la vista previa y exporta el MP4.
+
+**Nota sobre la animación:** el modo de trabajo con imágenes importadas aplica movimiento de cámara (zoom/paneo), transiciones, montaje, narración local y mezcla de audio. No crea movimiento corporal real de los personajes. Esa función necesita un modelo de animación por vídeo separado y puede no ser viable en CPU con equipos de memoria limitada.
 
 La importación no modifica los archivos originales de la carpeta de origen. Si la carpeta contiene varios guiones, renombra el principal a `guion.md` o `guion.txt` para que la selección sea inequívoca.
 
