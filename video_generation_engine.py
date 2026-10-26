@@ -99,11 +99,11 @@ def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
             marker = key.upper()
             if marker == "MARC_IMAGE_INPUT" or (
                 key in {"image", "image_name"} and any(x in class_type for x in ("loadimage", "imageonly", "wan", "video"))
-            :
+            ):
                 image_nodes.append((node_id, key))
             if marker == "MARC_PROMPT_INPUT" or (
                 key in {"text", "prompt", "positive"} and any(x in class_type for x in ("text", "clip", "prompt", "conditioning", "wan", "ltx", "video"))
-            :
+            ):
                 prompt_nodes.append((node_id, key))
             if marker == "MARC_NEGATIVE_INPUT" or key in {"negative_prompt", "negative"}:
                 negative_nodes.append((node_id, key))
