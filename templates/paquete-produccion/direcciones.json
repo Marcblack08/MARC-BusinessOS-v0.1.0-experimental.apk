@@ -1,0 +1,16 @@
+{
+  "scenes": [
+    {
+      "scene": 1,
+      "camera_motion": "Acercamiento lento desde la fachada hasta la puerta"
+    },
+    {
+      "scene": 2,
+      "camera_motion": "Paneo lento de izquierda a derecha por el pasillo oscuro"
+    },
+    {
+      "scene": 3,
+      "camera_motion": "Zoom rápido hacia el rostro asustado y termina en primer plano"
+    }
+  ]
+}
