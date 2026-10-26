@@ -86,16 +86,26 @@ def _setup_finished(self, report: dict, show_dialog: bool, continuation=None):
             messagebox.showinfo("Diagnóstico y preparación de IA", summary, parent=self)
         else:
             messagebox.showwarning("Diagnóstico y preparación de IA", summary, parent=self)
+    waiters = list(getattr(self, "_setup_waiters", []) or [])
+    self._setup_waiters = []
     if continuation:
-        continuation(report)
+        waiters.append(continuation)
+    for callback in waiters:
+        try:
+            callback(report)
+        except Exception as exc:
+            messagebox.showerror("No se pudo continuar la producción", str(exc), parent=self)
 
 
 def _run_setup(self, show_dialog: bool = True, continuation=None):
     if getattr(self, "_setup_running", False):
         if continuation:
-            messagebox.showinfo("Preparación en curso", "M.A.R.C. ya está comprobando e instalando los componentes que faltan.", parent=self)
+            self._setup_waiters = list(getattr(self, "_setup_waiters", []) or []) + [continuation]
+        self._setup_show_dialog = bool(getattr(self, "_setup_show_dialog", False) or show_dialog)
         return
     self._setup_running = True
+    self._setup_show_dialog = show_dialog
+    self._setup_waiters = [continuation] if continuation else []
     for button_name in ("prepare_ai_button", "full_production_button"):
         button = getattr(self, button_name, None)
         if button is not None:
@@ -121,7 +131,9 @@ def _run_setup(self, show_dialog: bool = True, continuation=None):
                 "notes": [f"El asistente de instalación no terminó correctamente: {exc}"],
             }
         try:
-            self.after(0, lambda result=report: _setup_finished(self, result, show_dialog, continuation))
+            self.after(0, lambda result=report: _setup_finished(
+                self, result, bool(getattr(self, "_setup_show_dialog", show_dialog))
+            ))
         except (tk.TclError, RuntimeError):
             pass
 
@@ -220,7 +232,6 @@ def _run_package_import(self, package, script: str, directions: list[str], repor
 def _start_full_production(self):
     if any(bool(getattr(self, name, False)) for name in (
         "generation_running", "render_running", "image_generation_running", "voice_generation_running",
-        "getattr_placeholder",
     )):
         messagebox.showinfo("Proceso en curso", "Espera a que termine el proceso actual.", parent=self)
         return
@@ -289,6 +300,10 @@ def _start_i2v_batch(self, original_start, report: dict):
             target["context"] = f"{scene.get('title', '')}\n{scene.get('text', '')}".strip()
             target["direction"] = str((getattr(self, "scene_directions", {}) or {}).get(scene_key, "")).strip()
 
+    try:
+        self.render_cancel_event.clear()
+    except Exception:
+        pass
     output_root = Path(marc_app.PROJECTS_DIR) / str(self.current_id or "importacion") / "generated_video"
     output_root.mkdir(parents=True, exist_ok=True)
     button = getattr(self, "full_production_button", None)
