@@ -12,7 +12,7 @@ if os.name == "nt":
 
 class VideoGenerationLauncherSmokeTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "nt", "Tkinter launcher smoke test requires Windows")
-    def test_launcher_adds_video_button_to_scenes_toolbar(self):
+    def test_launcher_adds_production_button_and_keeps_ai_tools_secondary(self):
         root = marc_launcher.marc_app.App()
         try:
             root.update_idletasks()
