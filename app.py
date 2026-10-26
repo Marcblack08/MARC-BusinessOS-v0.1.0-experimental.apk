@@ -6588,43 +6588,51 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                 chunk_size = 30
                 rendered_chunks = []
                 rendered_chunk_durations = []
-                group_count = max(1, math.ceil(len(concat_scene_indexes) / chunk_size))
-
-                for chunk_number, start in enumerate(range(0, len(concat_scene_indexes), chunk_size), start=1):
-                    if self.render_cancel_event.is_set():
-                        raise RuntimeError("__MARC_RENDER_CANCELLED__")
-                    chunk_indexes = concat_scene_indexes[start:start + chunk_size]
-                    chunk_durations = final_durations[start:start + chunk_size]
-                    chunk_path = scene_dir / f"transition_chunk_{chunk_number:03d}.mp4"
-                    chunk_filter_path = scene_dir / f"transition_chunk_{chunk_number:03d}.filter"
-                    chunk_filter_path.write_text(
-                        build_video_transition_filter_graph(
-                            chunk_durations,
-                            transition_seconds=transition,
-                            transition_style=transition_style,
-                            fade_edges=False,
-                            preserve_tail=True,
-                        ),
-                        encoding="utf-8",
-                    )
-                    chunk_cmd = [ffmpeg, "-y", "-filter_complex_threads", "1"]
-                    for scene_index in chunk_indexes:
-                        chunk_cmd.extend(["-i", str(scene_dir / f"scene_{scene_index + 1:03d}.mp4")])
-                    chunk_cmd.extend([
-                        "-filter_complex_script", str(chunk_filter_path),
-                        "-map", "[vout]", "-an", "-r", str(fps),
-                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
-                        "-crf", "25", "-movflags", "+faststart", str(chunk_path),
-                    ])
-                    run_ffmpeg(chunk_cmd, f"crossfade_chunk_{chunk_number:03d}.log", cwd=scene_dir)
-                    if not chunk_path.is_file() or chunk_path.stat().st_size == 0:
-                        raise RuntimeError(f"FFmpeg no produjo el bloque de transición {chunk_number}.")
-                    rendered_chunks.append(chunk_path)
-                    rendered_chunk_durations.append(sum(chunk_durations))
-                    self.generation_queue.put((
-                        "render_progress", total + 1, final_steps,
-                        f"Transiciones · bloque {chunk_number}/{group_count} ensamblado"
-                    ))
+                if len(concat_scene_indexes) <= chunk_size:
+                    # Short projects render in one pass to avoid an unnecessary encode generation.
+                    rendered_chunks = [
+                        scene_dir / f"scene_{scene_index + 1:03d}.mp4"
+                        for scene_index in concat_scene_indexes
+                    ]
+                    rendered_chunk_durations = list(final_durations)
+                    group_count = 1
+                else:
+                    group_count = max(1, math.ceil(len(concat_scene_indexes) / chunk_size))
+                    for chunk_number, start in enumerate(range(0, len(concat_scene_indexes), chunk_size), start=1):
+                        if self.render_cancel_event.is_set():
+                            raise RuntimeError("__MARC_RENDER_CANCELLED__")
+                        chunk_indexes = concat_scene_indexes[start:start + chunk_size]
+                        chunk_durations = final_durations[start:start + chunk_size]
+                        chunk_path = scene_dir / f"transition_chunk_{chunk_number:03d}.mp4"
+                        chunk_filter_path = scene_dir / f"transition_chunk_{chunk_number:03d}.filter"
+                        chunk_filter_path.write_text(
+                            build_video_transition_filter_graph(
+                                chunk_durations,
+                                transition_seconds=transition,
+                                transition_style=transition_style,
+                                fade_edges=False,
+                                preserve_tail=True,
+                            ),
+                            encoding="utf-8",
+                        )
+                        chunk_cmd = [ffmpeg, "-y", "-filter_complex_threads", "1"]
+                        for scene_index in chunk_indexes:
+                            chunk_cmd.extend(["-i", str(scene_dir / f"scene_{scene_index + 1:03d}.mp4")])
+                        chunk_cmd.extend([
+                            "-filter_complex_script", str(chunk_filter_path),
+                            "-map", "[vout]", "-an", "-r", str(fps),
+                            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
+                            "-crf", "25", "-movflags", "+faststart", str(chunk_path),
+                        ])
+                        run_ffmpeg(chunk_cmd, f"crossfade_chunk_{chunk_number:03d}.log", cwd=scene_dir)
+                        if not chunk_path.is_file() or chunk_path.stat().st_size == 0:
+                            raise RuntimeError(f"FFmpeg no produjo el bloque de transición {chunk_number}.")
+                        rendered_chunks.append(chunk_path)
+                        rendered_chunk_durations.append(sum(chunk_durations))
+                        self.generation_queue.put((
+                            "render_progress", total + 1, final_steps,
+                            f"Transiciones · bloque {chunk_number}/{group_count} ensamblado"
+                        ))
 
                 final_filter_path = scene_dir / "crossfade_final.filter"
                 final_filter_path.write_text(
