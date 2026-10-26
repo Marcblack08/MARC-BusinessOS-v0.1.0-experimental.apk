@@ -406,5 +406,17 @@ class SceneEngineTests(unittest.TestCase):
             build_comfy_image_workflow("model.safetensors", "prompt", "negative", 512, 512, 1, steps=0)
 
 
+    def test_scene_motion_direction_overrides_default_camera_move(self):
+        default_move = scene_motion_filter("2D fluida", 1280, 720, 5, "Normal", shot_index=0)
+        zoom_out = scene_motion_filter("2D fluida", 1280, 720, 5, "Normal", shot_index=0, direction="La cámara se aleja lentamente")
+        pan_left = scene_motion_filter("2D fluida", 1280, 720, 5, "Normal", shot_index=0, direction="Paneo de derecha a izquierda")
+        pan_right = scene_motion_filter("2D fluida", 1280, 720, 5, "Normal", shot_index=0, direction="Paneo de izquierda a derecha")
+        self.assertNotEqual(default_move, zoom_out)
+        self.assertNotEqual(zoom_out, pan_left)
+        self.assertNotEqual(pan_left, pan_right)
+        self.assertIn("if(eq(on,0)", zoom_out)
+        self.assertIn("min(on/", pan_left)
+        self.assertIn("min(on/", pan_right)
+
 if __name__ == "__main__":
     unittest.main()
