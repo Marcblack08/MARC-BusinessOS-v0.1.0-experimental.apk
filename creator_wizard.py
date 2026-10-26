@@ -572,8 +572,9 @@ def open_voice_catalog(app):
                     except Exception:
                         error_notes.append("No se pudo consultar el catálogo de voces de Windows.")
             try:
+                kokoro_base = str(getattr(app, "kokoro_url", "http://127.0.0.1:7860")).rstrip("/")
                 req = urllib.request.Request(
-                    "http://127.0.0.1:7860/tts/voices", headers={"Accept": "application/json"}
+                    kokoro_base + "/tts/voices", headers={"Accept": "application/json"}
                 )
                 with urllib.request.urlopen(req, timeout=3.0) as response:
                     payload = json.loads(response.read().decode("utf-8"))
@@ -678,8 +679,9 @@ def open_voice_catalog(app):
                         "input_type": "text", "text": VOICE_SAMPLE, "voice": name,
                         "output_format": "wav",
                     }).encode("utf-8")
+                    kokoro_base = str(getattr(app, "kokoro_url", "http://127.0.0.1:7860")).rstrip("/")
                     request = urllib.request.Request(
-                        "http://127.0.0.1:7860/tts/generate", data=payload,
+                        kokoro_base + "/tts/generate", data=payload,
                         headers={"Content-Type": "application/json", "Accept": "audio/wav"}, method="POST",
                     )
                     with urllib.request.urlopen(request, timeout=90) as response:
