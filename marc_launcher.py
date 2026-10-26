@@ -6,6 +6,7 @@ ComfyUI API workflow; it does not download large models automatically.
 """
 from __future__ import annotations
 
+import json
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -64,12 +65,37 @@ def _open_video_generation(self):
     )
     if not image_path:
         return
-    workflow_path = filedialog.askopenfilename(
-        parent=self, title="Selecciona el workflow API de imagen a vídeo de ComfyUI",
-        filetypes=[("Workflow API JSON", "*.json"), ("JSON", "*.json")],
-    )
+    settings_path = Path(getattr(marc_app, "APP_DATA_ROOT", Path.home())) / "video_generation_settings.json"
+    saved_workflow = ""
+    try:
+        saved_workflow = str(json.loads(settings_path.read_text(encoding="utf-8")).get("workflow_path", ""))
+    except (OSError, ValueError, AttributeError):
+        pass
+    workflow_path = ""
+    if saved_workflow and Path(saved_workflow).is_file():
+        if messagebox.askyesno(
+            "Workflow guardado",
+            "¿Usar el workflow de imagen a vídeo que configuraste anteriormente?\n\n"
+            f"{saved_workflow}\n\nPulsa No para elegir otro.",
+            parent=self,
+        ):
+            workflow_path = saved_workflow
+    if not workflow_path:
+        workflow_path = filedialog.askopenfilename(
+            parent=self, title="Selecciona el workflow API de imagen a vídeo de ComfyUI",
+            initialdir=str(Path(saved_workflow).parent) if saved_workflow else None,
+            filetypes=[("Workflow API JSON", "*.json"), ("JSON", "*.json")],
+        )
     if not workflow_path:
         return
+    try:
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(
+            json.dumps({"workflow_path": workflow_path}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
     motion_prompt, use_auto_analysis = _motion_prompt_dialog(self, image_path)
     if motion_prompt is None and not use_auto_analysis:
         return
