@@ -266,6 +266,66 @@ def _start_full_production(self):
     _run_setup(self, show_dialog=False, continuation=after_setup)
 
 
+def _start_basic_export(self, original_start, remote=False):
+    """Generate a small offline ambient bed when no music was supplied, then export."""
+    current_music = str(getattr(self, "music_track_path", "") or "")
+    if current_music and Path(current_music).is_file():
+        _continue_basic_export(self, original_start, current_music, remote=remote)
+        return
+    try:
+        project_root = Path(marc_app.PROJECTS_DIR) / str(getattr(self, "current_id", None) or "importacion")
+        music_root = project_root / "generated_video"
+        music_root.mkdir(parents=True, exist_ok=True)
+        script = self.script_text.get("1.0", "end-1c")
+        mood = infer_mood(script)
+        destination = music_root / f"marc_ambient_{mood}.wav"
+    except Exception:
+        destination = None
+        mood = "drama"
+    button = getattr(self, "full_production_button", None)
+    if button is not None:
+        button.configure(state="disabled")
+
+    def worker():
+        audio_path = ""
+        try:
+            if destination is not None:
+                if not destination.is_file() or destination.stat().st_size < 100_000:
+                    _set_status(self, f"Creando banda sonora ambiental local ({mood})…")
+                    generate_ambient_bed(destination, mood=mood)
+                if destination.is_file() and destination.stat().st_size > 0:
+                    audio_path = str(destination.resolve())
+        except Exception as exc:
+            _set_status(self, f"No se pudo generar la música automáticamente: {exc}")
+        try:
+            self.after(0, lambda path=audio_path: _continue_basic_export(
+                self, original_start, path, remote=remote, button=button
+            ))
+        except (tk.TclError, RuntimeError):
+            pass
+
+    threading.Thread(target=worker, daemon=True, name="MARC-Ambient-Music").start()
+
+
+def _continue_basic_export(self, original_start, music_path: str, remote=False, button=None):
+    if music_path and (not getattr(self, "music_track_path", "") or not Path(self.music_track_path).is_file()):
+        self.music_track_path = music_path
+        try:
+            self._refresh_audio_track_label()
+        except Exception:
+            pass
+    self._auto_export_after_import = True
+    try:
+        original_start(preview=False, remote=remote)
+    finally:
+        self._auto_export_after_import = False
+        if button is not None:
+            try:
+                button.configure(state="normal")
+            except tk.TclError:
+                pass
+
+
 def _start_i2v_batch(self, original_start, report: dict):
     """Animate each distinct imported still once, map clips to shots, then render audio+MP4."""
     workflow_value = str((report.get("comfyui") or {}).get("workflow_path") or "")
@@ -407,7 +467,7 @@ def _start_i2v_batch(self, original_start, report: dict):
                     _video_batch_failed(self, "La exportación se canceló. Los clips generados se conservaron.", button)
             self.after(0, ask_partial)
         else:
-            self.after(0, lambda: _finish_video_batch(self, clips, original_start, button))
+            self.after(0, lambda: _finish_video_batch(self, clips, original_start, button, music_path))
 
     threading.Thread(target=worker, daemon=True, name="MARC-I2V-Batch").start()
 
