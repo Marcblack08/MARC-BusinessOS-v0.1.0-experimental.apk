@@ -6493,7 +6493,7 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                         scene_label = (" ".join(source_text.split())[:150]
                                        if overlay_mode == "Subtítulo narrativo"
                                        else str(title or f"Escena {index + 1}"))
-                        scene_label = re.sub(r"\\s+", " ", scene_label).strip()[:160]
+                        scene_label = re.sub(r"\s+", " ", scene_label).strip()[:160]
                         label_file.write_text(scene_label, encoding="utf-8")
                         label_filter = build_subtitle_drawtext_filter(
                             label_file, subtitle_fontfile or None, subtitle_size_px,
@@ -6521,7 +6521,7 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                         scene_label = (" ".join(source_text.split())[:150]
                                        if overlay_mode == "Subtítulo narrativo"
                                        else str(title or f"Escena {index + 1}"))
-                        scene_label = re.sub(r"\\s+", " ", scene_label).strip()[:160]
+                        scene_label = re.sub(r"\s+", " ", scene_label).strip()[:160]
                         label_file.write_text(scene_label, encoding="utf-8")
                         label_path = ffmpeg_filter_path(label_file)
                         label_size = max(16, min(30, width // (58 if overlay_mode == "Subtítulo narrativo" else 52)))
