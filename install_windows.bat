@@ -151,7 +151,7 @@ if errorlevel 1 echo [AVISO] La preparacion IA no termino por completo. MARC gua
 :tests
 echo.
 echo [7/7] Validando sintaxis y pruebas...
-".venv\Scripts\python.exe" -m compileall -q app.py scene_engine.py story_engine.py voice_engine.py production_pipeline.py production_package.py media_quality.py remote_server.py
+".venv\Scripts\python.exe" -m compileall -q app.py marc_launcher.py setup_engine.py video_generation_engine.py local_audio.py scene_engine.py story_engine.py voice_engine.py production_pipeline.py production_package.py media_quality.py remote_server.py
 if errorlevel 1 (
   echo [ERROR] La comprobacion de sintaxis detecto errores. No se abrira MARC automaticamente.
   pause
