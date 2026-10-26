@@ -535,10 +535,13 @@ def _launch_comfy(launcher: Path, callback: Callable[[str], None] | None = None)
         return
     _notify(callback, "Iniciando ComfyUI local…")
     try:
+        # Open a visible console so users can diagnose a missing node, driver, or model.
+        # /s /c plus the quoted call safely handles install paths containing spaces.
+        command = f'call "{launcher}"'
         subprocess.Popen(
-            ["cmd.exe", "/c", str(launcher)], cwd=str(launcher.parent),
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            creationflags=0,
+            ["cmd.exe", "/d", "/s", "/c", command], cwd=str(launcher.parent),
+            stdin=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
         )
     except OSError as exc:
         _notify(callback, f"No se pudo iniciar ComfyUI: {exc}")
