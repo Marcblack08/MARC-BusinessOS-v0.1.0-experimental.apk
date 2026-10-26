@@ -147,20 +147,29 @@ def _install_setup_button(self):
     if toolbar is None:
         print("MARC: no se encontró la barra de herramientas de Escenas.")
         return
-    self.prepare_ai_button = ttk.Button(
-        toolbar, text="Preparar IA / Diagnóstico", command=lambda: _run_setup(self, show_dialog=True)
-    )
-    self.prepare_ai_button.pack(side="left", padx=(6, 0))
     self.full_production_button = ttk.Button(
         toolbar, text="Producción automática", style="Accent.TButton",
         command=lambda: _start_full_production(self)
     )
     self.full_production_button.pack(side="left", padx=(6, 0))
+
+    # Keep diagnostics and one-image actions in the optional AI panel so the
+    # main toolbar stays compact on 1366x768 screens.
+    tools_panel = getattr(self, "image_ai_bar", None)
+    if tools_panel is None:
+        tools_panel = self.scenes_tab
+    self.video_ai_actions = tk.Frame(tools_panel, bg=self.colors["panel"])
+    self.video_ai_actions.pack(fill="x", pady=(5, 0))
+    self.prepare_ai_button = ttk.Button(
+        self.video_ai_actions, text="Preparar IA / Diagnóstico",
+        command=lambda: _run_setup(self, show_dialog=True)
+    )
+    self.prepare_ai_button.pack(side="left")
     self.animate_image_button = ttk.Button(
-        toolbar, text="Animar imagen a vídeo IA", command=lambda: _open_video_generation(self)
+        self.video_ai_actions, text="Animar imagen a vídeo IA",
+        command=lambda: _open_video_generation(self)
     )
     self.animate_image_button.pack(side="left", padx=(6, 0))
-
 
 def _startup_init(self, *args, **kwargs):
     _original_init(self, *args, **kwargs)
