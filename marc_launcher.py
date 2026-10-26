@@ -336,11 +336,24 @@ def _continue_basic_export(self, original_start, music_path: str, remote=False, 
                 pass
 
 
+def _i2v_dimensions(self) -> tuple[int, int]:
+    try:
+        platform = str(self.platform_var.get())
+    except Exception:
+        platform = "YouTube 16:9"
+    if "9:16" in platform:
+        return 512, 768
+    if "1:1" in platform:
+        return 640, 640
+    return 768, 512
+
+
 def _start_i2v_batch(self, original_start, report: dict):
     """Animate each distinct imported still once, map clips to shots, then render audio+MP4."""
     workflow_value = str((report.get("comfyui") or {}).get("workflow_path") or "")
     workflow_path = Path(workflow_value) if workflow_value else setup_engine.ensure_official_workflow()
     comfy_url = str((report.get("comfyui") or {}).get("url") or setup_engine.DEFAULT_COMFY_URL)
+    i2v_width, i2v_height = _i2v_dimensions(self)
     if not workflow_path or not workflow_path.is_file():
         messagebox.showerror("Falta el workflow de vídeo", "No se encuentra la plantilla LTX de imagen a vídeo.", parent=self)
         return
@@ -444,7 +457,7 @@ def _start_i2v_batch(self, original_start, report: dict):
                         base_url=comfy_url,
                         negative_prompt="deformed anatomy, identity changes, extra limbs, flicker, severe blur, text, watermark",
                         progress=progress,
-                        frame_count=49,
+                        frame_count=49, output_width=i2v_width, output_height=i2v_height,
                     )
                     if generated.resolve() != destination.resolve():
                         if destination.exists():
@@ -570,6 +583,7 @@ def _continue_single_image(self, image_path: str, report: dict):
     if prompt is None or not prompt.strip():
         return
     output_root = Path(marc_app.PROJECTS_DIR) / str(getattr(self, "current_id", None) or "importacion") / "generated_video"
+    i2v_width, i2v_height = _i2v_dimensions(self)
     button = getattr(self, "animate_image_button", None)
     if button:
         button.configure(state="disabled")
@@ -587,7 +601,7 @@ def _continue_single_image(self, image_path: str, report: dict):
                 image_path=image_path, motion_prompt=motion,
                 workflow_path=workflow_path, output_dir=output_root,
                 base_url=str((report.get("comfyui") or {}).get("url") or setup_engine.DEFAULT_COMFY_URL),
-                progress=progress, frame_count=49,
+                progress=progress, frame_count=49, output_width=i2v_width, output_height=i2v_height,
             )
             self.after(0, lambda path=str(destination): _single_video_finished(self, path, button))
         except Exception as exc:
