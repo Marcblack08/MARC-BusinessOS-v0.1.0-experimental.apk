@@ -192,10 +192,10 @@ if defined PYEXE exit /b 0
 where python >nul 2>nul
 if not errorlevel 1 (
   for /f "delims=" %%P in ('python -c "import sys; print(sys.executable)" 2^>nul') do set "PYEXE=%%P"
-  if defined PYEXE (
-    "%PYEXE%" -c "import sys; raise SystemExit(0 if (3,11) <= sys.version_info[:2] < (3,15) else 1)" >nul 2>nul
-    if errorlevel 1 set "PYEXE="
-  )
+)
+if defined PYEXE (
+  "%PYEXE%" -c "import sys; raise SystemExit(0 if (3,11) <= sys.version_info[:2] < (3,15) else 1)" >nul 2>nul
+  if errorlevel 1 set "PYEXE="
 )
 exit /b 0
 
