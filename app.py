@@ -2442,16 +2442,24 @@ class App(tk.Tk):
         extra_note = f" · {unused_images} imágenes importadas sin plano asignado (hay menos planos que imágenes)" if unused_images else ""
         self.status_var.set(
             f"Paquete importado: {len(images)} imágenes distribuidas en {scene_count} planos{direction_note}{audio_summary}{extra_note}. "
-            "Revisa y aprueba el guion antes de exportar."
+            "Listo para revisión o montaje automático."
         )
-        messagebox.showinfo(
+        start_now = messagebox.askyesno(
             "Paquete importado",
             f"Guion: {Path(script_path).name}\nImágenes: {len(images)}\nPlanos detectados: {scene_count}\n"
-            f"Direcciones: {len(directions)}\nNarración: {'importada' if self.audio_track_path else 'no incluida'}\n"
+            f"Direcciones: {len(directions)}\nNarración: {'importada' if self.audio_track_path else 'se sintetizará con la voz local de Windows si está disponible'}\n"
             f"Música: {'importada' if self.music_track_path else 'no incluida'}\n\n"
-            "Los recursos se copiaron al proyecto. Las indicaciones controlan zoom/paneo de imágenes fijas; "
-            "no crean movimiento corporal generativo. Si no importaste voz, puedes generarla desde la pestaña Audio."
+            "Las imágenes y las indicaciones se copiaron al proyecto. El movimiento será zoom/paneo y transiciones; "
+            "esto no genera movimiento corporal neuronal. ¿Deseas aprobar el guion e iniciar ahora el montaje MP4? "
+            "El vídeo se guardará automáticamente en la carpeta de exportaciones del proyecto."
         )
+        if start_now:
+            self.approve_script(remote=True)
+            self._auto_export_after_import = True
+            try:
+                self._start_video_render(preview=False, remote=False)
+            finally:
+                self._auto_export_after_import = False
 
     def assign_scene_image(self):
         if self.generation_running or self.render_running or self.image_generation_running or self.voice_generation_running:
@@ -5976,6 +5984,13 @@ Write-Output 'NARRATION_OK'
                 export_dir = PROJECTS_DIR / str(row["id"]) / "exports"
                 export_dir.mkdir(parents=True, exist_ok=True)
                 output = str((export_dir / f"{safe_title}.mp4").resolve())
+            elif getattr(self, "_auto_export_after_import", False):
+                safe_title = re.sub(r"[^A-Za-z0-9._-]+", "_", str(row["title"])).strip("._")[:60]
+                safe_title = safe_title or f"proyecto-{row['id']}"
+                export_dir = PROJECTS_DIR / str(row["id"]) / "exports"
+                export_dir.mkdir(parents=True, exist_ok=True)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output = str((export_dir / f"{safe_title}_{timestamp}.mp4").resolve())
             else:
                 output = filedialog.asksaveasfilename(
                     title="Guardar vídeo MP4", defaultextension=".mp4",
