@@ -109,3 +109,11 @@ La versión con panel remoto inicia un pequeño servidor web dentro de MARC, lig
 El panel permite crear guiones en Ollama local, revisar y guardar guiones, aprobarlos, solicitar lotes de imágenes mediante ComfyUI, exportar MP4, cancelar trabajos, subir recursos al proyecto y descargar archivos. Los MP4 solicitados desde el teléfono se guardan en la carpeta `projects/<id>/exports` para que el panel los ofrezca como descarga.
 
 **Requisitos y seguridad:** la computadora debe permanecer encendida, conectada a Internet y con MARC abierto; Ollama y ComfyUI se ejecutan en la computadora. El servidor no se publica directamente en la LAN ni en Internet; Tailscale Serve lo expone solo dentro del tailnet. No ejecutes `tailscale funnel` ni compartas el código de acceso. Los archivos subidos se guardan en `projects/<id>/uploads`; para asignar una imagen a una escena, abre el proyecto en MARC y selecciónala desde los controles de escenas. La carga y descarga remotas deben probarse con el instalador de Windows antes de utilizar el flujo en producción.
+
+## Paquete de producción en una carpeta (nueva ruta recomendada)
+
+Puedes entregar al editor una carpeta con el guion, las indicaciones por escena, las imágenes y, si ya existen, una pista de narración y una pista musical. En MARC, ve a **Escenas → Importar paquete (guion + dirección + imágenes)** y selecciona la carpeta completa. El programa detecta los recursos, los copia al proyecto y conecta narración/música con nombres convencionales.
+
+Ejemplo: `MiVideo/guion.md`, `MiVideo/direcciones.json`, `MiVideo/imagenes/001.png`, y opcionalmente `MiVideo/audio/narracion.wav` y `MiVideo/audio/musica.mp3`. Consulta [la guía del paquete de producción](docs/PAQUETE_PRODUCCION.md) y la [plantilla de ejemplo](templates/paquete-produccion/).
+
+El instalador desde el código ahora intenta instalar Python 3.12 automáticamente con Winget si no hay una versión compatible, conserva el entorno virtual anterior si detecta que se creó con una versión incompatible, registra el hardware en `%LOCALAPPDATA%\MARC Video Studio AI Desktop\hardware-profile.json` y guarda las pruebas de instalación en `installation-tests.log`. No descarga modelos visuales grandes por defecto: si importas tus propias imágenes, el montaje funciona sin ComfyUI; los modelos de imagen/vídeo son opcionales y dependen del hardware.
