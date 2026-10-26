@@ -283,6 +283,13 @@ def _start_i2v_batch(self, original_start, report: dict):
         return
     scenes = list(getattr(self, "scene_data", []) or [])
     scenes_by_key = {str(index + 1): scene for index, scene in enumerate(scenes)}
+    try:
+        script_for_music = self.script_text.get("1.0", "end-1c")
+    except Exception:
+        script_for_music = ""
+    music_mood = infer_mood(script_for_music)
+    existing_music = str(getattr(self, "music_track_path", "") or "")
+    music_is_available = bool(existing_music and Path(existing_music).is_file())
     # One generation per distinct image. If the imported package has one image for
     # each original scene, the same short clip can be reused for its split timeline
     # shots without paying the generation cost for each storyboard fragment.
@@ -310,10 +317,23 @@ def _start_i2v_batch(self, original_start, report: dict):
     def progress(message: str):
         _set_status(self, "Vídeo IA · " + message)
 
+    generated_music = output_root / f"marc_ambient_{music_mood}.wav"
+
     def worker():
         clips: dict[str, str] = {}
         failures: list[str] = []
         total = len(image_targets)
+        music_path = ""
+        if not music_is_available:
+            try:
+                if not generated_music.is_file() or generated_music.stat().st_size < 100_000:
+                    progress(f"Creando banda sonora ambiental local ({music_mood})…")
+                    generate_ambient_bed(generated_music, mood=music_mood)
+                if generated_music.is_file() and generated_music.stat().st_size > 0:
+                    music_path = str(generated_music.resolve())
+                    progress("Banda sonora ambiental preparada.")
+            except Exception as exc:
+                progress(f"La banda sonora no se pudo crear; se continuará sin música: {exc}")
         for count, target in enumerate(image_targets.values(), start=1):
             image_path = Path(target["image"])
             context = target["context"]
@@ -382,7 +402,7 @@ def _start_i2v_batch(self, original_start, report: dict):
                     parent=self,
                 )
                 if ok:
-                    _finish_video_batch(self, clips, original_start, button)
+                    _finish_video_batch(self, clips, original_start, button, music_path)
                 else:
                     _video_batch_failed(self, "La exportación se canceló. Los clips generados se conservaron.", button)
             self.after(0, ask_partial)
@@ -392,9 +412,15 @@ def _start_i2v_batch(self, original_start, report: dict):
     threading.Thread(target=worker, daemon=True, name="MARC-I2V-Batch").start()
 
 
-def _finish_video_batch(self, clips: dict[str, str], original_start, button):
+def _finish_video_batch(self, clips: dict[str, str], original_start, button, generated_music=""):
     try:
         self.scene_video_assets = clips
+        if generated_music and (not getattr(self, "music_track_path", "") or not Path(self.music_track_path).is_file()):
+            self.music_track_path = generated_music
+            try:
+                self._refresh_audio_track_label()
+            except Exception:
+                pass
         try:
             manifest = Path(marc_app.PROJECTS_DIR) / str(self.current_id or "importacion") / "generated_video" / "scene_video_assets.json"
             manifest.parent.mkdir(parents=True, exist_ok=True)
