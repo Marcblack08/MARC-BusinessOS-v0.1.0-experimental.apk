@@ -105,14 +105,31 @@ def _setup_finished(self, report: dict, show_dialog: bool, continuation=None):
             messagebox.showerror("No se pudo continuar la producción", str(exc), parent=self)
 
 
-def _run_setup(self, show_dialog: bool = True, continuation=None):
+def _run_setup(self, show_dialog: bool = True, continuation=None,
+               install_video_models: bool = True,
+               install_text_model: bool = True,
+               install_vision_model: bool = True):
     if getattr(self, "_setup_running", False):
         if continuation:
             self._setup_waiters = list(getattr(self, "_setup_waiters", []) or []) + [continuation]
         self._setup_show_dialog = bool(getattr(self, "_setup_show_dialog", False) or show_dialog)
+        # If the user requests a more complete setup while a lighter one is active,
+        # queue a full diagnostic after the current pass rather than silently ignoring it.
+        requested = (install_video_models, install_text_model, install_vision_model)
+        active = getattr(self, "_setup_profile", (False, False, False))
+        if any(a and not b for a, b in zip(requested, active)):
+            self._setup_waiters.append(
+                lambda _report: _run_setup(
+                    self, show_dialog=False,
+                    install_video_models=install_video_models,
+                    install_text_model=install_text_model,
+                    install_vision_model=install_vision_model,
+                )
+            )
         return
     self._setup_running = True
     self._setup_show_dialog = show_dialog
+    self._setup_profile = (install_video_models, install_text_model, install_vision_model)
     self._setup_waiters = [continuation] if continuation else []
     for button_name in ("prepare_ai_button", "full_production_button"):
         button = getattr(self, button_name, None)
@@ -121,14 +138,19 @@ def _run_setup(self, show_dialog: bool = True, continuation=None):
                 button.configure(state="disabled")
             except tk.TclError:
                 pass
-    self.status_var.set("Analizando hardware e instalando las dependencias que falten…")
+    set_creator_status(self, "Analizando hardware e instalando solo lo necesario…", 8)
 
     def progress(message: str):
         _set_status(self, "Preparación IA · " + message)
 
     def worker():
         try:
-            report = setup_engine.run_automatic_setup(callback=progress, install_video_models=True)
+            report = setup_engine.run_automatic_setup(
+                callback=progress,
+                install_video_models=install_video_models,
+                install_text_model=install_text_model,
+                install_vision_model=install_vision_model,
+            )
         except Exception as exc:
             report = {
                 "hardware": setup_engine.detect_hardware(),
@@ -273,12 +295,8 @@ def _start_wizard_production(self, title: str, script: str, image_paths: list[st
         summary = _setup_summary(report)
         continue_basic = messagebox.askyesno(
             "Movimiento IA no disponible en este equipo",
-            "Este equipo no ha quedado preparado para movimiento corporal neuronal.
-
-"
-            + summary + "
-
-¿Crear el vídeo con movimiento de cámara, voces, música y montaje convencional? "
+            "Este equipo no ha quedado preparado para movimiento corporal neuronal.\n\n"
+            + summary + "\n\n¿Crear el vídeo con movimiento de cámara, voces, música y montaje convencional? "
             "Podrás volver a probar Movimiento IA desde un equipo compatible.",
             parent=self,
         )
