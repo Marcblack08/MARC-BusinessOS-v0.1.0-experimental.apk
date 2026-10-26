@@ -16,7 +16,7 @@ if not exist ".venv\Scripts\python.exe" (
 ".venv\Scripts\python.exe" -m pip install --upgrade pyinstaller
 if errorlevel 1 goto error
 echo [1/4] Validando sintaxis y pruebas... 
-".venv\Scripts\python.exe" -m py_compile app.py scene_engine.py story_engine.py ollama_client.py tests\test_scene_engine.py tests\test_story_engine.py tests\test_ffmpeg_smoke.py
+".venv\Scripts\python.exe" -m py_compile app.py scene_engine.py story_engine.py voice_engine.py production_pipeline.py production_package.py media_quality.py remote_server.py ollama_client.py tests\test_production_package.py tests\test_scene_engine.py tests\test_story_engine.py tests\test_ffmpeg_smoke.py
 if errorlevel 1 goto error
 ".venv\Scripts\python.exe" -m unittest discover -s tests -v
 if errorlevel 1 goto error
