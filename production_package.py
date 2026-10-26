@@ -175,6 +175,65 @@ def discover_production_package(folder: str | Path) -> ProductionPackage:
     )
 
 
+def map_production_resources(
+    shots: list[dict[str, Any]],
+    image_count: int,
+    direction_count: int,
+    source_scene_count: int,
+) -> list[tuple[int | None, int | None]]:
+    """Map imported images/directions to expanded storyboard shots.
+
+    When there is one image/direction per original script scene, keep that pairing
+    across all short shots split from the same scene. If the user supplies one
+    asset per shot, map one-to-one. Otherwise distribute a smaller batch evenly
+    across the timeline so every provided image participates in the edit.
+    Returned indexes are zero-based; a missing direction is represented by None.
+    """
+    shot_items = list(shots)
+    try:
+        images_total = max(0, int(image_count))
+        directions_total = max(0, int(direction_count))
+        source_total = max(0, int(source_scene_count))
+    except (TypeError, ValueError):
+        raise ValueError("Los recuentos de escenas, imágenes y direcciones deben ser enteros.") from None
+    if not shot_items:
+        return []
+    if images_total < 1:
+        raise ValueError("Debe haber al menos una imagen para crear el montaje.")
+
+    mappings: list[tuple[int | None, int | None]] = []
+    shot_total = len(shot_items)
+    for shot_index, shot in enumerate(shot_items):
+        try:
+            source_index = int(shot.get("source_scene_index", shot_index + 1)) - 1
+        except (TypeError, ValueError):
+            source_index = shot_index
+        source_index = max(0, min(max(0, source_total - 1), source_index))
+
+        if source_total > 0 and images_total == source_total:
+            image_index = source_index
+        elif images_total >= shot_total:
+            image_index = shot_index
+        else:
+            image_index = min(images_total - 1, (shot_index * images_total) // shot_total)
+
+        direction_index: int | None = None
+        if directions_total:
+            if directions_total == shot_total:
+                direction_index = shot_index
+            elif source_total > 0 and directions_total == source_total:
+                direction_index = source_index
+            elif directions_total == images_total:
+                direction_index = min(directions_total - 1, image_index)
+            else:
+                direction_index = min(
+                    directions_total - 1,
+                    (shot_index * directions_total) // shot_total,
+                )
+        mappings.append((image_index, direction_index))
+    return mappings
+
+
 def parse_scene_directions(path: str | Path | None) -> list[str]:
     """Read camera-movement directions from JSON, numbered text, or one-line-per-shot text."""
     if not path:
