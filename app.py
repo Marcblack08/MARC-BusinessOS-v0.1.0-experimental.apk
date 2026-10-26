@@ -147,6 +147,7 @@ class App(tk.Tk):
         self.state("zoomed")
         self.conn = db_connect()
         self.current_id = None
+        self._creator_narration_override = ""
         self.series_key = ""
         self.episode_number = 1
         self.story_bible = ""
@@ -2888,7 +2889,7 @@ class App(tk.Tk):
             )
             self.detect_kokoro_voices(quiet=False)
             return
-        raw_script = self.script_text.get("1.0", "end-1c")
+        raw_script = str(getattr(self, "_creator_narration_override", "") or "").strip() or self.script_text.get("1.0", "end-1c")
         if not parse_script_scenes(raw_script):
             messagebox.showwarning("Sin guion", "Genera o escribe un guion antes de crear la narración.")
             return
@@ -5810,6 +5811,7 @@ Write-Output 'NARRATION_OK'
         if not project:
             return
         self.current_id = project["id"]
+        self._creator_narration_override = ""
         self.title_var.set(project["title"])
         self.topic_var.set(project["topic"])
         self.platform_var.set(project["platform"])
@@ -6184,10 +6186,13 @@ Write-Output 'NARRATION_OK'
         voice_assignments_json = json.dumps(self.voice_assignments or {}, ensure_ascii=False)
         # Keep spoken narration tied to the original script; visual shot splitting must not
         # change narration wording or add artificial pauses between split storyboard shots.
-        narration_text = "\n\n".join(
-            str(scene.get("text", "")).strip()
-            for scene in original_scenes if str(scene.get("text", "")).strip()
-        ).strip() if not audio_path and os.name == "nt" else ""
+        narration_override = str(getattr(self, "_creator_narration_override", "") or "").strip()
+        narration_text = (
+            narration_override or "\n\n".join(
+                str(scene.get("text", "")).strip()
+                for scene in original_scenes if str(scene.get("text", "")).strip()
+            ).strip()
+        ) if not audio_path and os.name == "nt" else ""
         self.remote_render_active = bool(remote)
         args = (
             ffmpeg, str(Path(output).resolve()), int(row["id"]), width, height,
