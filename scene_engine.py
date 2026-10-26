@@ -731,6 +731,74 @@ def build_cinematic_image_prompt(
     )
 
 
+
+def build_comfy_image_workflow(
+    checkpoint: str,
+    prompt: str,
+    negative_prompt: str,
+    width: int,
+    height: int,
+    scene_number: int,
+    upscale_model: str = "",
+    seed: int = 0,
+    steps: int = 22,
+    cfg: float = 6.5,
+) -> dict:
+    """Build a ComfyUI API workflow, optionally applying a local AI upscaler.
+
+    The optional upscaler is deliberately opt-in: older GPUs and CPU-only
+    systems can keep the original low-memory generation path.
+    """
+    checkpoint = str(checkpoint or "").strip()
+    if not checkpoint:
+        raise ValueError("A checkpoint is required.")
+    try:
+        width = int(width)
+        height = int(height)
+        scene_number = int(scene_number)
+        seed = int(seed)
+        steps = int(steps)
+        cfg = float(cfg)
+    except (TypeError, ValueError):
+        raise ValueError("Image dimensions, scene number, seed and sampler settings must be numeric.") from None
+    if width < 64 or height < 64 or width > 2048 or height > 2048:
+        raise ValueError("Image dimensions must be between 64 and 2048 pixels.")
+    if width % 8 or height % 8:
+        raise ValueError("Image dimensions must be multiples of 8.")
+    if scene_number < 1:
+        raise ValueError("Scene number must be positive.")
+    if not 1 <= steps <= 80:
+        raise ValueError("Sampling steps must be between 1 and 80.")
+    if not math.isfinite(cfg) or not 0.0 <= cfg <= 30.0:
+        raise ValueError("CFG must be finite and between 0 and 30.")
+
+    workflow = {
+        "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": checkpoint}},
+        "2": {"class_type": "CLIPTextEncode", "inputs": {"text": str(prompt or ""), "clip": ["1", 1]}},
+        "3": {"class_type": "CLIPTextEncode", "inputs": {"text": str(negative_prompt or ""), "clip": ["1", 1]}},
+        "4": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
+        "5": {"class_type": "KSampler", "inputs": {
+            "seed": seed, "steps": steps, "cfg": cfg,
+            "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1.0,
+            "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0]
+        }},
+        "6": {"class_type": "VAEDecode", "inputs": {"samples": ["5", 0], "vae": ["1", 2]}},
+    }
+    image_output = ["6", 0]
+    upscale_model = str(upscale_model or "").strip()
+    if upscale_model and upscale_model.casefold() not in {"(sin mejora)", "none", "ninguno"}:
+        workflow["8"] = {"class_type": "UpscaleModelLoader", "inputs": {"model_name": upscale_model}}
+        workflow["9"] = {"class_type": "ImageUpscaleWithModel", "inputs": {
+            "upscale_model": ["8", 0], "image": ["6", 0]
+        }}
+        image_output = ["9", 0]
+    workflow["7"] = {"class_type": "SaveImage", "inputs": {
+        "filename_prefix": f"MARC_Studio/scene_{scene_number:03d}",
+        "images": image_output,
+    }}
+    return workflow
+
+
 _TRANSITION_FILTER_NAMES = {
     "fundido suave": "fade",
     "deslizar izquierda": "slideleft",
