@@ -276,6 +276,32 @@ def _start_full_production(self):
     _run_setup(self, show_dialog=False, continuation=after_setup)
 
 
+def _watch_export_completion(self, previous_path: str = "", attempt: int = 0):
+    """Open the export folder once the final render has produced a new MP4."""
+    if getattr(self, "render_running", False):
+        if attempt < 7200:
+            try:
+                self.after(2000, lambda: _watch_export_completion(self, previous_path, attempt + 1))
+            except (tk.TclError, RuntimeError):
+                pass
+        return
+    current_path = str(getattr(self, "last_export_path", "") or "")
+    if not current_path or current_path == previous_path:
+        return
+    path = Path(current_path)
+    if not path.is_file():
+        return
+    self.status_var.set("MP4 terminado. Abriendo la carpeta de exportación…")
+    try:
+        if os.name == "nt":
+            os.startfile(str(path.parent))
+        else:
+            import webbrowser
+            webbrowser.open(path.parent.as_uri())
+    except (OSError, AttributeError):
+        pass
+
+
 def _start_basic_export(self, original_start, remote=False):
     """Generate a small offline ambient bed when no music was supplied, then export."""
     current_music = str(getattr(self, "music_track_path", "") or "")
@@ -324,9 +350,11 @@ def _continue_basic_export(self, original_start, music_path: str, remote=False, 
             self._refresh_audio_track_label()
         except Exception:
             pass
+    previous_path = str(getattr(self, "last_export_path", "") or "")
     self._auto_export_after_import = True
     try:
         original_start(preview=False, remote=remote)
+        self.after(2000, lambda: _watch_export_completion(self, previous_path))
     finally:
         self._auto_export_after_import = False
         if button is not None:
@@ -510,9 +538,11 @@ def _finish_video_batch(self, clips: dict[str, str], original_start, button, gen
             manifest.write_text(json.dumps(clips, ensure_ascii=False, indent=2), encoding="utf-8")
         except OSError:
             pass
+        previous_path = str(getattr(self, "last_export_path", "") or "")
         self._auto_export_after_import = True
         self.status_var.set("Clips IA listos. Montando voces, música, subtítulos y MP4…")
         original_start(preview=False, remote=False)
+        self.after(2000, lambda: _watch_export_completion(self, previous_path))
     except Exception as exc:
         messagebox.showerror("No se pudo montar el MP4", str(exc), parent=self)
     finally:
