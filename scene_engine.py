@@ -828,8 +828,16 @@ def build_video_transition_filter_graph(
     durations: Iterable[float],
     transition_seconds: float = 0.4,
     transition_style: str = "Fundido suave",
+    *,
+    fade_edges: bool = True,
+    preserve_tail: bool = False,
 ) -> str:
-    """Build a real FFmpeg xfade graph. Inputs last nominal duration + transition_seconds."""
+    """Build a real FFmpeg xfade graph.
+
+    Inputs last nominal duration + transition_seconds. For long timelines, chunks
+    can preserve the short trailing handle and skip edge fades; a final small graph
+    crossfades those chunks and applies the project-wide fades exactly once.
+    """
     try:
         values = [float(value) for value in durations]
         transition = float(transition_seconds)
@@ -859,10 +867,11 @@ def build_video_transition_filter_graph(
             f"offset={elapsed:.3f}[{next_label}]"
         )
         current = f"[{next_label}]"
-    fade = min(0.28, total / 10.0)
-    fade_out_start = max(0.0, total - fade)
-    parts.append(
-        f"{current}trim=duration={total:.3f},setpts=PTS-STARTPTS,"
-        f"fade=t=in:st=0:d={fade:.3f},fade=t=out:st={fade_out_start:.3f}:d={fade:.3f}[vout]"
-    )
+    output_duration = total + transition if preserve_tail else total
+    video_chain = f"{current}trim=duration={output_duration:.3f},setpts=PTS-STARTPTS"
+    if fade_edges:
+        fade = min(0.28, total / 10.0)
+        fade_out_start = max(0.0, total - fade)
+        video_chain += f",fade=t=in:st=0:d={fade:.3f},fade=t=out:st={fade_out_start:.3f}:d={fade:.3f}"
+    parts.append(f"{video_chain}[vout]")
     return ";".join(parts)
