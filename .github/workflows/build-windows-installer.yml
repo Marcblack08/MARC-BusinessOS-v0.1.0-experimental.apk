@@ -10,6 +10,7 @@ on:
       - "video_generation_engine.py"
       - "setup_engine.py"
       - "local_audio.py"
+      - "creator_wizard.py"
       - "production_package.py"
       - "install_windows.bat"
       - "scripts/**"
@@ -49,7 +50,7 @@ jobs:
       - name: Validate source and tests
         shell: pwsh
         run: |
-          python -m py_compile app.py marc_launcher.py setup_engine.py video_generation_engine.py local_audio.py remote_server.py scene_engine.py story_engine.py production_package.py ollama_client.py voice_engine.py tests/test_production_package.py tests/test_scene_engine.py tests/test_story_engine.py tests/test_ffmpeg_smoke.py tests/test_remote_server.py tests/test_app_startup.py tests/test_voice_engine.py tests/test_setup_engine.py tests/test_video_generation_engine.py tests/test_video_generation_launcher.py tests/test_local_audio.py
+          python -m py_compile app.py marc_launcher.py setup_engine.py video_generation_engine.py local_audio.py creator_wizard.py remote_server.py scene_engine.py story_engine.py production_package.py ollama_client.py voice_engine.py tests/test_production_package.py tests/test_scene_engine.py tests/test_story_engine.py tests/test_ffmpeg_smoke.py tests/test_remote_server.py tests/test_app_startup.py tests/test_voice_engine.py tests/test_setup_engine.py tests/test_video_generation_engine.py tests/test_video_generation_launcher.py tests/test_local_audio.py tests/test_creator_wizard.py
           python -m unittest discover -s tests -v
 
       - name: Install application dependencies
@@ -59,7 +60,7 @@ jobs:
         run: python -m pip install --upgrade pyinstaller
 
       - name: Build desktop application
-        run: python -m PyInstaller --noconfirm --clean --windowed --onedir --hidden-import vlc --hidden-import setup_engine --hidden-import video_generation_engine --hidden-import local_audio --name "MARC Video Studio AI Desktop" marc_launcher.py
+        run: python -m PyInstaller --noconfirm --clean --windowed --onedir --hidden-import vlc --hidden-import setup_engine --hidden-import video_generation_engine --hidden-import local_audio --hidden-import creator_wizard --name "MARC Video Studio AI Desktop" marc_launcher.py
 
       - name: Install Inno Setup
         shell: pwsh
