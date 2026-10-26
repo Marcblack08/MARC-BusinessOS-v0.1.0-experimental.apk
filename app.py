@@ -39,7 +39,7 @@ from story_engine import (
     creative_direction, dialogue_quality_warnings
 )
 from production_pipeline import ProductionPipeline, STAGE_LABELS
-from production_package import discover_production_package, parse_scene_directions
+from production_package import discover_production_package, map_production_resources, parse_scene_directions
 from media_quality import inspect_media_file
 from remote_server import RemoteControlServer
 
@@ -885,6 +885,11 @@ class App(tk.Tk):
         self.approve_button.grid(row=0, column=2, sticky="w", padx=(6, 0))
         self.export_button = ttk.Button(primary_actions, text="Exportar MP4", command=self.export_video)
         self.export_button.grid(row=0, column=3, sticky="w", padx=(6, 0))
+        self.import_package_top_button = ttk.Button(
+            primary_actions, text="Importar guion + imágenes", style="Accent.TButton",
+            command=self.import_production_package
+        )
+        self.import_package_top_button.grid(row=0, column=4, sticky="e", padx=(8, 0))
         self.configuration_visible = True
         self.config_toggle_button = ttk.Button(
             primary_actions, text="⚙ Ajustes −", command=self.toggle_configuration)
@@ -965,12 +970,12 @@ class App(tk.Tk):
         studio_tabs.grid(row=2, column=0, sticky="nsew")
         self.studio_tabs = studio_tabs
         self.workflow_steps = [
-            ("Guion", "Crea el guion y revísalo antes de continuar."),
-            ("Escenas", "Comprueba las escenas y que cada plano dure 5 segundos o menos."),
-            ("Imágenes", "Genera o asigna una imagen para cada escena."),
-            ("Montaje", "Revisa el orden, la duración y las transiciones."),
-            ("Vista previa", "Reproduce el resultado y comprueba que todo se vea bien."),
-            ("Audio", "Añade o revisa voces, música y niveles de sonido."),
+            ("Guion", "Importa tu guion ya escrito o revísalo antes del montaje."),
+            ("Escenas", "Comprueba el texto y las indicaciones por escena."),
+            ("Imágenes", "Importa todas tus imágenes en un solo lote y revisa sus miniaturas."),
+            ("Montaje", "MARC enlaza las escenas, movimiento de cámara, voces, audio y transiciones."),
+            ("Vista previa", "Reproduce el resultado y revísalo antes de exportar."),
+            ("Audio", "Comprueba la voz local, la música importada y los niveles."),
         ]
         self.studio_tabs.bind("<<NotebookTabChanged>>", self.update_workflow_guide)
 
@@ -1105,19 +1110,20 @@ class App(tk.Tk):
         scenes_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=14, pady=12)
         self.scenes_tab = scenes_tab
         studio_tabs.add(scenes_tab, text="2. Escenas")
-        scenes_tab.grid_columnconfigure(0, weight=1)
+        scenes_tab.grid_columnconfigure(0, weight=3, uniform="scene_visual_workspace")
+        scenes_tab.grid_columnconfigure(1, weight=2, uniform="scene_visual_workspace", minsize=280)
         scenes_tab.grid_rowconfigure(6, weight=1)
         tk.Label(scenes_tab, text="PLAN DE MONTAJE", bg=self.colors["panel"], fg=self.colors["text"],
-                 font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w")
-        tk.Label(scenes_tab, text="Organiza el guion como escenas, asigna ilustraciones propias o genera imágenes con un motor local opcional.",
+                 font=("Segoe UI", 12, "bold")).grid(row=0, column=0, columnspan=2, sticky="w")
+        tk.Label(scenes_tab, text="Tu flujo: guion por escenas + indicaciones de movimiento + lote de imágenes ya creadas. MARC se encarga del movimiento de cámara, voz local, audio disponible, transiciones y MP4.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
-                 wraplength=1000, justify="left").grid(row=1, column=0, sticky="w", pady=(4, 6))
+                 wraplength=1200, justify="left").grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 6))
         self.scene_summary_var = tk.StringVar(value="0 planos · 0 palabras · planos ≤5 s")
         scene_summary_card = tk.Frame(
             scenes_tab, bg=self.colors["surface"], padx=12, pady=9,
             highlightbackground=self.colors["border"], highlightthickness=1
         )
-        scene_summary_card.grid(row=2, column=0, sticky="ew", pady=(0, 10))
+        scene_summary_card.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         tk.Frame(scene_summary_card, bg=self.colors["accent"], width=3).pack(side="left", fill="y", padx=(0, 10))
         tk.Label(
             scene_summary_card, textvariable=self.scene_summary_var, bg=self.colors["surface"],
@@ -1125,7 +1131,7 @@ class App(tk.Tk):
         ).pack(side="left", fill="x", expand=True)
 
         scene_actions = tk.Frame(scenes_tab, bg=self.colors["panel"])
-        scene_actions.grid(row=3, column=0, sticky="ew", pady=(0, 7))
+        scene_actions.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 7))
         self.import_package_button = ttk.Button(
             scene_actions, text="Importar paquete (guion + dirección + imágenes)",
             style="Accent.TButton", command=self.import_production_package
@@ -1138,8 +1144,13 @@ class App(tk.Tk):
         self.refresh_scenes_button = ttk.Button(scene_actions, text="Actualizar escenas",
                                                 command=lambda: self._refresh_scene_outline(self.script_text.get("1.0", "end-1c")))
         self.refresh_scenes_button.pack(side="left", padx=(6, 0))
+        self.toggle_image_ai_button = ttk.Button(
+            scene_actions, text="Generación IA opcional ▸", command=self.toggle_image_ai_tools
+        )
+        self.toggle_image_ai_button.pack(side="right", padx=(8, 0))
         image_ai_bar = tk.Frame(scenes_tab, bg=self.colors["panel"])
-        image_ai_bar.grid(row=4, column=0, sticky="ew", pady=(0, 8))
+        image_ai_bar.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        self.image_ai_bar = image_ai_bar
         model_row = tk.Frame(image_ai_bar, bg=self.colors["panel"])
         model_row.pack(fill="x", pady=(0, 6))
         tk.Label(model_row, text="MODELO LOCAL", bg=self.colors["panel"], fg=self.colors["muted"],
@@ -1184,12 +1195,18 @@ class App(tk.Tk):
             image_action_row, text="Generar imágenes que faltan", command=self.generate_missing_scene_images)
         self.generate_missing_images_button.pack(side="left", padx=(6, 0))
         self.image_ai_status_var = tk.StringVar(value="Motor visual local · comprobando ComfyUI y checkpoints…")
-        tk.Label(scenes_tab, textvariable=self.image_ai_status_var, bg=self.colors["panel"],
-                 fg=self.colors["muted"], font=("Segoe UI", 8), anchor="w",
-                 wraplength=1000, justify="left").grid(row=5, column=0, sticky="ew", pady=(0, 7))
+        self.image_ai_status_label = tk.Label(
+            scenes_tab, textvariable=self.image_ai_status_var, bg=self.colors["panel"],
+            fg=self.colors["muted"], font=("Segoe UI", 8), anchor="w",
+            wraplength=1000, justify="left"
+        )
+        self.image_ai_status_label.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 7))
+        self.image_ai_tools_visible = False
+        image_ai_bar.grid_remove()
+        self.image_ai_status_label.grid_remove()
 
         scene_body = tk.Frame(scenes_tab, bg=self.colors["input"], padx=8, pady=8)
-        scene_body.grid(row=6, column=0, sticky="nsew")
+        scene_body.grid(row=6, column=0, sticky="nsew", padx=(0, 6))
         scene_body.grid_columnconfigure(0, weight=1)
         scene_body.grid_rowconfigure(0, weight=1)
         columns = ("number", "title", "words", "duration", "visual")
@@ -1209,9 +1226,48 @@ class App(tk.Tk):
         self.scene_outline.configure(yscrollcommand=scene_scroll.set)
         self.scene_outline.bind("<Double-1>", lambda _event: self.assign_scene_image())
         self.scene_outline.bind("<<TreeviewSelect>>", self._timeline_scene_selected)
-        tk.Label(scenes_tab, text="Orden recomendado: aprueba el guion y genera las imágenes que falten. Ollama/Qwen crea texto; ComfyUI crea imágenes.",
+
+        scene_visual_panel = tk.Frame(
+            scenes_tab, bg=self.colors["panel"], padx=12, pady=12,
+            highlightthickness=1, highlightbackground=self.colors["border"]
+        )
+        scene_visual_panel.grid(row=6, column=1, sticky="nsew", padx=(6, 0))
+        scene_visual_panel.grid_columnconfigure(0, weight=1)
+        tk.Label(scene_visual_panel, text="IMAGEN DE LA ESCENA",
+                 bg=self.colors["panel"], fg=self.colors["text"],
+                 font=("Segoe UI", 11, "bold")).grid(row=0, column=0, sticky="w")
+        self.scene_artwork_canvas = tk.Canvas(
+            scene_visual_panel, bg="#070c16", height=210, width=320,
+            highlightthickness=1, highlightbackground=self.colors["border"]
+        )
+        self.scene_artwork_canvas.grid(row=1, column=0, sticky="ew", pady=(8, 6))
+        self.scene_visual_caption_var = tk.StringVar(value="Importa tu lote para visualizar las imágenes.")
+        tk.Label(scene_visual_panel, textvariable=self.scene_visual_caption_var,
+                 bg=self.colors["panel"], fg="#a9caff", font=("Segoe UI", 9, "bold"),
+                 wraplength=330, justify="left").grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        tk.Label(scene_visual_panel, text="MOVIMIENTO / DIRECCIÓN",
+                 bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 8, "bold")).grid(row=3, column=0, sticky="w")
+        self.scene_visual_direction_var = tk.StringVar(value="Automático: movimiento de cámara y transición.")
+        tk.Label(scene_visual_panel, textvariable=self.scene_visual_direction_var,
+                 bg=self.colors["input"], fg=self.colors["text"], padx=8, pady=8,
+                 wraplength=330, justify="left", anchor="nw").grid(row=4, column=0, sticky="ew", pady=(4, 8))
+        tk.Label(scene_visual_panel, text="DIÁLOGO / TEXTO DE LA ESCENA",
+                 bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Segoe UI", 8, "bold")).grid(row=5, column=0, sticky="w")
+        self.scene_visual_dialogue_var = tk.StringVar(value="Al seleccionar una escena aparecerá aquí su texto.")
+        tk.Label(scene_visual_panel, textvariable=self.scene_visual_dialogue_var,
+                 bg=self.colors["panel"], fg=self.colors["muted"], padx=8, pady=8,
+                 wraplength=330, justify="left", anchor="nw").grid(row=6, column=0, sticky="ew", pady=(4, 8))
+        scene_visual_actions = tk.Frame(scene_visual_panel, bg=self.colors["panel"])
+        scene_visual_actions.grid(row=7, column=0, sticky="ew")
+        ttk.Button(scene_visual_actions, text="＋ Asignar / reemplazar",
+                   command=self.assign_scene_image).pack(side="left", fill="x", expand=True)
+        ttk.Button(scene_visual_actions, text="Ver monitor",
+                   command=self.show_selected_scene_in_monitor).pack(side="left", fill="x", expand=True, padx=(6, 0))
+        tk.Label(scenes_tab, text="Importa el guion por escenas, las indicaciones de movimiento y todas tus imágenes. MARC genera la voz local si falta una narración y monta el MP4. La animación de personajes mediante IA es opcional y requiere un modelo de vídeo compatible.",
                  bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9),
-                 wraplength=1000, justify="left").grid(row=7, column=0, sticky="w", pady=(8, 0))
+                 wraplength=1200, justify="left").grid(row=7, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
         visual_tab = tk.Frame(studio_tabs, bg=self.colors["panel"], padx=18, pady=16)
         studio_tabs.add(visual_tab, text="3. Imágenes")
@@ -1986,6 +2042,66 @@ class App(tk.Tk):
                 break
             elapsed += clip_width
 
+    def _render_scene_asset_preview(self):
+        """Render the selected imported image and its scene direction in the Scenes inspector."""
+        canvas = getattr(self, "scene_artwork_canvas", None)
+        if canvas is None:
+            return
+        width, height = 320, 210
+        try:
+            if not canvas.winfo_exists():
+                return
+            canvas.delete("all")
+            width = max(220, canvas.winfo_width())
+            height = max(150, canvas.winfo_height())
+            selected = self._scene_selection_number()
+            number = selected or max(1, int(getattr(self, "timeline_selected_scene", 1)))
+            scenes = getattr(self, "scene_data", [])
+            scene = scenes[number - 1] if 1 <= number <= len(scenes) else {}
+            asset = str(getattr(self, "scene_assets", {}).get(str(number), "") or "")
+            if asset and Path(asset).is_file():
+                from PIL import Image, ImageTk
+                with Image.open(asset) as source:
+                    image = source.convert("RGB")
+                image.thumbnail((width - 12, height - 12), Image.Resampling.LANCZOS)
+                photo = ImageTk.PhotoImage(image)
+                self._scene_artwork_photo = photo
+                canvas.create_image(width // 2, height // 2, image=photo, anchor="center")
+                canvas.create_rectangle(5, 5, width - 5, height - 5, outline="#397dff", width=1)
+                self.scene_visual_caption_var.set(f"Escena {number:03d} · {Path(asset).name}")
+            else:
+                canvas.create_rectangle(5, 5, width - 5, height - 5, fill="#0a1220", outline="#293b56")
+                canvas.create_text(
+                    width // 2, height // 2,
+                    text="SIN IMAGEN ASIGNADA\n\nImporta el lote completo\no asigna una imagen a esta escena.",
+                    fill="#aab8ce", font=("Segoe UI", 10, "bold"), justify="center",
+                )
+                self.scene_visual_caption_var.set(f"Escena {number:03d} · sin imagen asignada")
+            direction = getattr(self, "scene_directions", {}).get(str(number), "")
+            self.scene_visual_direction_var.set(
+                direction or "Movimiento automático: MARC aplicará un movimiento de cámara y una transición adecuados."
+            )
+            spoken = re.sub(r"\s+", " ", str(scene.get("text", "") or "")).strip()
+            self.scene_visual_dialogue_var.set(
+                spoken[:480] + ("…" if len(spoken) > 480 else "")
+                if spoken else "No hay texto asociado a esta escena."
+            )
+        except (OSError, ValueError, tk.TclError, ImportError, AttributeError) as exc:
+            try:
+                canvas.delete("all")
+                canvas.create_text(width // 2, height // 2, text=f"No se pudo mostrar la imagen.\n{exc}",
+                                   fill="#ff8298", justify="center")
+            except tk.TclError:
+                pass
+
+    def show_selected_scene_in_monitor(self):
+        """Switch to the main monitor and redraw the selected scene."""
+        try:
+            self.studio_tabs.select(self.script_tab)
+            self._render_preview_frame()
+        except (AttributeError, tk.TclError):
+            pass
+
     def _timeline_scene_selected(self, _event=None):
         number = self._scene_selection_number()
         if number is not None:
@@ -1995,6 +2111,7 @@ class App(tk.Tk):
                 self.timeline_playhead_seconds = sum(durations[:number - 1])
             self._draw_timeline()
             self._render_preview_frame()
+            self._render_scene_asset_preview()
 
     def _timeline_seconds_from_event(self, event):
         canvas = self.timeline_canvas
@@ -2240,9 +2357,9 @@ class App(tk.Tk):
             target_seconds = max(60, int(self.duration_var.get() or "10") * 60)
         except (ValueError, tk.TclError):
             target_seconds = 600
-        required_shots = min(120, visual_shot_count(target_seconds))
+        required_shots = min(1440, visual_shot_count(target_seconds))
         self.scene_data = (
-            expand_scenes_to_shots(parsed_scenes, required_shots, max_scenes=120)
+            expand_scenes_to_shots(parsed_scenes, required_shots, max_scenes=1440)
             if getattr(self, "auto_expand_storyboard", True) else parsed_scenes
         )
         durations = allocate_scene_durations(self.scene_data, target_seconds)
@@ -2282,6 +2399,19 @@ class App(tk.Tk):
             self.scene_summary_var.set(f"{len(self.scene_data)} planos · {total_words} palabras · objetivo {self.duration_var.get()} min{visual_note} · {voice_label} · {music_label}")
         self._draw_timeline()
         self._render_preview_frame()
+        self._render_scene_asset_preview()
+
+    def toggle_image_ai_tools(self):
+        """Show/hide optional local image-generation controls; batch editing is the default."""
+        self.image_ai_tools_visible = not bool(getattr(self, "image_ai_tools_visible", False))
+        if self.image_ai_tools_visible:
+            self.image_ai_bar.grid()
+            self.image_ai_status_label.grid()
+            self.toggle_image_ai_button.configure(text="Ocultar generación IA ▾")
+        else:
+            self.image_ai_bar.grid_remove()
+            self.image_ai_status_label.grid_remove()
+            self.toggle_image_ai_button.configure(text="Generación IA opcional ▸")
 
     def import_production_package(self):
         """Import an entire prepared folder; fall back to selecting individual files."""
@@ -2372,6 +2502,7 @@ class App(tk.Tk):
             self.title_var.set(Path(script_path).stem.replace("_", " ").replace("-", " ").strip() or "Proyecto importado")
         if not str(self.topic_var.get() or "").strip():
             self.topic_var.set("Producción importada desde guion, dirección e imágenes")
+        source_scene_count = len(parse_script_scenes(script))
         self.script_text.delete("1.0", "end")
         self.script_text.insert("1.0", script)
         self.auto_expand_storyboard = True
@@ -2401,11 +2532,15 @@ class App(tk.Tk):
                 imported_paths.append(str(destination.resolve()))
 
             scene_count = len(self.scene_data)
-            for index in range(scene_count):
-                image_index = min(len(imported_paths) - 1, (index * len(imported_paths)) // scene_count)
-                self.scene_assets[str(index + 1)] = imported_paths[image_index]
-                if directions:
-                    direction_index = min(len(directions) - 1, (index * len(directions)) // scene_count)
+            resource_map = map_production_resources(
+                self.scene_data, len(imported_paths), len(directions), source_scene_count
+            )
+            assigned_image_indexes = set()
+            for index, (image_index, direction_index) in enumerate(resource_map):
+                if image_index is not None and 0 <= image_index < len(imported_paths):
+                    self.scene_assets[str(index + 1)] = imported_paths[image_index]
+                    assigned_image_indexes.add(image_index)
+                if direction_index is not None and 0 <= direction_index < len(directions):
                     self.scene_directions[str(index + 1)] = directions[direction_index]
 
             if narration_path and Path(narration_path).is_file():
@@ -2438,7 +2573,7 @@ class App(tk.Tk):
         if self.music_track_path:
             audio_note.append("música importada")
         audio_summary = " · " + ", ".join(audio_note) if audio_note else " · voz/música no incluidas en la carpeta"
-        unused_images = max(0, len(imported_paths) - scene_count)
+        unused_images = max(0, len(imported_paths) - len(assigned_image_indexes))
         extra_note = f" · {unused_images} imágenes importadas sin plano asignado (hay menos planos que imágenes)" if unused_images else ""
         self.status_var.set(
             f"Paquete importado: {len(images)} imágenes distribuidas en {scene_count} planos{direction_note}{audio_summary}{extra_note}. "
@@ -3130,9 +3265,9 @@ Write-Output 'NARRATION_OK'
             target_seconds = max(60, int(self.duration_var.get() or "10") * 60)
         except ValueError:
             target_seconds = 600
-        required_shots = min(120, visual_shot_count(target_seconds))
+        required_shots = min(1440, visual_shot_count(target_seconds))
         scenes = (
-            expand_scenes_to_shots(parsed_scenes, required_shots, max_scenes=120)
+            expand_scenes_to_shots(parsed_scenes, required_shots, max_scenes=1440)
             if getattr(self, "auto_expand_storyboard", True) else parsed_scenes
         )
         durations = allocate_scene_durations(scenes, target_seconds)
@@ -5837,9 +5972,9 @@ Write-Output 'NARRATION_OK'
             return
 
         target_seconds = max(60, int(row["duration_minutes"]) * 60)
-        required_shots = min(120, visual_shot_count(target_seconds))
+        required_shots = min(1440, visual_shot_count(target_seconds))
         scenes = (
-            expand_scenes_to_shots(original_scenes, required_shots, max_scenes=120)
+            expand_scenes_to_shots(original_scenes, required_shots, max_scenes=1440)
             if getattr(self, "auto_expand_storyboard", True) else original_scenes
         )
         asset_map = dict(self.scene_assets)
