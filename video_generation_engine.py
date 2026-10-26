@@ -228,7 +228,7 @@ def visual_workflow_to_api(workflow: dict) -> dict:
                 inputs["video"] = video
             if len(values) >= 3:
                 inputs.update({
-                    "filename_prefix": values[0], "format": values[1], "codec": values[2]
+                    "filename_prefix": values[0], "format": {"format": values[1], "codec": values[2]}
                 })
         else:
             # Ignore canvas notes, reroutes and any unsupported nodes.
@@ -334,7 +334,6 @@ def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
         if isinstance(node, dict) and isinstance(node.get("inputs"), dict):
             if str(node.get("class_type", "")) == "LTXVImgToVideo":
                 node["inputs"]["length"] = length
-                node["inputs"]["steps"] = node["inputs"].get("steps", 15)
             if str(node.get("class_type", "")) == "LTXVScheduler":
                 node["inputs"]["steps"] = min(30, max(1, int(node["inputs"].get("steps", 20))))
     return prepared
@@ -343,7 +342,9 @@ def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
 def analyze_image_with_ollama(image_path: str | Path,
                               base_url: str = "http://127.0.0.1:11434",
                               model_override: str | None = None,
-                              timeout: float = 180.0) -> str:
+                              timeout: float = 180.0,
+                              scene_context: str = "",
+                              camera_direction: str = "") -> str:
     """Use an installed local vision model to describe a still and suggest motion."""
     path = Path(image_path).expanduser().resolve()
     if not path.is_file():
@@ -388,6 +389,10 @@ def analyze_image_with_ollama(image_path: str | Path,
                 "y devuelve una instrucción breve en español para el modelo de vídeo. "
                 "Conserva identidad, vestuario, entorno y estilo visual. Propón un movimiento corporal "
                 "natural y una acción coherente con la postura; no inventes personajes adicionales. "
+                "Usa el contexto narrativo y la dirección visual siguientes cuando estén presentes. "
+                "No cambies la identidad del personaje ni añadas elementos incompatibles. "
+                f"Contexto del guion: {str(scene_context or '').strip()[:1200] or 'Sin contexto narrativo adicional'}. "
+                f"Dirección del plano: {str(camera_direction or '').strip()[:350] or 'Movimiento natural apropiado para la escena'}. "
                 "No incluyas explicaciones, encabezados ni comillas: solo el prompt de movimiento."
             ),
             "images": [image_data],
