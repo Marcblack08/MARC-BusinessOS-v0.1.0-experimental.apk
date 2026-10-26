@@ -73,15 +73,6 @@ def _files_in_package(root: Path) -> list[Path]:
     return sorted(found, key=lambda item: _natural_key(item, root))
 
 
-def _pick_by_names(files: list[Path], names: set[str], extensions: set[str]) -> Path | None:
-    candidates = [path for path in files if path.suffix.casefold() in extensions and _normalise(path.stem).replace(" ", "_") in names]
-    if not candidates:
-        return None
-    # Prefer package-root files, then conventional names, then natural path order.
-    candidates.sort(key=lambda path: (len(path.relative_to(path.parents[len(path.parts) - len(path.parts)]).parts) if False else len(path.parts), path.name.casefold()))
-    return candidates[0]
-
-
 def _script_file(files: list[Path], root: Path) -> Path:
     text_files = [path for path in files if path.suffix.casefold() in TEXT_EXTENSIONS]
     preferred = [
