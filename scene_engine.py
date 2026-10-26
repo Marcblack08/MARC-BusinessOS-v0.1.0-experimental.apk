@@ -622,10 +622,12 @@ def scene_motion_filter(
     seconds: int,
     intensity: str = "Normal",
     shot_index: int = 0,
+    direction: str = "",
 ) -> str:
-    """Build a per-shot camera move for still artwork (push, pull, pan or tilt)."""
+    """Build a per-shot camera move; optional Spanish/English direction cues override the default."""
     style = (animation_style or "").lower()
     level = (intensity or "Normal").strip().lower()
+    direction_text = " ".join(str(direction or "").casefold().split())
     if "pixel" in style:
         low_w, low_h = max(160, width // 5), max(90, height // 5)
         return f"scale={low_w}:{low_h}:flags=neighbor,scale={width}:{height}:flags=neighbor,fps=24"
@@ -646,6 +648,18 @@ def scene_motion_filter(
     # Different camera directions across adjacent shots prevent every still from
     # using the same centered push-in. This is camera movement, not body animation.
     move = max(0, int(shot_index)) % 5
+    # Human direction notes control the camera move in the still-image pipeline.
+    # This is deterministic pan/zoom, not generated body animation.
+    if any(token in direction_text for token in ("zoom out", "alejar", "alejamiento", "retrocede", "retroceder", "se aleja")):
+        move = 1
+    elif any(token in direction_text for token in ("pan izquierda", "hacia la izquierda", "de derecha a izquierda", "desplaza a la izquierda", "paneo izquierdo")):
+        move = 3
+    elif any(token in direction_text for token in ("pan derecha", "hacia la derecha", "de izquierda a derecha", "desplaza a la derecha", "paneo derecho")):
+        move = 2
+    elif any(token in direction_text for token in ("tilt arriba", "hacia arriba", "de abajo hacia arriba", "inclina hacia arriba", "paneo vertical arriba")):
+        move = 4
+    elif any(token in direction_text for token in ("zoom in", "acercar", "acercamiento", "se acerca", "entra en primer plano", "push in")):
+        move = 0
     frames = max(24, max(1, int(seconds)) * 24)
     centered_x = "iw/2-(iw/zoom/2)"
     centered_y = "ih/2-(ih/zoom/2)"
