@@ -6,6 +6,12 @@ on:
     branches: [main, "audit/**"]
     paths:
       - "app.py"
+      - "production_package.py"
+      - "install_windows.bat"
+      - "scripts/**"
+      - "templates/paquete-produccion/**"
+      - "docs/PAQUETE_PRODUCCION.md"
+      - "README.md"
       - "docs/INSTALACION_WINDOWS.md"
       - "remote_server.py"
       - "requirements.txt"
@@ -39,7 +45,7 @@ jobs:
       - name: Validate source and tests
         shell: pwsh
         run: |
-          python -m py_compile app.py remote_server.py scene_engine.py story_engine.py ollama_client.py voice_engine.py tests/test_scene_engine.py tests/test_story_engine.py tests/test_ffmpeg_smoke.py tests/test_remote_server.py tests/test_app_startup.py tests/test_voice_engine.py
+          python -m py_compile app.py remote_server.py scene_engine.py story_engine.py production_package.py ollama_client.py voice_engine.py tests/test_production_package.py tests/test_scene_engine.py tests/test_story_engine.py tests/test_ffmpeg_smoke.py tests/test_remote_server.py tests/test_app_startup.py tests/test_voice_engine.py
           python -m unittest discover -s tests -v
 
       - name: Install application dependencies
