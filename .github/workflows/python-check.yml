@@ -18,7 +18,7 @@ jobs:
       - name: Install FFmpeg for media smoke tests
         run: choco install ffmpeg --yes --no-progress
       - name: Compile all Python source and tests
-        run: python -m py_compile app.py marc_launcher.py video_generation_engine.py remote_server.py scene_engine.py story_engine.py production_package.py ollama_client.py voice_engine.py tests/test_production_package.py tests/test_scene_engine.py tests/test_story_engine.py tests/test_ffmpeg_smoke.py tests/test_remote_server.py tests/test_app_startup.py tests/test_voice_engine.py
+        run: python -m py_compile app.py marc_launcher.py setup_engine.py video_generation_engine.py remote_server.py tests/test_setup_engine.py tests/test_video_generation_engine.py tests/test_video_generation_launcher.py scene_engine.py story_engine.py production_package.py ollama_client.py voice_engine.py tests/test_production_package.py tests/test_scene_engine.py tests/test_story_engine.py tests/test_ffmpeg_smoke.py tests/test_remote_server.py tests/test_app_startup.py tests/test_voice_engine.py
       - name: Run scene and FFmpeg integration tests
         run: python -m unittest discover -s tests -v
       - name: Smoke test desktop UI startup
