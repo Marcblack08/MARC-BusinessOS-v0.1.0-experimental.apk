@@ -69,27 +69,74 @@ echo [3/4] Instalando dependencias del proyecto...
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 goto error
 
-echo [4/4] Revisando herramientas opcionales...
-where ollama >nul 2>nul
-if errorlevel 1 (
-  echo [AVISO] Ollama no aparece en PATH. Instala Ollama para usar la IA local.
-) else (
-  echo [OK] Ollama encontrado.
-)
+echo [4/6] Instalando herramientas gratuitas necesarias...
+where winget >nul 2>nul
+if errorlevel 1 goto manual_tools
+
 where ffmpeg >nul 2>nul
 if errorlevel 1 (
-  echo [AVISO] FFmpeg no aparece en PATH. Puedes seleccionar ffmpeg.exe desde MARC al exportar.
-) else (
-  echo [OK] FFmpeg encontrado.
+  echo [AUTO] Instalando FFmpeg para exportar MP4...
+  winget install --id Gyan.FFmpeg.Shared --exact --silent --accept-package-agreements --accept-source-agreements
+  if errorlevel 1 echo [AVISO] Winget no pudo instalar FFmpeg; MARC seguira permitiendo seleccionarlo manualmente.
 )
+
+where ollama >nul 2>nul
+if errorlevel 1 (
+  echo [AUTO] Instalando Ollama para guiones locales sin pagar API...
+  winget install --id Ollama.Ollama --exact --silent --accept-package-agreements --accept-source-agreements
+  if errorlevel 1 echo [AVISO] Winget no pudo instalar Ollama; consulta https://ollama.com/download
+)
+
+rem Refresh common per-user paths for tools installed during this session.
+if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links" set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
+if exist "%LOCALAPPDATA%\Programs\Ollama" set "PATH=%LOCALAPPDATA%\Programs\Ollama;%PATH%"
+if exist "C:\Program Files\FFmpeg\bin" set "PATH=C:\Program Files\FFmpeg\bin;%PATH%"
+
+:tools_ready
+echo.
+echo [5/6] Comprobando FFmpeg y Ollama...
+where ffmpeg >nul 2>nul
+if errorlevel 1 (
+  echo [AVISO] FFmpeg no se detecto en PATH. MARC puede buscarlo o permitir seleccionarlo.
+) else (
+  echo [OK] FFmpeg disponible.
+)
+where ollama >nul 2>nul
+if errorlevel 1 (
+  echo [AVISO] Ollama no se detecto en PATH. La importacion de guion, imagenes, voz y montaje seguira disponible.
+  goto tests
+)
+echo [OK] Ollama disponible.
+echo [AUTO] Descargando Qwen 2.5 3B, modelo gratuito local para generar guiones.
+echo Esta descarga ocupa varios GB y necesita conexion a Internet.
+ollama pull qwen2.5:3b
+if errorlevel 1 echo [AVISO] No se pudo descargar Qwen. Puedes volver a intentarlo luego con: ollama pull qwen2.5:3b
+
+:tests
+echo.
+echo [6/6] Validacion automatizada...
+".venv\Scripts\python.exe" -m compileall -q app.py scene_engine.py story_engine.py voice_engine.py production_pipeline.py media_quality.py remote_server.py
+if errorlevel 1 (
+  echo [AVISO] La comprobacion de sintaxis detecto errores. Revisa el registro antes de ejecutar MARC.
+) else (
+  echo [OK] Sintaxis Python validada.
+)
+".venv\Scripts\python.exe" -m unittest discover -s tests -v
+if errorlevel 1 echo [AVISO] Algunas pruebas no pasaron. La instalacion sigue, pero revisa los resultados anteriores.
 echo.
 echo ============================================================
-echo Instalacion de dependencias completada.
+echo Preparacion de MARC terminada.
 echo Abre MARC con start_windows.bat.
-echo Para empaquetar la aplicacion, usa build_windows.bat.
+echo Para crear un instalador empaquetado, usa build_windows.bat.
+echo El motor de imagenes IA es opcional; puedes importar tus propias imagenes sin descargar modelos.
 echo ============================================================
 pause
 exit /b 0
+
+:manual_tools
+echo [AVISO] Winget no esta disponible. Para instalar herramientas automaticamente, instala App Installer de Microsoft Store.
+echo Puedes instalar FFmpeg desde https://ffmpeg.org/download.html y Ollama desde https://ollama.com/download
+goto tools_ready
 
 :venv_error
 echo.
