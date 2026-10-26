@@ -13,10 +13,10 @@ if not exist ".venv\Scripts\python.exe" (
   exit /b 1
 )
 if exist ".venv\Scripts\pythonw.exe" (
-  start "" ".venv\Scripts\pythonw.exe" app.py
+  start "" ".venv\Scripts\pythonw.exe" marc_launcher.py
   exit /b 0
 )
-".venv\Scripts\python.exe" app.py
+".venv\Scripts\python.exe" marc_launcher.py
 if errorlevel 1 (
   echo.
   echo MARC termino con un error. Copia el mensaje anterior para diagnosticarlo.
