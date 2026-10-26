@@ -86,11 +86,21 @@ def _linked_source(value, workflow: dict) -> str | None:
     return None
 
 
-def _find_text_encoder(source_id: str, workflow: dict) -> list[tuple[str, str]]:
-    """Walk upstream from a conditioning input and find text-bearing nodes."""
+def _linked_source(value, workflow: dict) -> str | None:
+    """Return a ComfyUI API node ID for a standard [node_id, output_slot] link."""
+    if isinstance(value, list) and len(value) == 2:
+        source = str(value[0])
+        if source in workflow and isinstance(value[1], int):
+            return source
+    return None
+
+
+def _find_text_encoder(source_id: str, workflow: dict, polarity: str) -> list[tuple[str, str]]:
+    """Walk upstream along only the requested positive/negative conditioning branch."""
     found: list[tuple[str, str]] = []
     pending = [str(source_id)]
     seen: set[str] = set()
+    wanted_input = "positive" if polarity == "positive" else "negative"
     while pending:
         node_id = pending.pop(0)
         if node_id in seen or node_id not in workflow:
@@ -104,6 +114,13 @@ def _find_text_encoder(source_id: str, workflow: dict) -> list[tuple[str, str]]:
         if "text" in inputs and any(token in class_type for token in ("clip", "text", "prompt", "encode")):
             found.append((node_id, "text"))
             continue
+        # LTXV/Wan conditioning nodes expose both branches on the same node.
+        # Following every input would incorrectly collect both encoders as positive.
+        if wanted_input in inputs:
+            source = _linked_source(inputs.get(wanted_input), workflow)
+            if source:
+                pending.append(source)
+            continue
         for value in inputs.values():
             source = _linked_source(value, workflow)
             if source:
@@ -111,19 +128,136 @@ def _find_text_encoder(source_id: str, workflow: dict) -> list[tuple[str, str]]:
     return found
 
 
-def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
-                     negative_prompt: str = "") -> dict:
-    """Fill the unique image input and positive text input of an API workflow.
+def visual_workflow_to_api(workflow: dict) -> dict:
+    """Convert the official LTX image-to-video visual template to ComfyUI API format.
 
-    ComfyUI API workflows encode links as [source_node_id, output_slot]. The
-    adapter follows positive/negative conditioning links where possible, avoiding
-    overwriting a negative prompt with the motion prompt. Ambiguous workflows
-    are rejected rather than modified unpredictably.
+    The converter deliberately supports the node types used by the official
+    Comfy-Org LTX-Video 0.9.5 image-to-video template. It omits canvas notes,
+    groups and editor-only widget values, and fails if the workflow is incompatible.
     """
+    if not isinstance(workflow, dict) or not isinstance(workflow.get("nodes"), list):
+        raise VideoGenerationError("El workflow visual de ComfyUI no contiene una lista de nodos válida.")
+    nodes = {str(node.get("id")): node for node in workflow["nodes"] if isinstance(node, dict)}
+    links = {}
+    for link in workflow.get("links", []):
+        if isinstance(link, list) and len(link) >= 6:
+            links[str(link[0])] = (str(link[1]), int(link[2]))
+    api: dict[str, dict] = {}
+
+    def link_value(node: dict, input_name: str):
+        for item in node.get("inputs", []) or []:
+            if item.get("name") == input_name and item.get("link") is not None:
+                ref = links.get(str(item["link"]))
+                if ref:
+                    return [ref[0], ref[1]]
+        return None
+
+    for node_id, node in nodes.items():
+        class_type = str(node.get("type", ""))
+        values = list(node.get("widgets_values") or [])
+        inputs: dict = {}
+        if class_type == "CheckpointLoaderSimple":
+            if values:
+                inputs["ckpt_name"] = values[0]
+        elif class_type == "CLIPLoader":
+            if len(values) >= 3:
+                inputs.update({"clip_name": values[0], "type": values[1], "device": values[2]})
+        elif class_type == "CLIPTextEncode":
+            clip = link_value(node, "clip")
+            if values and clip:
+                inputs.update({"text": values[0], "clip": clip})
+        elif class_type == "LoadImage":
+            if values:
+                inputs["image"] = values[0]
+        elif class_type == "LTXVImgToVideo":
+            names = ("width", "height", "length", "batch_size", "strength")
+            for index, name in enumerate(names):
+                if index < len(values):
+                    inputs[name] = values[index]
+            for name in ("positive", "negative", "vae", "image"):
+                value = link_value(node, name)
+                if value:
+                    inputs[name] = value
+        elif class_type == "LTXVConditioning":
+            for name in ("positive", "negative"):
+                value = link_value(node, name)
+                if value:
+                    inputs[name] = value
+            if values:
+                inputs["frame_rate"] = values[0]
+        elif class_type == "LTXVScheduler":
+            names = ("steps", "max_shift", "base_shift", "stretch", "terminal")
+            for index, name in enumerate(names):
+                if index < len(values):
+                    inputs[name] = values[index]
+            latent = link_value(node, "latent")
+            if latent:
+                inputs["latent"] = latent
+        elif class_type == "KSamplerSelect":
+            if values:
+                inputs["sampler_name"] = values[0]
+        elif class_type == "SamplerCustom":
+            # The visual editor includes an extra control-after-generate choice;
+            # this is UI state, not an API input, so it must not shift cfg.
+            if len(values) >= 4:
+                inputs.update({
+                    "add_noise": values[0], "noise_seed": int(values[1]),
+                    "cfg": float(values[3]),
+                })
+            for name in ("model", "positive", "negative", "sampler", "sigmas", "latent_image"):
+                value = link_value(node, name)
+                if value:
+                    inputs[name] = value
+        elif class_type == "VAEDecode":
+            for name in ("samples", "vae"):
+                value = link_value(node, name)
+                if value:
+                    inputs[name] = value
+        elif class_type == "CreateVideo":
+            images = link_value(node, "images")
+            if images:
+                inputs["images"] = images
+            if values:
+                inputs["fps"] = values[0]
+            audio = link_value(node, "audio")
+            if audio:
+                inputs["audio"] = audio
+        elif class_type == "SaveVideo":
+            video = link_value(node, "video")
+            if video:
+                inputs["video"] = video
+            if len(values) >= 3:
+                inputs.update({
+                    "filename_prefix": values[0], "format": values[1], "codec": values[2]
+                })
+        else:
+            # Ignore canvas notes, reroutes and any unsupported nodes.
+            continue
+        api[node_id] = {"class_type": class_type, "inputs": inputs}
+
+    required = {
+        "CheckpointLoaderSimple", "CLIPLoader", "CLIPTextEncode", "LoadImage",
+        "LTXVImgToVideo", "LTXVConditioning", "LTXVScheduler", "KSamplerSelect",
+        "SamplerCustom", "VAEDecode", "CreateVideo", "SaveVideo",
+    }
+    present = {str(item.get("class_type")) for item in api.values()}
+    missing = sorted(required - present)
+    if missing:
+        raise VideoGenerationError(
+            "La plantilla LTX no contiene los nodos requeridos: " + ", ".join(missing)
+        )
+    return api
+
+
+def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
+                     negative_prompt: str = "", frame_count: int = 49) -> dict:
+    """Fill image and positive/negative prompts of an API or official visual workflow."""
     if not isinstance(workflow, dict) or not workflow:
         raise VideoGenerationError("El workflow de ComfyUI está vacío o no es válido.")
-    prepared = json.loads(json.dumps(workflow))
-
+    if "nodes" in workflow and "links" in workflow:
+        prepared = visual_workflow_to_api(workflow)
+    else:
+        prepared = json.loads(json.dumps(workflow))
     image_nodes: list[tuple[str, str]] = []
     text_nodes: list[tuple[str, str]] = []
     for node_id, node in prepared.items():
@@ -136,7 +270,6 @@ def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
         if "text" in inputs and any(token in class_type for token in ("clip", "text", "prompt", "encode")):
             text_nodes.append((node_id, "text"))
 
-    # Trace downstream video/sampler nodes back to their positive/negative text encoders.
     positive_nodes: list[tuple[str, str]] = []
     negative_nodes: list[tuple[str, str]] = []
     for node in prepared.values():
@@ -146,16 +279,16 @@ def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
             if key.lower() not in {"positive", "negative"}:
                 continue
             source_id = _linked_source(value, prepared)
-            if not source_id:
-                continue
-            matches = _find_text_encoder(source_id, prepared)
-            if key.lower() == "positive":
-                positive_nodes.extend(matches)
-            else:
-                negative_nodes.extend(matches)
+            if source_id:
+                matches = _find_text_encoder(
+                    source_id, prepared, "positive" if key.lower() == "positive" else "negative"
+                )
+                if key.lower() == "positive":
+                    positive_nodes.extend(matches)
+                else:
+                    negative_nodes.extend(matches)
     positive_nodes = list(dict.fromkeys(positive_nodes))
     negative_nodes = list(dict.fromkeys(negative_nodes))
-
     if not positive_nodes:
         negative_clues = (
             "low quality", "worst quality", "bad anatomy", "deformed", "blurry",
@@ -171,8 +304,7 @@ def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
             positive_nodes = candidates
         else:
             raise VideoGenerationError(
-                "No se pudo distinguir la entrada de texto positivo. Usa un workflow API con "
-                "una conexión positive clara al sampler/modelo de vídeo."
+                "No se pudo distinguir el prompt positivo. Usa el workflow API LTX que se incluye en Preparar IA."
             )
         if not negative_nodes:
             negative_nodes = negative_by_text
@@ -180,24 +312,31 @@ def prepare_workflow(workflow: dict, image_filename: str, motion_prompt: str,
     image_nodes = list(dict.fromkeys(image_nodes))
     if len(image_nodes) != 1:
         raise VideoGenerationError(
-            "El workflow debe tener una única entrada LoadImage. Si tiene varias imágenes, "
-            "prepara un workflow de imagen a vídeo con una sola imagen de referencia."
+            "El workflow debe tener una única entrada LoadImage para animar la imagen de referencia."
         )
     if len(positive_nodes) != 1:
         raise VideoGenerationError(
-            "El workflow tiene varias entradas de texto positivo. Simplifica el prompt a un único "
-            "codificador de texto positivo para que MARC pueda insertar el movimiento."
+            "El workflow tiene varias entradas de texto positivo. Usa la plantilla oficial LTX de MARC."
         )
     prepared[image_nodes[0][0]]["inputs"][image_nodes[0][1]] = image_filename
     prepared[positive_nodes[0][0]]["inputs"][positive_nodes[0][1]] = motion_prompt
     if negative_prompt.strip():
         if len(negative_nodes) > 1:
             raise VideoGenerationError(
-                "El workflow tiene varias entradas negativas. Deja el prompt negativo vacío o utiliza "
-                "un workflow con una sola entrada negativa."
+                "El workflow tiene varias entradas negativas. Deja el prompt negativo vacío o usa la plantilla oficial LTX de MARC."
             )
         if len(negative_nodes) == 1:
             prepared[negative_nodes[0][0]]["inputs"][negative_nodes[0][1]] = negative_prompt.strip()
+    # LTX expects 8n+1 frames. Keep a short default clip to contain resource use.
+    length = max(9, int(frame_count))
+    length = ((length - 1) // 8) * 8 + 1
+    for node in prepared.values():
+        if isinstance(node, dict) and isinstance(node.get("inputs"), dict):
+            if str(node.get("class_type", "")) == "LTXVImgToVideo":
+                node["inputs"]["length"] = length
+                node["inputs"]["steps"] = node["inputs"].get("steps", 15)
+            if str(node.get("class_type", "")) == "LTXVScheduler":
+                node["inputs"]["steps"] = min(30, max(1, int(node["inputs"].get("steps", 20))))
     return prepared
 
 
