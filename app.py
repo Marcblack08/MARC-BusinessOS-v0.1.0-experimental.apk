@@ -6581,18 +6581,66 @@ if (!(Test-Path -LiteralPath $OutputFile) -or (Get-Item -LiteralPath $OutputFile
                 raise RuntimeError("__MARC_RENDER_CANCELLED__")
             self.generation_queue.put(("render_progress", total + 1, final_steps, "Uniendo escenas y aplicando transiciones…"))
             if transition_style != "Corte directo":
-                # Use FFmpeg xfade between clips. The individual clips were rendered with
-                # a short extra tail, so the transition overlaps motion instead of flashing black.
-                concat_cmd = [ffmpeg, "-y", "-filter_complex_threads", "1"]
-                for scene_index in concat_scene_indexes:
-                    concat_cmd.extend(["-i", str(scene_dir / f"scene_{scene_index + 1:03d}.mp4")])
-                filter_graph = build_video_transition_filter_graph(
-                    final_durations,
-                    transition_seconds=max(0.08, min(0.4, crossfade_seconds or 0.4)),
-                    transition_style=transition_style,
+                # Keep long timelines compatible with Windows command-line length limits.
+                # Render small transition chunks with a tail handle, then xfade the chunks in
+                # a compact final graph. The filter graph is stored in a file, not argv.
+                transition = max(0.08, min(0.4, crossfade_seconds or 0.4))
+                chunk_size = 30
+                rendered_chunks = []
+                rendered_chunk_durations = []
+                group_count = max(1, math.ceil(len(concat_scene_indexes) / chunk_size))
+
+                for chunk_number, start in enumerate(range(0, len(concat_scene_indexes), chunk_size), start=1):
+                    if self.render_cancel_event.is_set():
+                        raise RuntimeError("__MARC_RENDER_CANCELLED__")
+                    chunk_indexes = concat_scene_indexes[start:start + chunk_size]
+                    chunk_durations = final_durations[start:start + chunk_size]
+                    chunk_path = scene_dir / f"transition_chunk_{chunk_number:03d}.mp4"
+                    chunk_filter_path = scene_dir / f"transition_chunk_{chunk_number:03d}.filter"
+                    chunk_filter_path.write_text(
+                        build_video_transition_filter_graph(
+                            chunk_durations,
+                            transition_seconds=transition,
+                            transition_style=transition_style,
+                            fade_edges=False,
+                            preserve_tail=True,
+                        ),
+                        encoding="utf-8",
+                    )
+                    chunk_cmd = [ffmpeg, "-y", "-filter_complex_threads", "1"]
+                    for scene_index in chunk_indexes:
+                        chunk_cmd.extend(["-i", str(scene_dir / f"scene_{scene_index + 1:03d}.mp4")])
+                    chunk_cmd.extend([
+                        "-filter_complex_script", str(chunk_filter_path),
+                        "-map", "[vout]", "-an", "-r", str(fps),
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
+                        "-crf", "25", "-movflags", "+faststart", str(chunk_path),
+                    ])
+                    run_ffmpeg(chunk_cmd, f"crossfade_chunk_{chunk_number:03d}.log", cwd=scene_dir)
+                    if not chunk_path.is_file() or chunk_path.stat().st_size == 0:
+                        raise RuntimeError(f"FFmpeg no produjo el bloque de transición {chunk_number}.")
+                    rendered_chunks.append(chunk_path)
+                    rendered_chunk_durations.append(sum(chunk_durations))
+                    self.generation_queue.put((
+                        "render_progress", total + 1, final_steps,
+                        f"Transiciones · bloque {chunk_number}/{group_count} ensamblado"
+                    ))
+
+                final_filter_path = scene_dir / "crossfade_final.filter"
+                final_filter_path.write_text(
+                    build_video_transition_filter_graph(
+                        rendered_chunk_durations,
+                        transition_seconds=transition,
+                        transition_style=transition_style,
+                    ),
+                    encoding="utf-8",
                 )
+                concat_cmd = [ffmpeg, "-y", "-filter_complex_threads", "1"]
+                for chunk_path in rendered_chunks:
+                    concat_cmd.extend(["-i", str(chunk_path)])
                 concat_cmd.extend([
-                    "-filter_complex", filter_graph, "-map", "[vout]", "-an",
+                    "-filter_complex_script", str(final_filter_path),
+                    "-map", "[vout]", "-an",
                     "-t", f"{sum(final_durations):.3f}", "-r", str(fps),
                     "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
                     "-crf", "25", "-movflags", "+faststart", str(temp_output_path)
