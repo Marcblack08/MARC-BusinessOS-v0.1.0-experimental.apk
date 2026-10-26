@@ -246,28 +246,13 @@ def _winget_install(package_id: str, callback: Callable[[str], None] | None = No
         winget, "install", "--id", package_id, "--exact", "--silent",
         "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity",
     ]
-    try:
-        proc = subprocess.Popen(
-            command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, encoding="utf-8", errors="replace",
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
-        )
-        try:
-            output, _ = proc.communicate(timeout=1200)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            _notify(callback, f"La instalación de {package_id} excedió el tiempo límite.")
-            return False
-        if proc.returncode == 0:
-            _refresh_path()
-            _notify(callback, f"{package_id} instalado.")
-            return True
-        tail = (output or "").splitlines()[-2:]
-        _notify(callback, f"Winget no pudo instalar {package_id}: {' '.join(tail)[:280]}")
-        return False
-    except OSError as exc:
-        _notify(callback, f"No se pudo ejecutar Winget para {package_id}: {exc}")
-        return False
+    success = _stream_process(command, callback, f"Instalación {package_id}", timeout=1200)
+    if success:
+        _refresh_path()
+        _notify(callback, f"{package_id} instalado.")
+        return True
+    _notify(callback, f"Winget no pudo confirmar la instalación de {package_id}.")
+    return False
 
 
 def _refresh_path() -> None:
