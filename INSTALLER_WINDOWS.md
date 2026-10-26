@@ -9,16 +9,15 @@
 ## Para quien compila
 
 1. Instala Python 3.11 o 3.12 de 64 bits.
-2. Instala Ollama si quieres generación de guiones local y descarga el modelo Qwen 2.5 3B por separado.
-3. Instala FFmpeg y verifica que `ffmpeg -version` funcione, o prepara su ejecutable para la aplicación.
-4. Ejecuta `install_windows.bat`.
-5. Instala Inno Setup 6 desde https://jrsoftware.org/isinfo.php.
-6. Ejecuta `build_windows.bat`.
-7. El instalador se crea en `dist-installer` si ambas compilaciones terminan correctamente.
+2. Ejecuta `install_windows.bat`. El script prepara el entorno, instala dependencias Python y, si Windows tiene Winget, intenta instalar FFmpeg y Ollama automáticamente.
+3. Si Ollama queda disponible, el script descarga Qwen 2.5 3B para generación local de guiones. Esto requiere Internet y varios GB de espacio; puedes omitirlo si solo vas a importar guiones ya escritos.
+4. El instalador ejecuta una comprobación de sintaxis y las pruebas unitarias, mostrando avisos si alguna falla.
+5. Para crear el ejecutable de escritorio, instala Inno Setup 6 desde https://jrsoftware.org/isinfo.php y ejecuta `build_windows.bat`.
+6. El instalador se crea en `dist-installer` si las herramientas de empaquetado están instaladas y la compilación termina correctamente.
 
 ## Requisitos del usuario final
 
-La aplicación de escritorio no incorpora Ollama/Qwen ni FFmpeg automáticamente. Esos componentes deben instalarse por separado para las funciones de IA local y exportación MP4. La primera descarga del modelo necesita conexión a internet; después, la inferencia de texto puede funcionar localmente.
+La instalación desde el código intenta configurar automáticamente FFmpeg y Ollama mediante Winget. Si Winget no está disponible o una instalación falla, el asistente muestra las páginas oficiales. La primera descarga de Qwen necesita conexión a Internet; después, la generación de guiones puede funcionar localmente. No se descargan automáticamente checkpoints de imagen o modelos generativos de vídeo de varios GB: son opcionales, dependen del hardware y la aplicación también puede editar vídeos usando imágenes que el usuario ya tenga.
 
 ## Verificación
 
