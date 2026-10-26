@@ -194,6 +194,7 @@ def _run_package_import(self, package, script: str, directions: list[str], repor
         )
         return
     start_hook_called = {"value": False}
+    self.scene_video_assets = {}
     original_start = self._start_video_render
     original_ask = marc_app.messagebox.askyesno
 
