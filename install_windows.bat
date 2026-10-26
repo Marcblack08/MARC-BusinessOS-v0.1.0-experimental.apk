@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 title MARC Studio - Instalacion automatica
 color 0B
@@ -44,8 +44,8 @@ if exist ".venv\Scripts\python.exe" (
   if errorlevel 1 (
     echo [AVISO] El entorno .venv existente usa una version incompatible de Python.
     set "VENV_BACKUP=.venv_backup"
-    if exist ".venv_backup" set "VENV_BACKUP=.venv_backup_%RANDOM%"
-    ren ".venv" "%VENV_BACKUP%"
+    if exist ".venv_backup" set "VENV_BACKUP=.venv_backup_!RANDOM!"
+    ren ".venv" "!VENV_BACKUP!"
     if errorlevel 1 (
       echo [ERROR] No se pudo apartar el entorno anterior. No se borro ningun proyecto.
       pause
